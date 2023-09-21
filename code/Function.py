@@ -254,7 +254,7 @@ def DataMap(SIM_parameters, Vector_Dictionary, OptimalPointingIdx, Nearby_SRCpos
     plt.gca().invert_xaxis()
     plt.plot(Nearby_SRCposition.ra, Nearby_SRCposition.dec, marker='.', color='black',linestyle='')    
     plt.plot(SIM_parameters["PSRposition"].ra, SIM_parameters["PSRposition"].dec, marker='*', color='green',linestyle='')
-    plt.plot(Vector_Dictionary['SampleRA'][OptimalPointingIdx], Vector_Dictionary['SampleDEC'][OptimalPointingIdx], marker='o', color='yellow', linestyle='')
+    plt.plot(Vector_Dictionary['SampleRA'][OptimalPointingIdx], Vector_Dictionary['SampleDEC'][OptimalPointingIdx], marker='+', color='red', linestyle='')
 
     # label of the nearby sources
     plt.scatter(Vector_Dictionary['SampleRA'], Vector_Dictionary['SampleDEC'], c=Vector_Dictionary["SNR"], s=10, edgecolor='face')

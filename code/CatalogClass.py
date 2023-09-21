@@ -111,22 +111,25 @@ class XmmCatalog:
         :rtype: list, astropy.table.Table
         """
         CountRates = []     # Empty list of count rates
-        xmmflux = NearbySources_Table['SC_EP_8_FLUX']     # Take all of the column SC_EP_8_FLUX of the NearbySources_Table to calculate the count rates.
 
-        for f in xmmflux:
-            pimms_cmds = "instrument nicer 0.3-10.0\nfrom flux ERGS 0.2-12.0\nmodel power 2.0 0.0\ngo {}\nexit\n".format(f)     # Call Wepimms to calculate the count rates.
-            
-            with open('pimms_script.xco', 'w') as f:
-                f.write(pimms_cmds)
-                f.close()
+        xmmflux = NearbySources_Table['SC_EP_8_FLUX']     # Take all of the column SC_EP_8_FLUX of the NearbySources_Table to calculate the count rates.
+        NH = NearbySources_Table['Nh']
+        Power_Law = NearbySources_Table['Photon Index']
+
+        for flux, nh, power_law in zip(xmmflux, NH, Power_Law):
+            pimms_cmds = "instrument nicer 0.3-10.0\nfrom flux ERGS 0.2-12.0\nmodel galactic nh {}\nmodel power {} 0.0\ngo {}\nexit\n".format(nh, power_law, flux)     # Call Wepimms to calculate the count rates.
+
+            with open('pimms_script.xco', 'w') as file:
+                file.write(pimms_cmds)
+                file.close()
 
             result = subprocess.run(['pimms', '@pimms_script.xco'], stdout=subprocess.PIPE).stdout.decode(sys.stdout.encoding)
             count_rate = float(result.split("predicts")[1].split('cps')[0])
             CountRates.append(count_rate)           # Append to the count rates list the data we obtains with the program 
 
-        NearbySources_Table["Count Rates"] = CountRates       # Add the count rates column to the NearbySources_Table
-        
-        return CountRates, NearbySources_Table                  # Return to the main fil the New NearbySources_Table and their Count Rates
+        NearbySources_Table["Count Rates"] = CountRates                  # Return to the main fil the New NearbySources_Table and their Count Rates
+
+        return CountRates, NearbySources_Table
 
 
     def NicerParameters(parameters):
@@ -143,10 +146,118 @@ class XmmCatalog:
 
 
 
-class Athena():
+class Xmm2Athena:
+    """
+    A class for processing X-ray data from the XMM-Newton and Athena catalogs.
 
-    def open_catalog(file_name):
-        with fits.open(file_name) as data:
-            CATALOG = data[1].data
-            SRC_Table = Table(CATALOG)
-            return SRC_Table
+    This class provides methods for working with X-ray source catalogs from XMM-Newton
+    (XMM2) and Athena. It includes functionality for merging and processing data from
+    these catalogs to create a combined table of nearby sources.
+
+    Methods:
+    1. open_catalog(file_name_xmm2ath, file_path_xmmdr11):
+        Opens and reads the XMM2 and XMM-DR11 FITS files and returns tables for further
+        processing.
+
+    2. NearbySourcesTable_With_X2M_data(NearbySources_Table, XmmDR11_Table, Xmm2Ath_Table):
+        Merges nearby sources data from XMM-DR11 with additional information from XMM2
+        catalog. It calculates average values and appends them to the table when specific
+        data is missing.
+
+    Attributes:
+    None
+
+    Example Usage:
+    ```
+    xmm2_athena = Xmm2Athena()
+    xmm2_table, dr11_table = xmm2_athena.open_catalog('xmm2_catalog.fits', 'xmmdr11_catalog.fits')
+    combined_table = xmm2_athena.NearbySourcesTable_With_X2M_data(nearby_sources_table, dr11_table, xmm2_table)
+    ```
+
+    Note: Make sure to replace 'xmm2_catalog.fits' and 'xmmdr11_catalog.fits' with
+    the actual file paths of your FITS files.
+    """
+    
+    def open_catalog(file_name_xmm2ath, file_path_xmmdr11):
+
+        with fits.open(file_name_xmm2ath) as data:
+            Xmm2Ath_Table = Table(data[1].data)
+        
+        with fits.open(file_path_xmmdr11) as data:
+            XmmDR11_Table = Table(data[1].data)
+        
+        return Xmm2Ath_Table, XmmDR11_Table
+
+
+    def NearbySourcesTable_With_X2M_data(NearbySources_Table, XmmDR11_Table, Xmm2Ath_Table):
+        """
+        Merge X-ray source data from XMM-DR11 with additional information from XMM2 catalog.
+
+        This function combines data from two X-ray source catalogs, XMM-DR11 and XMM2, to
+        create a merged table containing information about nearby sources. It also calculates
+        average values for certain parameters and populates the table with the merged data.
+
+        Parameters:
+        - NearbySources_Table (astropy.table.Table): A table containing data from nearby sources.
+        - XmmDR11_Table (astropy.table.Table): A table containing data from the XMM-DR11 catalog.
+        - Xmm2Ath_Table (astropy.table.Table): A table containing data from the XMM2 catalog.
+
+        Returns:
+        - NearbySources_Table (astropy.table.Table): A table with merged data and additional
+        columns for 'Photon Index', 'Log Nh', and 'Nh'.
+        """
+        
+        message = 'Not founded'
+        
+        NearbySources_Table_XMMDR11 = Table(names=XmmDR11_Table.colnames,
+                                                dtype=XmmDR11_Table.dtype)
+            
+        Index_DR11 = []
+
+        for item in  NearbySources_Table['IAUNAME']:
+            if item in XmmDR11_Table['IAUNAME']:
+                index = list(XmmDR11_Table['IAUNAME']).index(item)
+                Index_DR11.append(index)
+                NearbySources_Table_XMMDR11.add_row(XmmDR11_Table[index])
+            else:
+                Index_DR11.append(message)
+
+        NearbySource_Table_Xmm2Athena = Table(names=Xmm2Ath_Table.colnames,
+                                                dtype=Xmm2Ath_Table.dtype)
+            
+        for item in NearbySources_Table_XMMDR11["DETID"]:
+            if item in Xmm2Ath_Table['DETID']:
+                index = list(Xmm2Ath_Table['DETID']).index(item)
+                NearbySource_Table_Xmm2Athena.add_row(Xmm2Ath_Table[index])
+
+        average_value_logNH = np.mean(NearbySource_Table_Xmm2Athena['logNH_med'])
+        average_value_PhotonIndex = np.mean(NearbySource_Table_Xmm2Athena['PhoIndex_med'])
+
+        Log_Nh, Photon_Index = [], []
+
+        for item in NearbySources_Table_XMMDR11["DETID"]:
+            if item in Xmm2Ath_Table["DETID"]:
+                index = list(Xmm2Ath_Table['DETID']).index(item)
+
+                Log_Nh.append(Xmm2Ath_Table['logNH_med'][index])
+                Photon_Index.append(Xmm2Ath_Table['PhoIndex_med'][index])
+            else:
+                Log_Nh.append(0)
+                Photon_Index.append(0)
+
+        for item in range(len(NearbySources_Table_XMMDR11)):
+            if Log_Nh[item] == 0:
+                Log_Nh[item] = average_value_logNH
+            if Photon_Index[item] == 0:
+                Photon_Index[item] = average_value_PhotonIndex
+
+        NH = [np.exp(Nh * np.log(10)) for Nh in Log_Nh]
+
+        COLNAMES = ['Photon Index', 'Log Nh', 'Nh']
+        DATA = [Photon_Index, Log_Nh, NH]
+
+        for col, data in zip(COLNAMES, DATA):
+            NearbySources_Table[col] = data
+
+        return NearbySources_Table
+        
