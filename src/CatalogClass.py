@@ -1,123 +1,197 @@
-# -------------------------------------------------- #
+import numpy as np
+from astropy.table import Table
+from astropy.io import fits
+from astropy.coordinates import SkyCoord
+import astropy.units as u
+import matplotlib.pyplot as plt
 
-                    ## PACKAGES ##
-
-# Sys
+import subprocess
 import sys
 
-# Subprocess
-import subprocess
-
-# Numpy
-import numpy as np
-
-# ASTROPY
-from astropy.io import fits
-from astropy.coordinates import Angle, SkyCoord
-from astropy import units as u
-from astropy.table import Table
-
-# ASTROQUERY
-from astroquery.simbad import Simbad
-
-# -------------------------------------------------- #
+import Function as F
 
 class XmmCatalog:
     """
-    This class represents an XMM Catalog and provides methods for working with it.
+        A class for processing and analyzing XMM-Newton (XMM) DR13 catalog data and related NICER parameters.
 
-    Attributes:
-        None
+        This class provides methods for opening the XMM-Newton DR13 catalog, transforming source coordinates to SkyCoord
+        objects, loading NICER parameters from a file, creating a table of nearby sources, plotting a neighborhood map,
+        and calculating count rates for each source in the catalog.
 
-    Methods:
-        1. open_catalog(file_name):
-           Opens an XMM Catalog file and returns it as an astropy Table.
-        
-        2. TransformCoord2SkyCoord(catalog):
-           Transforms the coordinates of all sources in the catalog to SkyCoord objects.
-        
-        3. CreateNearbySourceTable(NearbySource, XMM_catalog):
-           Creates an astropy Table of all sources close to the observing object.
+        Parameters:
+        - XMM_DR13_path (str): The path to the XMM DR13 catalog file.
+        - NICER_parameters_path (str): The path to the file containing NICER parameters.
 
-        4. CountRates(NearbySources_Table):
-           Calculates the count rates for every source and adds them to the NearbySources_Table.
+        Attributes:
+        - catalog (astropy.table.Table): The XMM-Newton DR13 catalog data.
+        - SRCcoord (astropy.coordinates.SkyCoord): SkyCoord object containing transformed source coordinates.
+        - NICER_parameters (tuple): NICER parameters (EffArea and OffAxisAngle) loaded from a file.
+        - NearbySources_Table (astropy.table.Table): Table of nearby sources.
+        - CountRates (list): List of calculated count rates for nearby sources.
 
-        5. NicerParameters(parameters):
-           Imports Nicer parameters (EffArea and OffAxisAngle) to the program.
+        Methods:
+        - open_catalog(XMM_DR13_path): Open and load the XMM-Newton DR13 catalog as an astropy Table.
 
-    Usage:
-    Instantiate an XmmCatalog object and use its methods to manipulate XMM Catalog data.
+        - transform_coord_2_skycoord(catalog): Transform source coordinates in the catalog to SkyCoord objects.
+
+        - nicer_parameters(NICER_parameters_path): Load NICER parameters (EffArea and OffAxisAngle) from a file.
+
+        - create_NearbySource_table(NearbySource, XMM_catalog): Create an astropy Table of nearby sources.
+
+        - neighbourhood_of_object(NearbySources_Table, OBJ_dictionary): Plot a neighborhood map for the object.
+
+        - count_rates(Modified_NearbySources_Table): Calculate count rates for nearby sources and update the table.
+
+        Returns:
+        Various data types, depending on the specific method's purpose and return values.
     """
-
-    def open_catalog(file_name):
+        
+    def __init__(self, XMM_DR13_path, NICER_parameters_path):
         """
-        Opens an XMM Catalog file and returns it as an astropy Table.
+            Constructor for XmmCatalog class.
 
-        :param file_name: The name of the XMM Catalog file.
-        :type file_name: str
-        :return: The catalog Table.
-        :rtype: astropy.table.Table
+            Initializes an instance of the XmmCatalog class by opening the XMM DR13 catalog file,
+            transforming source coordinates to SkyCoord objects, and loading the NICER parameters
+            from the specified files.
+
+            :param XMM_DR13_path: The path to the XMM DR13 catalog file.
+            :type XMM_DR13_path: str
+            :param NICER_parameters_path: The path to the file containing NICER parameters.
+            :type NICER_parameters_path: str
         """
-        with fits.open(file_name) as data:
-            CATALOG = data[1].data
-            SRC_Table = Table(CATALOG)
-            return SRC_Table                                # Return the catalog Table.
+        
+        self.catalog = self.open_catalog(XMM_DR13_path)
+        self.SRCcoord = self.transform_coord_2_skycoord(self.catalog)
+        self.NICER_parameters = self.nicer_parameters(NICER_parameters_path)
+        self.NearbySources_Table = None
+        self.CountRates = []
 
 
-    def TransformCoord2SkyCoord(catalog):
+    def open_catalog(self, XMM_DR13_path):
         """
-        Transforms the coordinates of all sources in the catalog to SkyCoord objects.
+            Opens an XMM DR13 catalog file and returns it as an astropy Table.
 
-        :param catalog: The catalog containing source coordinates.
-        :type catalog: astropy.table.Table
-        :return: SkyCoord object containing transformed coordinates.
-        :rtype: astropy.coordinates.SkyCoord
+            :param XMM_DR13_path: The path to the XMM DR13 catalog file.
+            :type XMM_DR13_path: str
+            :return: The catalog Table or None if an error occurs.
+            :rtype: astropy.table.Table
         """
-        return SkyCoord(ra=catalog['SC_RA'], dec=catalog['SC_DEC'], unit=(u.deg, u.deg))        # Return SkyCoord object.
-    
+        try:
+            with fits.open(XMM_DR13_path) as data:
+                XMM_catalog = Table(data[1].data)
+                return XMM_catalog
+        except Exception as err:
+            print(f"An error occurred while opening the catalog: {err}")
+            return None
 
-    def CreateNearbySourceTable(NearbySource, XMM_catalog):
+
+    def transform_coord_2_skycoord(self, catalog):
         """
-        Creates an astropy Table of all sources close to the observing object.
+            Transforms the coordinates of all sources in the catalog to SkyCoord objects.
 
-        :param NearbySource: List of nearby sources.
-        :type NearbySource: list
-        :param XMM_catalog: The XMM Catalog.
-        :type XMM_catalog: astropy.table.Table
-        :return: NearbySources_Table, SRCposition
-        :rtype: astropy.table.Table, astropy.coordinates.SkyCoord
+            :param catalog: The catalog containing source coordinates.
+            :type catalog: astropy.table.Table
+            :return: SkyCoord object containing transformed coordinates.
+            :rtype: astropy.coordinates.SkyCoord
         """
-        N_SRC = len(NearbySource)                                               # Return the number of sources.          
-        NUMBER = [NearbySource[number][0] for number in range(N_SRC)]           # Return their index in the catalog Xmm.
+        return SkyCoord(ra=catalog['SC_RA'], dec=catalog['SC_DEC'], unit=(u.deg, u.deg))
 
-        NearbySources_Table = Table(names=XMM_catalog.colnames,                 # Creation of the NearbySources Table with column name and data type of Xmm Catalog.
-                                    dtype=XMM_catalog.dtype)
+
+    def nicer_parameters(self, NICER_parameters_path):
+        """
+            Loads NICER parameters (EffArea and OffAxisAngle) from a file and returns them.
+
+            This method reads NICER parameters from the specified file and returns them as NumPy arrays.
+
+            :param NICER_parameters_path: The path to the file containing NICER parameters.
+            :type NICER_parameters_path: str
+            :return: EffArea, OffAxisAngle
+            :rtype: numpy.ndarray, numpy.ndarray
+        """
+        try:
+            EffArea, OffAxisAngle = np.loadtxt(NICER_parameters_path, unpack=True, usecols=(0, 1))
+            return EffArea, OffAxisAngle
+        except Exception as err:
+            print(f"An error occurred while reading NICER parameters: {str(err)}")
+            return None, None  
+
+
+    def create_NearbySource_table(self, NearbySource, XMM_catalog):
+        """
+            Creates an astropy Table of all sources close to the observing object.
+
+            :param NearbySource: List of nearby sources.
+            :type NearbySource: list
+            :param XMM_catalog: The XMM Catalog.
+            :type XMM_catalog: astropy.table.Table
+            :return: NearbySources_Table, SRCposition
+            :rtype: astropy.table.Table, astropy.coordinates.SkyCoord
+        """
+        N_SRC = len(NearbySource)        
+        NUMBER = [NearbySource[number][0] for number in range(N_SRC)]           
+
+        self.NearbySources_Table = Table(names=XMM_catalog.colnames,
+                                         dtype=XMM_catalog.dtype)
         
         for number in NUMBER:
-            NearbySources_Table.add_row(XMM_catalog[number])
+            self.NearbySources_Table.add_row(XMM_catalog[number])
         
-        SRCposition = SkyCoord(ra=NearbySources_Table['SC_RA']*u.degree, dec=NearbySources_Table['SC_DEC']*u.degree)    # Creation of SkyCoord object for all the sources close to the observing object.
+        Nearby_SRCposition = SkyCoord(ra=self.NearbySources_Table['SC_RA'], dec=self.NearbySources_Table['SC_DEC'], unit=(u.degree, u.degree))
 
-        return NearbySources_Table, SRCposition         # Return to the main file the NearbySources_Table and the SRC position.
-
-
-    def CountRates(NearbySources_Table):
+        return self.NearbySources_Table, Nearby_SRCposition
+        
+        
+    def neighbourhood_of_object(NearbySources_Table, OBJ_dictionary):
         """
-        Calculates the count rates for every source and adds them to the NearbySources_Table.
+            Plot a neighborhood map of nearby sources relative to a specified object.
 
-        :param NearbySources_Table: Table containing nearby sources.
-        :type NearbySources_Table: astropy.table.Table
-        :return: CountRates, Updated NearbySources_Table
-        :rtype: list, astropy.table.Table
+            This function creates a scatter plot of nearby sources using their right ascension (RA) and
+            declination (DEC) coordinates. The object of interest is marked with a red dot, while other sources
+            are marked with white 'x' markers. The title of the plot includes the object's name and the count
+            of nearby sources.
+
+            :param NearbySources_Table: Table of nearby sources with RA and DEC coordinates.
+            :type NearbySources_Table: astropy.table.Table
+            :param OBJ_dictionary: Dictionary containing object information, including position and name.
+            :type OBJ_dictionary: dict
+
+            This function does not return any values; it displays the plot.
+
+            Example:
+            neighbourhood_of_object(NearbySources_Table, {'PSRposition': SkyCoord(...), 'ObjectName': 'ExampleObject'})
         """
-        CountRates = []     # Empty list of count rates
+        RA = NearbySources_Table['SC_RA']
+        DEC = NearbySources_Table['SC_DEC']
+            
+        fig, ax = plt.subplots()
+        plt.gca().invert_xaxis()
 
-        xmmflux = NearbySources_Table['SC_EP_8_FLUX']     # Take all of the column SC_EP_8_FLUX of the NearbySources_Table to calculate the count rates.
-        NH = NearbySources_Table['Nh']
-        Power_Law = NearbySources_Table['Photon Index']
+        plt.scatter(RA, DEC, c='white', s=4, marker='x')
+        plt.scatter(OBJ_dictionary['PSRposition'].ra, OBJ_dictionary['PSRposition'].dec, c='red', s=10)
+        ax.set_facecolor('black')
+        plt.title('Nearby sources for ' + OBJ_dictionary['ObjectName'] + ' N_SRC : ' + str(len(NearbySources_Table)))
+        plt.xlabel('Right Ascension')
+        plt.ylabel('Declination')
+        plt.show()     
+               
+        
+    def count_rates(self, Modified_NearbySources_Table):
+        """
+            Calculates the count rates for every source and adds them to the NearbySources_Table.
+
+            :param Modified_NearbySources_Table: Table containing nearby sources.
+            :type Modified_NearbySources_Table: astropy.table.Table
+            :return: CountRates, Updated NearbySources_Table
+            :rtype: list, astropy.table.Table
+        """
+
+        self.NearbySources_Table = Modified_NearbySources_Table
+        xmmflux = self.NearbySources_Table['SC_EP_8_FLUX']
+        NH = self.NearbySources_Table['Nh']
+        Power_Law = self.NearbySources_Table['Photon Index']
 
         for flux, nh, power_law in zip(xmmflux, NH, Power_Law):
-            pimms_cmds = "instrument nicer 0.3-10.0\nfrom flux ERGS 0.2-12.0\nmodel galactic nh {}\nmodel power {} 0.0\ngo {}\nexit\n".format(nh, power_law, flux)     # Call Wepimms to calculate the count rates.
+            pimms_cmds = "instrument nicer 0.3-10.0\nfrom flux ERGS 0.2-12.0\nmodel galactic nh {}\nmodel power {} 0.0\ngo {}\nexit\n".format(nh, power_law, flux)
 
             with open('pimms_script.xco', 'w') as file:
                 file.write(pimms_cmds)
@@ -125,139 +199,132 @@ class XmmCatalog:
 
             result = subprocess.run(['pimms', '@pimms_script.xco'], stdout=subprocess.PIPE).stdout.decode(sys.stdout.encoding)
             count_rate = float(result.split("predicts")[1].split('cps')[0])
-            CountRates.append(count_rate)           # Append to the count rates list the data we obtains with the program 
+            self.CountRates.append(count_rate)
 
-        NearbySources_Table["Count Rates"] = CountRates                  # Return to the main fil the New NearbySources_Table and their Count Rates
+        self.NearbySources_Table["Count Rates"] = self.CountRates
 
-        return CountRates, NearbySources_Table
-
-
-    def NicerParameters(parameters):
-        """
-        Imports Nicer parameters (EffArea and OffAxisAngle) to the program.
-
-        :param parameters: The file containing Nicer parameters.
-        :type parameters: str
-        :return: EffArea, OffAxisAngle
-        :rtype: numpy.ndarray, numpy.ndarray
-        """
-        EffAera, OffAxisAngle = np.loadtxt(parameters, unpack=True, usecols=(0, 1))               
-        return EffAera, OffAxisAngle                    # Return EffAera and OffAxisAngle to the main file
-
-
+        return self.CountRates, self.NearbySources_Table
+    
 
 class Xmm2Athena:
     """
-    A class for processing X-ray data from the XMM-Newton and Athena catalogs.
-
-    This class provides methods for working with X-ray source catalogs from XMM-Newton
-    (XMM2) and Athena. It includes functionality for merging and processing data from
-    these catalogs to create a combined table of nearby sources.
-
-    Methods:
-    1. open_catalog(file_name_xmm2ath, file_path_xmmdr11):
-        Opens and reads the XMM2 and XMM-DR11 FITS files and returns tables for further
-        processing.
-
-    2. NearbySourcesTable_With_X2M_data(NearbySources_Table, XmmDR11_Table, Xmm2Ath_Table):
-        Merges nearby sources data from XMM-DR11 with additional information from XMM2
-        catalog. It calculates average values and appends them to the table when specific
-        data is missing.
-
-    Attributes:
-    None
-
-    Example Usage:
-    ```
-    xmm2_athena = Xmm2Athena()
-    xmm2_table, dr11_table = xmm2_athena.open_catalog('xmm2_catalog.fits', 'xmmdr11_catalog.fits')
-    combined_table = xmm2_athena.NearbySourcesTable_With_X2M_data(nearby_sources_table, dr11_table, xmm2_table)
-    ```
-
-    Note: Make sure to replace 'xmm2_catalog.fits' and 'xmmdr11_catalog.fits' with
-    the actual file paths of your FITS files.
-    """
-    
-    def open_catalog(file_name_xmm2ath, file_path_xmmdr11):
-
-        with fits.open(file_name_xmm2ath) as data:
-            Xmm2Ath_Table = Table(data[1].data)
+        A class for processing and analyzing XMM-Newton (XMM) DR11 and XMM-Newton to Athena (X2A) catalog data.
         
-        with fits.open(file_path_xmmdr11) as data:
-            XmmDR11_Table = Table(data[1].data)
-        
-        return Xmm2Ath_Table, XmmDR11_Table
-
-
-    def NearbySourcesTable_With_X2M_data(NearbySources_Table, XmmDR11_Table, Xmm2Ath_Table):
-        """
-        Merge X-ray source data from XMM-DR11 with additional information from XMM2 catalog.
-
-        This function combines data from two X-ray source catalogs, XMM-DR11 and XMM2, to
-        create a merged table containing information about nearby sources. It also calculates
-        average values for certain parameters and populates the table with the merged data.
+        This class provides methods for opening XMM-Newton DR11 and XMM-Newton to Athena catalog files,
+        as well as adding columns for average logNH and PhotonIndex values to a given nearby sources table.
 
         Parameters:
-        - NearbySources_Table (astropy.table.Table): A table containing data from nearby sources.
-        - XmmDR11_Table (astropy.table.Table): A table containing data from the XMM-DR11 catalog.
-        - Xmm2Ath_Table (astropy.table.Table): A table containing data from the XMM2 catalog.
+        - XMM_DR11_path (str): The file path to the XMM-Newton DR11 catalog.
+        - XMM_2_Athena_path (str): The file path to the XMM-Newton to Athena catalog.
+
+        Attributes:
+        - XMM_DR11 (astropy.table.Table): The XMM-Newton DR11 catalog data.
+        - XMM_2_ATHENA (astropy.table.Table): The XMM-Newton to Athena catalog data.
+        - NearbySources_Table_DR11 (astropy.table.Table): The nearby sources table based on XMM-Newton DR11 data.
+        - NearbySources_Table_X2A (astropy.table.Table): The nearby sources table based on XMM-Newton to Athena data.
+        - average_logNH_value (float): The average logNH value calculated from XMM-Newton to Athena data.
+        - average_PhotonIndex_value (float): The average PhotonIndex value calculated from XMM-Newton to Athena data.
+
+        Methods:
+        - open_catalog(XMM_DR11_path, XMM_2_Athena_path): Open and load XMM-Newton DR11 and XMM-Newton to Athena catalog data.
+
+        - add_nh_photo_index(NearbySources_Table): Add columns for logNH and PhotonIndex to the nearby sources table
+        based on matching DETID values with XMM-Newton to Athena data.
 
         Returns:
-        - NearbySources_Table (astropy.table.Table): A table with merged data and additional
-        columns for 'Photon Index', 'Log Nh', and 'Nh'.
+        astropy.table.Table: The nearby sources table with additional columns for logNH and PhotonIndex.
+    """
+    
+    def __init__(self, XMM_DR11_path, XMM_2_Athena_path):
+        self.XMM_DR11, self.XMM_2_ATHENA = self.open_catalog(XMM_DR11_path, XMM_2_Athena_path)
+
+        self.NearbySources_Table_DR11 = None
+        self.NearbySources_Table_X2A = None
+        
+        self.average_logNH_value = 0
+        self.average_PhotonIndex_value = 0 
+
+
+    def open_catalog(self, XMM_DR11_path, XMM_2_Athena_path):
+        """
+            Open and load XMM-Newton DR11 and XMM-Newton to Athena catalog data.
+
+            Parameters:
+            - XMM_DR11_path (str): The file path to the XMM-Newton DR11 catalog.
+            - XMM_2_Athena_path (str): The file path to the XMM-Newton to Athena catalog.
+
+            Returns:
+            Tuple[astropy.table.Table, astropy.table.Table]: A tuple containing the loaded XMM-Newton DR11 and
+            XMM-Newton to Athena catalog data tables.
+        """
+        try:
+            with fits.open(XMM_DR11_path) as data1, fits.open(XMM_2_Athena_path) as data2:
+                cat_XMM_DR11 = Table(data1[1].data)
+                cat_XMM_2_ATHENA = Table(data2[1].data)
+            return cat_XMM_DR11, cat_XMM_2_ATHENA
+        except Exception as err:
+            print(f"An error occurred while opening the catalog: {err}")
+            return None, None
+
+
+def add_nh_photo_index(self, NearbySources_Table):
+        """
+            Add columns for logNH and PhotonIndex to the nearby sources table
+            based on matching DETID values with XMM-Newton to Athena data.
+
+            Parameters:
+            - NearbySources_Table (astropy.table.Table): The nearby sources table to which columns
+            for logNH and PhotonIndex will be added.
+
+            Returns:
+            astropy.table.Table: The modified nearby sources table with additional columns for logNH and PhotonIndex.
         """
         
-        message = 'Not founded'
+        self.NearbySources_Table_DR11 = Table(names=self.XMM_DR11.colnames,
+                                              dtype=self.XMM_DR11.dtype)
+        self.NearbySources_Table_X2A = Table(names=self.XMM_2_ATHENA.colnames,
+                                             dtype=self.XMM_2_ATHENA.dtype)
+
+        for item in NearbySources_Table['IAUNAME']:
+            if item in self.XMM_DR11['IAUNAME']:
+                index = list(self.XMM_DR11['IAUNAME']).index(item)
+                self.NearbySources_Table_DR11.add_row(self.XMM_DR11[index])
+                
+        for item in self.NearbySources_Table_DR11['DETID']:
+            if item in self.XMM_2_ATHENA['DETID']:
+                index = list(self.XMM_2_ATHENA['DETID']).index(item)
+                self.NearbySources_Table_X2A.add_row(self.XMM_2_ATHENA[index])
+                
+        self.average_logNH_value = np.mean(self.NearbySources_Table_X2A['logNH_med'])
+        self.average_PhotonIndex_value = np.mean(self.NearbySources_Table_X2A['PhoIndex_med'])
         
-        NearbySources_Table_XMMDR11 = Table(names=XmmDR11_Table.colnames,
-                                                dtype=XmmDR11_Table.dtype)
-            
-        Index_DR11 = []
-
-        for item in  NearbySources_Table['IAUNAME']:
-            if item in XmmDR11_Table['IAUNAME']:
-                index = list(XmmDR11_Table['IAUNAME']).index(item)
-                Index_DR11.append(index)
-                NearbySources_Table_XMMDR11.add_row(XmmDR11_Table[index])
-            else:
-                Index_DR11.append(message)
-
-        NearbySource_Table_Xmm2Athena = Table(names=Xmm2Ath_Table.colnames,
-                                                dtype=Xmm2Ath_Table.dtype)
-            
-        for item in NearbySources_Table_XMMDR11["DETID"]:
-            if item in Xmm2Ath_Table['DETID']:
-                index = list(Xmm2Ath_Table['DETID']).index(item)
-                NearbySource_Table_Xmm2Athena.add_row(Xmm2Ath_Table[index])
-
-        average_value_logNH = np.mean(NearbySource_Table_Xmm2Athena['logNH_med'])
-        average_value_PhotonIndex = np.mean(NearbySource_Table_Xmm2Athena['PhoIndex_med'])
-
         Log_Nh, Photon_Index = [], []
-
-        for item in NearbySources_Table_XMMDR11["DETID"]:
-            if item in Xmm2Ath_Table["DETID"]:
-                index = list(Xmm2Ath_Table['DETID']).index(item)
-
-                Log_Nh.append(Xmm2Ath_Table['logNH_med'][index])
-                Photon_Index.append(Xmm2Ath_Table['PhoIndex_med'][index])
+        for item in self.NearbySources_Table_DR11['DETID']:
+            if item in self.XMM_2_ATHENA['DETID']:
+                index = list(self.XMM_2_ATHENA['DETID']).index(item)
+                
+                Log_Nh.append(self.XMM_2_ATHENA['logNH_med'][index])
+                Photon_Index.append(self.XMM_2_ATHENA['PhoIndex_med'][index])
             else:
-                Log_Nh.append(0)
-                Photon_Index.append(0)
-
-        for item in range(len(NearbySources_Table_XMMDR11)):
-            if Log_Nh[item] == 0:
-                Log_Nh[item] = average_value_logNH
+                Log_Nh.append(0.0)
+                Photon_Index.append(0.0)
+            
+        for item in range(len(self.NearbySources_Table_DR11)):
             if Photon_Index[item] == 0:
-                Photon_Index[item] = average_value_PhotonIndex
+                Photon_Index[item] = 2.0
+                
+        # NH = [np.exp(Nh * np.log(10)) for Nh in Log_Nh]
+        NH = []
+        for value, number in zip(Log_Nh, range(len(Log_Nh))):
+            if Log_Nh[number] != 0.0:
+                NH.append(np.exp(value * np.log(10)))
+            else:
+                NH.append(0.0)
 
-        NH = [np.exp(Nh * np.log(10)) for Nh in Log_Nh]
-
-        COLNAMES = ['Photon Index', 'Log Nh', 'Nh']
-        DATA = [Photon_Index, Log_Nh, NH]
-
+        COLNAMES = ['Photon Index', 'Nh']
+        DATA = [Photon_Index, NH]
+        
         for col, data in zip(COLNAMES, DATA):
             NearbySources_Table[col] = data
-
+            
         return NearbySources_Table
-        
