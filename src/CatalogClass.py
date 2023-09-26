@@ -4,11 +4,9 @@ from astropy.io import fits
 from astropy.coordinates import SkyCoord
 import astropy.units as u
 import matplotlib.pyplot as plt
-
 import subprocess
 import sys
 
-import Function as F
 
 class XmmCatalog:
     """
@@ -294,9 +292,6 @@ def add_nh_photo_index(self, NearbySources_Table):
             if item in self.XMM_2_ATHENA['DETID']:
                 index = list(self.XMM_2_ATHENA['DETID']).index(item)
                 self.NearbySources_Table_X2A.add_row(self.XMM_2_ATHENA[index])
-                
-        self.average_logNH_value = np.mean(self.NearbySources_Table_X2A['logNH_med'])
-        self.average_PhotonIndex_value = np.mean(self.NearbySources_Table_X2A['PhoIndex_med'])
         
         Log_Nh, Photon_Index = [], []
         for item in self.NearbySources_Table_DR11['DETID']:
@@ -313,13 +308,14 @@ def add_nh_photo_index(self, NearbySources_Table):
             if Photon_Index[item] == 0:
                 Photon_Index[item] = 2.0
                 
-        # NH = [np.exp(Nh * np.log(10)) for Nh in Log_Nh]
-        NH = []
-        for value, number in zip(Log_Nh, range(len(Log_Nh))):
-            if Log_Nh[number] != 0.0:
-                NH.append(np.exp(value * np.log(10)))
-            else:
-                NH.append(0.0)
+        NH = [np.exp(value * np.log(10)) if value != 0.0 else 0.0 for value in Log_Nh]
+        
+        # NH = []
+        # for value, number in zip(Log_Nh, range(len(Log_Nh))):
+        #     if Log_Nh[number] != 0.0:
+        #         NH.append(np.exp(value * np.log(10)))
+        #     else:
+        #         NH.append(0.0)
 
         COLNAMES = ['Photon Index', 'Nh']
         DATA = [Photon_Index, NH]

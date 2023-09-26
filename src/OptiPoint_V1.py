@@ -4,23 +4,60 @@ import Function as F
 
 # -------------------------------------------------- #
 
+                # Arg_parser function
+             
+# --------------- # 
+import argparse
+from astroquery.simbad import Simbad
+# --------------- #      
+          
+PSRfullnames   = ['PSR J0437-4715','PSR J2124-3358','PSR J0751+1807', 'PSR J1231-1411']
+PSRcoordRA = [F.GetCoordPSR(NAME).ra for NAME in PSRfullnames]
+PSRcoordDEC = [F.GetCoordPSR(NAME).dec for NAME in PSRfullnames]
+PSRcountrates  = [1.319,0.1,0.025, 0.27]
+PSRtable = Table([PSRfullnames, PSRcoordRA, PSRcoordDEC, PSRcountrates],
+                 names=('FullName', 'RA', 'DEC','Count Rate'))
+
+parser = argparse.ArgumentParser(description='Search for information with object name or coord')
+
+group = parser.add_mutually_exclusive_group(required=True)
+group.add_argument('--name', type=str, help='Replace spaces by _')
+group.add_argument('--coord', type=float, nargs=2, help='ra dec (two float values)')
+group.add_argument('--info', help="Have some information about PSR")
+
+args = parser.parse_args()
+
+if args.name:
+    NAME = args.name.replace("_", " ")
+    print(f"Searching for information with name : {NAME}")
+    try:
+        OBJposition = F.GetCoordPSR(NAME)
+        print(OBJposition)
+    except Exception as error:
+        print(f"Error: {NAME} isn't in Simbad Database")
+elif args.coord:
+    ra, dec = args.coord
+    print(f"Searching for information with coordinates : (RA={ra}, DEC={dec})")
+    try:
+        NAME = Simbad.query_region(f"{ra}d {dec}d", radius="1s")['MAIN_ID'][0]
+    except Exception as error:
+        print(f"Error: There is no object with these coordinates (RA={ra}, DEC={dec}) in the Simbad Database.")
+    OBJposition = F.GetCoordPSR(NAME)
+elif args.info:
+    print(PSRtable)
+
+# CountRate = PSRtable['Count Rate'][PSRtable['FullName'] == NAME][0]
+CountRate = 0.1
+# -------------------------------------------------- #
+
+# -------------------------------------------------- #
+
                 # Choice function (wainting for improvement (arg_parser))
 
-NAME, OBJposition, CountRate = F.Choice()
+# NAME, OBJposition, CountRate = F.Choice()
 
 # -------------------------------------------------- #
 
-# -------------------------------------------------- #
-
-            # Pulsars table
-            
-PSRfullnames   = ['PSR J0437-4715','PSR J2124-3358','PSR J0751+1807', 'PSR J0030-0451', 'PSR J1231-1411']
-PSRshortnames  = ['PSR0437','PSR2124','PSR0751', 'PSR0030', 'PSR1231']
-PSRcountrates  = [1.319,0.1,0.025, 0.405, 0.27]
-PSRtable = Table([PSRfullnames, PSRshortnames, PSRcountrates], 
-                 names=('FullName', 'ShortName', 'Count Rate'))
-
-# -------------------------------------------------- #
 
 XMM_DR_13_path = "Catalog/4XMM_slim_DR13cat_v1.0.fits"
 NICER_parameters_path = "Catalog/NICER_PSF.dat"
@@ -53,6 +90,8 @@ Simulation_data = {'Object_data': Object_data,
                    'INSTbkgd': 0.2,
                    'EXPtime': 1e6,
                    }
+
+print(Simulation_data)
 
 # -------------------------------------------------- #
 
