@@ -1,48 +1,17 @@
+                # Python's Module
+
 import numpy as np
 from astropy.coordinates import SkyCoord, Angle
 from astroquery.simbad import Simbad
 from astropy import units as u
 import matplotlib.pyplot as plt
+import argparse
+from astropy.table import Table
+import subprocess
+import sys
+import os
 
-                    ## FUNCTION ##
-
-def Choice():
-    """
-    This function allows the user to calculate the optipoint with the name or coordinates of an object. It continuously prompts the user for input until a valid choice is made.
-
-    Returns:
-    Tuple: (NAME, OBJposition, PSRcountrates)
-        - NAME (str): Name of the object if 'name' is chosen, or determined based on coordinates if 'coord' is chosen.
-        - OBJposition (str): The coordinates of the object in the format 'ra dec'.
-        - PSRcountrates (float): The count rate entered by the user.
-    """
-    while True:
-        choice = input('Calculate the optipoint with name/coord of the object? (name/coord): ').lower()
-
-        try:
-            if choice == 'name':
-                NAME = input("Enter the name of the object: ")
-                PSRcountrates = float(input('Enter the count rate: '))
-                OBJposition = GetCoordPSR(NAME)
-                
-                return NAME, OBJposition, PSRcountrates
-
-            elif choice == 'coord':
-                COORD = input("Enter the coordinate of your object (ra dec): ")
-                PSRcountrates = float(input('Enter the count rate: '))
-                ra, dec = map(float, COORD.split())
-                NAME = Simbad.query_region(SkyCoord(ra=ra, dec=dec))['MAIN_ID'][0]
-                OBJposition = GetCoordPSR(NAME)
-                
-                return NAME, OBJposition, PSRcountrates
-
-            else:
-                print("Invalid choice. Please enter 'name' or 'coord'.")
-        
-        except ValueError:
-            print("Invalid input for count rate. Please enter a numeric value.")
-        except Exception as err:
-            print(f"An error occurred: {err}")
+                # Function
 
                     
 def Name_to_Short_Name(NAME):
@@ -84,6 +53,162 @@ def GetCoordPSR(name):
     return SkyCoord(ra=Simbad.query_object(name)['RA'][0], dec=Simbad.query_object(name)['DEC'][0], unit=(u.hourangle, u.deg))
 
 
+                # Object Table
+
+PSRfullnames   = ['PSR J0437-4715','PSR J2124-3358','PSR J0751+1807', 'PSR J1231-1411']
+PSRshortname = [Name_to_Short_Name(NAME) for NAME in PSRfullnames]
+PSRcoordRA = [GetCoordPSR(NAME).ra for NAME in PSRfullnames]
+PSRcoordDEC = [GetCoordPSR(NAME).dec for NAME in PSRfullnames]
+PSRcountrates  = [1.319,0.1,0.025, 0.27]
+PSRtable = Table([PSRfullnames, PSRshortname, PSRcoordRA, PSRcoordDEC, PSRcountrates],
+                 names=('FullName', 'ShortName', 'RA', 'DEC','CountRate'))
+
+
+def is_valid_file_path(file_path):
+    """
+    Check if a file exists at the given file path.
+
+    Parameters:
+        file_path (str): The file path to be checked.
+
+    Returns:
+        bool: True if the file exists, False otherwise.
+
+    Raises:
+        None
+    """
+    try:
+        if os.path.exists(file_path):
+            return True
+        else:
+            return False
+    except Exception as error:
+        print(f"An error occured: {error}")
+
+
+def get_valid_file_path(PATH):
+    """
+    Prompt the user for a valid file path until a valid one is provided.
+
+    Parameters:
+        PATH (str): The initial file path.
+
+    Returns:
+        str: A valid file path that exists.
+
+    Raises:
+        None
+    """
+    value = False
+    while not value:
+        if is_valid_file_path(PATH):
+            print(f"The file at {PATH} is valid.")
+            value = True
+            return PATH
+        else:
+            print(f"The file at {PATH} doesn't exist or the path is invalid.")
+            PATH = str(input("Enter the file path : \n"))
+            value = False
+
+
+def choose_catalog(Catalog):
+    """
+    Choose a catalog based on the provided keyword and return a valid file path for it.
+
+    Parameters:
+        Catalog (str): The catalog keyword, should be 'DR11' or 'DR13'.
+
+    Returns:
+        str: A valid file path for the selected catalog.
+
+    Raises:
+        argparse.ArgumentError: If an invalid catalog keyword is provided.
+    """
+    try:
+        if Catalog == 'DR13':
+            PATH = 'Catalog/4XMM_slim_DR13cat_v1.0.fits'
+            VALID_PATH = get_valid_file_path(PATH)
+            return VALID_PATH
+
+        elif Catalog == 'DR11':
+            PATH = 'Catalog/4xmmdr11slim_210716.fits'
+            VALID_PATH = get_valid_file_path(PATH)
+            return VALID_PATH
+        else:
+            raise argparse.ArgumentError(None, "invalid catalog keyword keyword. retry with DR11 or DR13.")
+    except argparse.ArgumentError as error:
+        print(f'An error occured : {error}')
+
+
+def initialization_code():
+    """
+    Initialize and configure the program based on command line arguments, searching for information about
+    a celestial object by its name or coordinates, and selecting a catalog.
+
+    Returns:
+        tuple: A tuple containing information about the celestial object:
+            - str: The name of the object.
+            - str: The coordinates of the object in the format "RA, DEC".
+            - float: The count rate of the object.
+            - str: A valid file path for the selected catalog.
+
+    Raises:
+        None
+    """
+    parser = argparse.ArgumentParser(description='Search for information with object name or coord')
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('--name', type=str, help='Replace spaces by _')
+    group.add_argument('--coord', type=float, nargs=2, help='ra dec (two float values)')
+    group.add_argument('--info', help="Have some information about PSR")
+    parser.add_argument("--Catalog", type=str, help="Enter a catalog keyword DR11/DR13.")
+
+    args = parser.parse_args()
+
+    if args.info:
+        print(PSRtable)
+        return
+    
+    if args.name:
+        NAME = args.name.replace("_", " ")
+        print(f"Searching for information with name : {NAME}")
+        try:
+            OBJposition = GetCoordPSR(NAME)
+            print(OBJposition)
+        except Exception as error:
+            print(f"Error: {NAME} isn't in Simbad Database")
+        PATH = choose_catalog(args.Catalog)
+    elif args.coord:
+        ra, dec = args.coord
+        print(f"Searching for information with coordinates : (RA={ra}, DEC={dec})")
+        try:
+            NAME = Simbad.query_region(f"{ra}d {dec}d", radius="1s")['MAIN_ID'][0]
+        except Exception as error:
+            print(f"Error: There is no object with these coordinates (RA={ra}, DEC={dec}) in the Simbad Database.")
+        OBJposition = GetCoordPSR(NAME)
+        PATH = choose_catalog(args.Catalog)
+
+    value = False
+    while not value:
+        if NAME in PSRfullnames:
+            CountRate = PSRtable['CountRate'][PSRtable['FullName'] == NAME][0]
+            value = True
+        else:
+            try:
+                CountRate = float(input("Enter the count rate of your object: \n"))
+                value = True  
+            except ValueError as error:
+                print(f"Error: {error}")
+                print("Please enter a valid float value for Count Rate.")
+                continue
+            
+    Object_data = {'ObjectName':NAME,
+               'ShortName': Name_to_Short_Name(NAME),
+               'CountRate': CountRate,
+               'PSRposition' : OBJposition}
+            
+    return Object_data, PATH
+
+
 def AngSeparation(reference, obj):
     """
     Calculate the angular separation between two celestial objects.
@@ -113,7 +238,6 @@ def FindNearbySources(catalog, SRCposition, obj_name):
     OBJECTposition = GetCoordPSR(obj_name)
     NUMBER = [n for n in range(len(catalog))]
     return [(number, coord) for (number, coord) in zip(NUMBER, SRCposition) if AngSeparation(OBJECTposition, coord) < 8*u.arcmin]
-
 
 
 def ScaledCtRate(D, OptCtRate, effareaX, effareaY):
@@ -304,3 +428,30 @@ def DataMap(Simulation_data, Vector_Dictionary, OptimalPointingIdx, Nearby_SRCpo
     cbar = plt.colorbar()
     cbar.set_label('S/N')
     plt.show()
+
+
+def count_rates(Table, xmmflux, NH, Power_Law):
+    """
+        Calculates the count rates for every source and adds them to the NearbySources_Table.
+
+        :param Modified_NearbySources_Table: Table containing nearby sources.
+        :type Modified_NearbySources_Table: astropy.table.Table
+        :return: CountRates, Updated NearbySources_Table
+        :rtype: list, astropy.table.Table
+    """
+    CountRates = []
+
+    for flux, nh, power_law in zip(xmmflux, NH, Power_Law):
+        pimms_cmds = "instrument nicer 0.3-10.0\nfrom flux ERGS 0.2-12.0\nmodel galactic nh {}\nmodel power {} 0.0\ngo {}\nexit\n".format(nh, power_law, flux)
+
+        with open('pimms_script.xco', 'w') as file:
+            file.write(pimms_cmds)
+            file.close()
+
+        result = subprocess.run(['pimms', '@pimms_script.xco'], stdout=subprocess.PIPE).stdout.decode(sys.stdout.encoding)
+        count_rate = float(result.split("predicts")[1].split('cps')[0])
+        CountRates.append(count_rate)
+
+    Table["Count Rates"] = CountRates
+
+    return CountRates, Table
