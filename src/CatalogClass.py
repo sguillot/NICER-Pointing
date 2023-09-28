@@ -5,7 +5,6 @@ from astropy.coordinates import SkyCoord
 import astropy.units as u
 import matplotlib.pyplot as plt
 
-
 class XmmCatalog:
     """
         A class for processing and analyzing XMM-Newton (XMM) DR13 catalog data and related NICER parameters.
@@ -130,7 +129,7 @@ class XmmCatalog:
         return self.NearbySources_Table, Nearby_SRCposition
         
         
-    def neighbourhood_of_object(NearbySources_Table, OBJ_dictionary):
+    def neighbourhood_of_object(NearbySources_Table, Object_data):
         """
             Plot a neighborhood map of nearby sources relative to a specified object.
 
@@ -156,9 +155,9 @@ class XmmCatalog:
         plt.gca().invert_xaxis()
 
         plt.scatter(RA, DEC, c='white', s=4, marker='x')
-        plt.scatter(OBJ_dictionary['PSRposition'].ra, OBJ_dictionary['PSRposition'].dec, c='red', s=10)
+        plt.scatter(Object_data['OBJposition'].ra, Object_data['OBJposition'].dec, c='red', s=10)
         ax.set_facecolor('black')
-        plt.title('Nearby sources for ' + OBJ_dictionary['ObjectName'] + ' N_SRC : ' + str(len(NearbySources_Table)))
+        plt.title('Nearby sources for ' + Object_data['ObjectName'] + ' N_SRC : ' + str(len(NearbySources_Table)))
         plt.xlabel('Right Ascension')
         plt.ylabel('Declination')
         plt.show()     
@@ -246,9 +245,11 @@ class Xmm2Athena:
                     index = list(self.XMM_DR11['IAUNAME']).index(item)
                     self.NearbySources_Table_DR11.add_row(self.XMM_DR11[index])
                     
+            INDEX_ATH = []
             for item in self.NearbySources_Table_DR11['DETID']:
                 if item in self.XMM_2_ATHENA['DETID']:
                     index = list(self.XMM_2_ATHENA['DETID']).index(item)
+                    INDEX_ATH.append(index)
                     self.NearbySources_Table_X2A.add_row(self.XMM_2_ATHENA[index])
             
             Log_Nh, Photon_Index = [], []
@@ -273,4 +274,4 @@ class Xmm2Athena:
             for col, data in zip(COLNAMES, DATA):
                 NearbySources_Table[col] = data
                 
-            return NearbySources_Table
+            return NearbySources_Table, INDEX_ATH

@@ -12,6 +12,59 @@ import sys
 import os
 
                 # Function
+                
+def variability_rate(NearbySource, NearbySources_Table, Simulation_data, INDEX_ATH):
+    XMMDR13 = Simulation_data['Catalog']['CurrentCatalog']
+    NAME = Simulation_data['Object_data']['ObjectName']
+    NUMBER = [NearbySource[item][0] for item in range(len(NearbySource))]
+    nbr_detected_sources = len(NearbySources_Table)
+    nbr_nan = 0
+    nbr_var_src = []
+    variability_rate = []
+    NBR_VAR = []
+    
+    for value, number in zip(NearbySources_Table['SC_FVAR'], NUMBER):
+        if np.isnan(value):
+            nbr_nan += 1
+        else:
+            variability_rate.append(XMMDR13['SC_FVAR'][number])
+            NBR_VAR.append(number)
+            nbr_var_src.append(number)
+            
+    var_src_name = [XMMDR13['IAUNAME'][number] for number in nbr_var_src]
+    var_src_skycoord = [SkyCoord(ra=XMMDR13['SC_RA'][number], dec=XMMDR13['SC_DEC'][number], unit=u.deg) for number in nbr_var_src]
+    nbr_variable_source = nbr_detected_sources - nbr_nan
+    message_xmm = f"Among {nbr_detected_sources} sources detected close to {NAME}, {nbr_variable_source} of them are variable. Using DR13 Catalog.\nHere is the name of these sources, their coordinates and their variability rate :"
+    print(message_xmm)
+    for item in range(len(nbr_var_src)):
+        print(f'Variability rate : {variability_rate[item]}\n{var_src_name[item]} : {var_src_skycoord[item]}\n')
+
+    present, missing = 0, 0
+    PRESENT, MISSING = [], []
+    for number in NBR_VAR:
+        if number in INDEX_ATH:
+            present += 1
+            PRESENT.append(XMMDR13['IAUNAME'][number])
+        else:
+            missing += 1
+            MISSING.append(XMMDR13['IAUNAME'][number])
+            
+    message_xmm2ath = f"Among {nbr_detected_sources} variable sources, {present} are in Xmm2Athena and {missing} are not in Xmm2Athena. "    
+    print(message_xmm2ath)
+    print('Here is the list of sources present in both catalog')
+    if len(PRESENT) !=0:
+        for item in range(len(PRESENT)):
+            print(PRESENT[item])
+    else:
+        print('...Empty list...')
+    print('Here is the list of sources that are missing in Xmm2Athena')
+    if len(MISSING) !=0:
+        for item in range(len(MISSING)):
+            print(MISSING[item])
+    else:
+        print('...Empty list...')
+    
+    
 
                     
 def Name_to_Short_Name(NAME):
@@ -238,7 +291,7 @@ def FindNearbySources(catalog, SRCposition, Object_data):
     OBJECTposition = Object_data['OBJposition']
     NUMBER = [n for n in range(len(catalog))]
     
-    NearbySources = [(number, coord) for (number, coord) in zip(NUMBER, SRCposition) if AngSeparation(OBJECTposition, coord) < 8*u.arcmin]
+    NearbySources = [(number, coord) for (number, coord) in zip(NUMBER, SRCposition) if AngSeparation(OBJECTposition, coord) < 5*u.arcmin]
     NumberOfSource = len(NearbySources)
 
     if NumberOfSource == 0:

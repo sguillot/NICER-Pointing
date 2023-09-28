@@ -25,19 +25,26 @@ while not value :
     XMM_2_ATHENA_path = F.get_valid_file_path('Catalog/xmm2athena_D6.1_V3.fits')
 
     X2A = Xmm2Athena(XMM_DR_11_path, XMM_2_ATHENA_path)
+    XMMDR11 = X2A.XMM_DR11
+    XMM2ATH = X2A.XMM_2_ATHENA
 
     # -------------------------------------------------- #
                     # Useful dictionary
 
+    Catalog = {'CurrentCatalog': XMM_DR_13_CATALOG,
+               'XMMDR11':XMMDR11,
+               'XMM2ATH':XMM2ATH}
+    
     Telescop_data = {'TelescopeName': 'NICER',
                     'EffArea': EffArea,
                     'OffAxisAngle': OffAxisAngle}
 
     Simulation_data = {'Object_data': Object_data,
-                    'Telescop_data': Telescop_data,
-                    'INSTbkgd': 0.2,
-                    'EXPtime': 1e6,
-                    }
+                       'Telescop_data': Telescop_data,
+                       'Catalog': Catalog,
+                       'INSTbkgd': 0.2,
+                       'EXPtime': 1e6,
+                       }
 
     # -------------------------------------------------- #
     
@@ -52,7 +59,9 @@ while not value :
         print(f"An error occured : {err}")
     
 NearbySources_Table, Nearby_SRCposition = XMM.create_NearbySource_table(NearbySource, XMM_DR_13_CATALOG)
-NearbySources_Table = X2A.add_nh_photon_index(NearbySources_Table=NearbySources_Table)
+NearbySources_Table, INDEX_ATH = X2A.add_nh_photon_index(NearbySources_Table=NearbySources_Table)
+
+F.variability_rate(NearbySource, NearbySources_Table, Simulation_data, INDEX_ATH)
 
 # -------------------------------------------------- #
 
