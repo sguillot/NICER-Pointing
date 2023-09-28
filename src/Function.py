@@ -202,9 +202,9 @@ def initialization_code():
                 continue
             
     Object_data = {'ObjectName':NAME,
-               'ShortName': Name_to_Short_Name(NAME),
-               'CountRate': CountRate,
-               'PSRposition' : OBJposition}
+                   'ShortName': Name_to_Short_Name(NAME),
+                   'CountRate': CountRate,
+                   'OBJposition' : OBJposition}
             
     return Object_data, PATH
 
@@ -223,7 +223,7 @@ def AngSeparation(reference, obj):
     return reference.separation(obj)
 
 
-def FindNearbySources(catalog, SRCposition, obj_name):
+def FindNearbySources(catalog, SRCposition, Object_data):
     """
     Find nearby sources close to the observing object within a specified angular range.
 
@@ -235,9 +235,17 @@ def FindNearbySources(catalog, SRCposition, obj_name):
     Returns:
     list: A list of tuples containing the number and coordinates of sources close to the observing object.
     """           
-    OBJECTposition = GetCoordPSR(obj_name)
+    OBJECTposition = Object_data['OBJposition']
     NUMBER = [n for n in range(len(catalog))]
-    return [(number, coord) for (number, coord) in zip(NUMBER, SRCposition) if AngSeparation(OBJECTposition, coord) < 8*u.arcmin]
+    
+    NearbySources = [(number, coord) for (number, coord) in zip(NUMBER, SRCposition) if AngSeparation(OBJECTposition, coord) < 8*u.arcmin]
+    NumberOfSource = len(NearbySources)
+
+    if NumberOfSource == 0:
+        return None
+    else:
+        return NearbySources
+    
 
 
 def ScaledCtRate(D, OptCtRate, effareaX, effareaY):
@@ -394,7 +402,6 @@ def OptimalPointInfos(Vector_Dictionary, OptimalPointingIdx, SRCoptimalRATES):
     #print str(SRCoptimalSEPAR)
     print ("Optimal Pointing:  " + str(Vector_Dictionary["SampleRA"][OptimalPointingIdx]) + "  " + str(Vector_Dictionary["SampleDEC"][OptimalPointingIdx]))
     print ("----------------------------------------------------------------------")
-
 
 
 def DataMap(Simulation_data, Vector_Dictionary, OptimalPointingIdx, Nearby_SRCposition):

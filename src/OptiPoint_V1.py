@@ -1,45 +1,56 @@
 from CatalogClass import XmmCatalog, Xmm2Athena
 import Function as F
 
-# -------------------------------------------------- #
+                # Initialization of code : Object, Catalog and NearbySources
+                
+value = False
+while not value :
+    # -------------------------------------------------- #
 
-                # Arg_parser function
+                    # Arg_parser function
 
-Object_data, PATH = F.initialization_code()
+    Object_data, PATH = F.initialization_code()
 
-# -------------------------------------------------- #
+    # -------------------------------------------------- #
 
-NICER_parameters_path = F.get_valid_file_path("Catalog/NICER_PSF.dat")
+    NICER_parameters_path = F.get_valid_file_path("Catalog/NICER_PSF.dat")
 
-XMM = XmmCatalog(PATH, NICER_parameters_path)
+    XMM = XmmCatalog(PATH, NICER_parameters_path)
 
-XMM_DR_13_CATALOG = XMM.catalog
-EffArea, OffAxisAngle = XMM.NICER_parameters
-SRCposition = XMM.SRCcoord
+    XMM_DR_13_CATALOG = XMM.catalog
+    EffArea, OffAxisAngle = XMM.NICER_parameters
+    SRCposition = XMM.SRCcoord
 
-XMM_DR_11_path = F.get_valid_file_path('Catalog/4XMM_DR11cat_v1.0.fits')
-XMM_2_ATHENA_path = F.get_valid_file_path('Catalog/xmm2athena_D6.1_V3.fits')
+    XMM_DR_11_path = F.get_valid_file_path('Catalog/4XMM_DR11cat_v1.0.fits')
+    XMM_2_ATHENA_path = F.get_valid_file_path('Catalog/xmm2athena_D6.1_V3.fits')
 
-X2A = Xmm2Athena(XMM_DR_11_path, XMM_2_ATHENA_path)
+    X2A = Xmm2Athena(XMM_DR_11_path, XMM_2_ATHENA_path)
 
-# -------------------------------------------------- #
-                # Useful dictionary
+    # -------------------------------------------------- #
+                    # Useful dictionary
 
-Telescop_data = {'TelescopeName': 'NICER',
-                 'EffArea': EffArea,
-                 'OffAxisAngle': OffAxisAngle}
+    Telescop_data = {'TelescopeName': 'NICER',
+                    'EffArea': EffArea,
+                    'OffAxisAngle': OffAxisAngle}
 
-Simulation_data = {'Object_data': Object_data,
-                   'Telescop_data': Telescop_data,
-                   'INSTbkgd': 0.2,
-                   'EXPtime': 1e6,
-                   }
+    Simulation_data = {'Object_data': Object_data,
+                    'Telescop_data': Telescop_data,
+                    'INSTbkgd': 0.2,
+                    'EXPtime': 1e6,
+                    }
 
-print(Simulation_data)
-
-# -------------------------------------------------- #
-
-NearbySource = F.FindNearbySources(XMM_DR_13_CATALOG, SRCposition, Simulation_data['Object_data']['ObjectName'])
+    # -------------------------------------------------- #
+    
+    try : 
+        NearbySource = F.FindNearbySources(XMM_DR_13_CATALOG, SRCposition, Simulation_data['Object_data'])
+        if NearbySource is None:
+            print(f"No sources detected close to {Object_data['ObjectName']}")
+        else:
+            print(f"We have detected {len(NearbySource)} sources close to {Object_data['ObjectName']}")
+            value = True
+    except Exception as err :
+        print(f"An error occured : {err}")
+    
 NearbySources_Table, Nearby_SRCposition = XMM.create_NearbySource_table(NearbySource, XMM_DR_13_CATALOG)
 NearbySources_Table = X2A.add_nh_photon_index(NearbySources_Table=NearbySources_Table)
 
