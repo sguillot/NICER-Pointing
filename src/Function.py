@@ -14,57 +14,31 @@ import os
                 # Function
                 
 def variability_rate(NearbySource, NearbySources_Table, Simulation_data, INDEX_ATH):
+    
     XMMDR13 = Simulation_data['Catalog']['CurrentCatalog']
     NAME = Simulation_data['Object_data']['ObjectName']
     NUMBER = [NearbySource[item][0] for item in range(len(NearbySource))]
-    nbr_detected_sources = len(NearbySources_Table)
-    nbr_nan = 0
-    nbr_var_src = []
-    variability_rate = []
-    NBR_VAR = []
+    NBR_VAR = [number for value, number in zip(NearbySources_Table['SC_FVAR'], NUMBER) if not np.isnan(value)]
     
-    for value, number in zip(NearbySources_Table['SC_FVAR'], NUMBER):
-        if np.isnan(value):
-            nbr_nan += 1
-        else:
-            variability_rate.append(XMMDR13['SC_FVAR'][number])
-            NBR_VAR.append(number)
-            nbr_var_src.append(number)
-            
-    var_src_name = [XMMDR13['IAUNAME'][number] for number in nbr_var_src]
-    var_src_skycoord = [SkyCoord(ra=XMMDR13['SC_RA'][number], dec=XMMDR13['SC_DEC'][number], unit=u.deg) for number in nbr_var_src]
-    nbr_variable_source = nbr_detected_sources - nbr_nan
-    message_xmm = f"Among {nbr_detected_sources} sources detected close to {NAME}, {nbr_variable_source} of them are variable. Using DR13 Catalog.\nHere is the name of these sources, their coordinates and their variability rate :"
-    print(message_xmm)
-    for item in range(len(nbr_var_src)):
-        print(f'Variability rate : {variability_rate[item]}\n{var_src_name[item]} : {var_src_skycoord[item]}\n')
+    VAR_SRC_NAME = [XMMDR13['IAUNAME'][number] for number in NBR_VAR]
+    VAR_RA = [XMMDR13['SC_RA'][number] for number in NBR_VAR]
+    VAR_DEC = [XMMDR13['SC_DEC'][number] for number in NBR_VAR]
+    VARIABILITY_RATE = [XMMDR13['SC_FVAR'][number] for number in NBR_VAR]
+    IN_X2A = [True if number in INDEX_ATH else False for number in NBR_VAR]
+    
+    COLNAMES = ['IAUNAME', 'RA', 'DEC', 'Var_Rate', 'In_Xmm2Athena']
+    COL_DATA = [VAR_SRC_NAME, VAR_RA, VAR_DEC, VARIABILITY_RATE, IN_X2A]
+    
+    VAR_SRC_Table = Table()
+    for name, data in zip(COLNAMES, COL_DATA):
+        VAR_SRC_Table[name] = data    
 
-    present, missing = 0, 0
-    PRESENT, MISSING = [], []
-    for number in NBR_VAR:
-        if number in INDEX_ATH:
-            present += 1
-            PRESENT.append(XMMDR13['IAUNAME'][number])
-        else:
-            missing += 1
-            MISSING.append(XMMDR13['IAUNAME'][number])
-            
-    message_xmm2ath = f"Among {nbr_detected_sources} variable sources, {present} are in Xmm2Athena and {missing} are not in Xmm2Athena. "    
+    message_xmm = f"Among {len(NearbySources_Table)} sources detected close to {NAME}, {len(VAR_SRC_NAME)} of them are variable. Using DR13 Catalog."
+    print(message_xmm)
+    message_xmm2ath = f"Among {len(VAR_SRC_Table)} variable sources, {IN_X2A.count(True)} are in Xmm2Athena and {IN_X2A.count(False)} are not in Xmm2Athena. "    
     print(message_xmm2ath)
-    print('Here is the list of sources present in both catalog')
-    if len(PRESENT) !=0:
-        for item in range(len(PRESENT)):
-            print(PRESENT[item])
-    else:
-        print('...Empty list...')
-    print('Here is the list of sources that are missing in Xmm2Athena')
-    if len(MISSING) !=0:
-        for item in range(len(MISSING)):
-            print(MISSING[item])
-    else:
-        print('...Empty list...')
-    
-    
+        
+    return VAR_SRC_Table
 
                     
 def Name_to_Short_Name(NAME):
@@ -193,6 +167,76 @@ def choose_catalog(Catalog):
         print(f'An error occured : {error}')
 
 
+def define_sources_list():
+    """
+    Prompts the user to define a list of sources for calculations. This function allows users to add sources either manually or by importing data from a file.
+
+    Returns:
+    SRC_LIST (list): A list of source tuples, each containing the source name, right ascension (ra), and declination (dec).
+
+    The function begins by asking the user whether they want to add sources to the calculation.
+    If the user chooses to add sources manually, they will be prompted to enter the source details (name, ra, and dec) for each source.
+    If the user chooses to import data from a file, the function reads data from the specified file and extracts the necessary columns.
+    The extracted data is then added to the SRC_LIST as source tuples.
+
+    The function continues to prompt the user until they have either manually added all the sources they need or imported sources from a file.
+    If the user enters invalid input at any point, the function will display an error message and continue to prompt for valid input.
+    
+    """
+    SRC_LIST = []
+
+    while True:
+        try:
+            choice = str(input("Add sources to calculation? (yes/y or no/n): ")).lower()
+
+            if choice in ['no', 'n']:
+                return None
+            elif choice in ['yes', 'y']:
+                break
+            else:
+                raise ValueError("Invalid input. Please enter 'yes' or 'y' for yes, 'no' or 'n' for no.")
+        except ValueError as error:
+            print(f"An error occured {error}")
+
+    while True :
+        open_file = str(input("Import data_src from a file? (yes/y or no/n): ")).lower()
+
+        try:
+            if open_file in ['yes', 'y']:
+                print("Try : Catalog/exemple_src.txt")
+                FILE_PATH = str(input("Enter a file_path : \n"))
+                file_path = get_valid_file_path(FILE_PATH)
+                
+                col1, ra, dec = np.loadtxt(file_path, unpack=True, usecols=(0, 1, 2), dtype={'names': ('col1', 'col2', 'col3'), 'formats': ('S25', 'f8', 'f8')})
+                name = [col1[data].decode().replace("_", " ") for data in range(len(col1))]
+                
+                for value in range(len(col1)):
+                    SRC_LIST.append((name[value], ra[value], dec[value]))
+                    
+                break
+                    
+            elif open_file in ['no', 'n']:
+                
+                nbr_src = int(input("How many sources do you need to add? "))
+                item = 0
+                
+                while item < nbr_src:
+                    name = input('Enter source name: ')
+                    ra = float(input('Enter right ascension: '))
+                    dec = float(input('Enter declination: '))
+                    SRC_LIST.append((name, ra, dec))
+                    item += 1
+                    print(f"{item} item added to the list")
+
+                break
+            else:
+                raise ValueError("Invalid input. Please enter 'yes' or 'y' for yes, 'no' or 'n' for no.")
+        except ValueError as error:
+            print(f"An error occured {error}")
+            
+    return SRC_LIST
+
+
 def initialization_code():
     """
     Initialize and configure the program based on command line arguments, searching for information about
@@ -204,9 +248,32 @@ def initialization_code():
             - str: The coordinates of the object in the format "RA, DEC".
             - float: The count rate of the object.
             - str: A valid file path for the selected catalog.
+            
+    This function initializes and configures the program based on command line arguments provided by the user.
+    The command line arguments can be used to search for information about a celestial object by either its name
+    or coordinates. Additionally, the user can select a catalog by providing a catalog keyword.
+
+    If the '--info' flag is used, the function prints the PSRtable and returns None.
+
+    If the '--name' flag is used, the function searches for information using the object name. If the object name contains
+    spaces, they are replaced by underscores. If the object is not found in the Simbad Database, an error message is displayed.
+    The function then prompts the user to enter the count rate for the object.
+
+    If the '--coord' flag is used, the function searches for information using the provided coordinates (RA and DEC).
+    If no object is found at the specified coordinates in the Simbad Database, an error message is displayed.
+    The function then prompts the user to enter the count rate for the object.
+
+    After obtaining the object's name, coordinates, and count rate, the user is prompted to define a list of sources using
+    the 'define_sources_list' function.
+
+    Returns a tuple containing the following elements:
+    - str: The name of the celestial object.
+    - str: The coordinates of the object in the format "RA, DEC".
+    - float: The count rate of the object.
+    - str: A valid file path for the selected catalog.
 
     Raises:
-        None
+    None
     """
     parser = argparse.ArgumentParser(description='Search for information with object name or coord')
     group = parser.add_mutually_exclusive_group(required=True)
@@ -258,8 +325,11 @@ def initialization_code():
                    'ShortName': Name_to_Short_Name(NAME),
                    'CountRate': CountRate,
                    'OBJposition' : OBJposition}
-            
-    return Object_data, PATH
+    
+    
+    SRC_VAR_LIST = define_sources_list()
+    
+    return Object_data, PATH, SRC_VAR_LIST
 
 
 def AngSeparation(reference, obj):
@@ -291,7 +361,7 @@ def FindNearbySources(catalog, SRCposition, Object_data):
     OBJECTposition = Object_data['OBJposition']
     NUMBER = [n for n in range(len(catalog))]
     
-    NearbySources = [(number, coord) for (number, coord) in zip(NUMBER, SRCposition) if AngSeparation(OBJECTposition, coord) < 5*u.arcmin]
+    NearbySources = [(number, coord) for (number, coord) in zip(NUMBER, SRCposition) if AngSeparation(OBJECTposition, coord) < 8*u.arcmin]
     NumberOfSource = len(NearbySources)
 
     if NumberOfSource == 0:
@@ -472,7 +542,7 @@ def DataMap(Simulation_data, Vector_Dictionary, OptimalPointingIdx, Nearby_SRCpo
     """
     Object_data = Simulation_data['Object_data']
     
-        # Plot the map of S/N ratio as function of NICER pointing
+    # Plot the map of S/N ratio as function of NICER pointing
     fig = plt.figure(figsize=(10,6.5))
     ax = fig.add_subplot(111)
     plt.gca().invert_xaxis()

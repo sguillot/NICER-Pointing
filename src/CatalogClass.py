@@ -129,7 +129,7 @@ class XmmCatalog:
         return self.NearbySources_Table, Nearby_SRCposition
         
         
-    def neighbourhood_of_object(NearbySources_Table, Object_data):
+    def neighbourhood_of_object(NearbySources_Table, Object_data, VAR_SRC_Table):
         """
             Plot a neighborhood map of nearby sources relative to a specified object.
 
@@ -148,18 +148,26 @@ class XmmCatalog:
             Example:
             neighbourhood_of_object(NearbySources_Table, {'PSRposition': SkyCoord(...), 'ObjectName': 'ExampleObject'})
         """
-        RA = NearbySources_Table['SC_RA']
-        DEC = NearbySources_Table['SC_DEC']
-            
         fig, ax = plt.subplots()
         plt.gca().invert_xaxis()
 
-        plt.scatter(RA, DEC, c='white', s=4, marker='x')
-        plt.scatter(Object_data['OBJposition'].ra, Object_data['OBJposition'].dec, c='red', s=10)
-        ax.set_facecolor('black')
+        plt.scatter(NearbySources_Table['SC_RA'], NearbySources_Table['SC_DEC'], c='black', s=15, label='All_Sources')
+        plt.scatter(VAR_SRC_Table['RA'], VAR_SRC_Table['DEC'], c='yellow', s=20, marker="+", label='Variable_Sources')
+        plt.scatter(Object_data['OBJposition'].ra, Object_data['OBJposition'].dec, c='red', s=30, label='OBJposition')
+        
+        # ax.set_facecolor('black')
         plt.title('Nearby sources for ' + Object_data['ObjectName'] + ' N_SRC : ' + str(len(NearbySources_Table)))
         plt.xlabel('Right Ascension')
         plt.ylabel('Declination')
+        
+        legend_labels = {'All_Sources': 'All Sources', 
+                         'Variable_Sources': 'Variable Sources',
+                         'OBJposition': 'PSRposition'}
+        
+        handles, labels = plt.gca().get_legend_handles_labels()
+        labels = [legend_labels.get(label, label) for label in labels]
+        plt.legend(handles, labels, loc='upper right', ncol=3)
+        
         plt.show()     
     
 

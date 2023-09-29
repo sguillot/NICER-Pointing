@@ -1,15 +1,12 @@
 from CatalogClass import XmmCatalog, Xmm2Athena
 import Function as F
-
-                # Initialization of code : Object, Catalog and NearbySources
                 
-value = False
-while not value :
+while True:
     # -------------------------------------------------- #
 
                     # Arg_parser function
 
-    Object_data, PATH = F.initialization_code()
+    Object_data, PATH, SRC_VAR_LIST = F.initialization_code()
 
     # -------------------------------------------------- #
 
@@ -45,23 +42,25 @@ while not value :
                        'INSTbkgd': 0.2,
                        'EXPtime': 1e6,
                        }
+    
 
     # -------------------------------------------------- #
-    
+
     try : 
         NearbySource = F.FindNearbySources(XMM_DR_13_CATALOG, SRCposition, Simulation_data['Object_data'])
         if NearbySource is None:
             print(f"No sources detected close to {Object_data['ObjectName']}")
+            break
         else:
             print(f"We have detected {len(NearbySource)} sources close to {Object_data['ObjectName']}")
-            value = True
-    except Exception as err :
-        print(f"An error occured : {err}")
+            break
+    except Exception as error :
+        print(f"An error occured : {error}")
     
 NearbySources_Table, Nearby_SRCposition = XMM.create_NearbySource_table(NearbySource, XMM_DR_13_CATALOG)
 NearbySources_Table, INDEX_ATH = X2A.add_nh_photon_index(NearbySources_Table=NearbySources_Table)
 
-F.variability_rate(NearbySource, NearbySources_Table, Simulation_data, INDEX_ATH)
+VAR_SRC_Table = F.variability_rate(NearbySource, NearbySources_Table, Simulation_data, INDEX_ATH)
 
 # -------------------------------------------------- #
 
@@ -69,7 +68,7 @@ F.variability_rate(NearbySource, NearbySources_Table, Simulation_data, INDEX_ATH
 
                 # Visualized data Matplotlib without S/N
 
-XmmCatalog.neighbourhood_of_object(NearbySources_Table, Simulation_data['Object_data'])
+XmmCatalog.neighbourhood_of_object(NearbySources_Table, Simulation_data['Object_data'], VAR_SRC_Table)
 
 # -------------------------------------------------- #
 
