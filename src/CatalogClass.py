@@ -104,7 +104,7 @@ class XmmCatalog:
             return None, None  
 
 
-    def create_NearbySource_table(self, NearbySource, XMM_catalog):
+    def create_NearbySource_table(self, NearbySource, XMM_catalog, UserList):
         """
             Creates an astropy Table of all sources close to the observing object.
 
@@ -115,14 +115,24 @@ class XmmCatalog:
             :return: NearbySources_Table, SRCposition
             :rtype: astropy.table.Table, astropy.coordinates.SkyCoord
         """
-        N_SRC = len(NearbySource)        
-        NUMBER = [NearbySource[number][0] for number in range(N_SRC)]           
-
+        N_SRC = len(NearbySource) - len(UserList)
+        NUMBER = [NearbySource[number][0] for number in range(N_SRC)]  
+          
         self.NearbySources_Table = Table(names=XMM_catalog.colnames,
                                          dtype=XMM_catalog.dtype)
         
-        for number in NUMBER:
-            self.NearbySources_Table.add_row(XMM_catalog[number])
+        if len(UserList) != 0:
+            for number in NUMBER:
+                self.NearbySources_Table.add_row(XMM_catalog[number])
+
+            for name, ra, dec, nan in UserList:
+                new_row = [0, name, ra, dec] + [0] * 28 + [nan] + [0]*11 + ['no website URL']
+                print(len(new_row))
+                self.NearbySources_Table.add_row(new_row)
+
+        else:
+            for number in NUMBER:
+                self.NearbySources_Table.add_row(XMM_catalog[number])
         
         Nearby_SRCposition = SkyCoord(ra=self.NearbySources_Table['SC_RA'], dec=self.NearbySources_Table['SC_DEC'], unit=(u.degree, u.degree))
 
@@ -148,27 +158,42 @@ class XmmCatalog:
             Example:
             neighbourhood_of_object(NearbySources_Table, {'PSRposition': SkyCoord(...), 'ObjectName': 'ExampleObject'})
         """
-        fig, ax = plt.subplots()
-        plt.gca().invert_xaxis()
-
-        plt.scatter(NearbySources_Table['SC_RA'], NearbySources_Table['SC_DEC'], c='black', s=15, label='All_Sources')
-        plt.scatter(VAR_SRC_Table['RA'], VAR_SRC_Table['DEC'], c='yellow', s=20, marker="+", label='Variable_Sources')
-        plt.scatter(Object_data['OBJposition'].ra, Object_data['OBJposition'].dec, c='red', s=30, label='OBJposition')
+        NBR_sources = len(NearbySources_Table)
+        VAR_RA = [VAR_SRC_Table['RA'][number] for number in range(len(VAR_SRC_Table)) if not VAR_SRC_Table['In_Xmm2Athena'][number]]
+        VAR_DEC = [VAR_SRC_Table['DEC'][number] for number in range(len(VAR_SRC_Table)) if not VAR_SRC_Table['In_Xmm2Athena'][number]]
         
-        # ax.set_facecolor('black')
-        plt.title('Nearby sources for ' + Object_data['ObjectName'] + ' N_SRC : ' + str(len(NearbySources_Table)))
-        plt.xlabel('Right Ascension')
-        plt.ylabel('Declination')
+        VAR_RA_X2A = [VAR_SRC_Table['RA'][number] for number in range(len(VAR_SRC_Table)) if VAR_SRC_Table['In_Xmm2Athena'][number]]
+        VAR_DEC_X2A = [VAR_SRC_Table['DEC'][number] for number in range(len(VAR_SRC_Table)) if VAR_SRC_Table['In_Xmm2Athena'][number]]
         
-        legend_labels = {'All_Sources': 'All Sources', 
-                         'Variable_Sources': 'Variable Sources',
-                         'OBJposition': 'PSRposition'}
+        fig, axes = plt.subplots(1, 2, figsize=(17, 7))
+        fig.suptitle(f"Neighbourhood of {Object_data['ObjectName']}")
         
-        handles, labels = plt.gca().get_legend_handles_labels()
-        labels = [legend_labels.get(label, label) for label in labels]
-        plt.legend(handles, labels, loc='upper right', ncol=3)
+        ax0, ax1 = axes[0], axes[1]
         
-        plt.show()     
+        RA = [NearbySources_Table['SC_RA'][RightAsc] for RightAsc in range(NBR_sources) if NearbySources_Table['SC_RA'][RightAsc] != Object_data['OBJposition'].ra]
+        DEC = [NearbySources_Table['SC_DEC'][Decl] for Decl in range(NBR_sources) if NearbySources_Table['SC_DEC'][Decl] != Object_data['OBJposition'].dec]        
+        
+        ax0.scatter(RA, DEC, color='black', s=10, label="Sources")
+        ax0.scatter(Object_data['OBJposition'].ra, Object_data['OBJposition'].dec, marker='*', s=100, color='red', label=f"{Object_data['ObjectName']}")
+        ax0.legend(loc='upper right')
+        ax0.set_xlabel("Right Ascension")
+        ax0.set_ylabel("Declination")
+        ax0.set_title(f"Sources close to {Object_data['ObjectName']}, {NBR_sources} sources")
+        
+        
+        INVAR_RA = [NearbySources_Table['SC_RA'][RightAsc] for RightAsc in range(NBR_sources) if NearbySources_Table['SC_RA'][RightAsc] not in VAR_RA]
+        INVAR_DEC = [NearbySources_Table['SC_DEC'][Decl] for Decl in range(NBR_sources) if NearbySources_Table['SC_DEC'][Decl] not in VAR_DEC]
+        
+        ax1.scatter(INVAR_RA, INVAR_DEC, color='black', s=10, label=f"Invariable sources : {len(INVAR_RA)}")
+        ax1.scatter(VAR_RA, VAR_DEC, color='orange', s=10, label=f"Variable sources : {len(VAR_RA)}")
+        ax1.scatter(VAR_RA_X2A, VAR_DEC_X2A, color='blue', s=10, label=f"Variable sources in Xmm2Athena : {len(VAR_RA_X2A)}")
+        ax1.scatter(Object_data['OBJposition'].ra, Object_data['OBJposition'].dec, marker='*', s=100, color='red', label=f"{Object_data['ObjectName']}")
+        ax1.legend(loc='upper right', ncol=2)
+        ax1.set_xlabel("Right Ascension")
+        ax1.set_ylabel("Declination")
+        ax1.set_title(f"Variable and invariable sources close to {Object_data['ObjectName']} ")
+        
+        plt.show()   
     
 
 class Xmm2Athena:
@@ -231,7 +256,7 @@ class Xmm2Athena:
         return cat_XMM_DR11, cat_XMM_2_ATHENA
 
 
-    def add_nh_photon_index(self, NearbySources_Table):
+    def add_nh_photon_index(self, NearbySources_Table, UserList):
             """
                 Add columns for logNH and PhotonIndex to the nearby sources table
                 based on matching DETID values with XMM-Newton to Athena data.
@@ -248,38 +273,40 @@ class Xmm2Athena:
             self.NearbySources_Table_X2A = Table(names=self.XMM_2_ATHENA.colnames,
                                                 dtype=self.XMM_2_ATHENA.dtype)
 
-            for item in NearbySources_Table['IAUNAME']:
+            iter_number = len(NearbySources_Table) - len(UserList)
+
+            for item in NearbySources_Table['IAUNAME'][:iter_number]:
                 if item in self.XMM_DR11['IAUNAME']:
                     index = list(self.XMM_DR11['IAUNAME']).index(item)
                     self.NearbySources_Table_DR11.add_row(self.XMM_DR11[index])
-                    
+
             INDEX_ATH = []
             for item in self.NearbySources_Table_DR11['DETID']:
                 if item in self.XMM_2_ATHENA['DETID']:
                     index = list(self.XMM_2_ATHENA['DETID']).index(item)
                     INDEX_ATH.append(index)
                     self.NearbySources_Table_X2A.add_row(self.XMM_2_ATHENA[index])
-            
+
             Log_Nh, Photon_Index = [], []
             for item in self.NearbySources_Table_DR11['DETID']:
                 if item in self.XMM_2_ATHENA['DETID']:
                     index = list(self.XMM_2_ATHENA['DETID']).index(item)
-                    
+
                     Log_Nh.append(self.XMM_2_ATHENA['logNH_med'][index])
                     Photon_Index.append(self.XMM_2_ATHENA['PhoIndex_med'][index])
                 else:
                     Log_Nh.append(0.0)
                     Photon_Index.append(0.0)
-                
+
             for item in range(len(self.NearbySources_Table_DR11)):
                 if Photon_Index[item] == 0:
                     Photon_Index[item] = 2.0
-                    
-            NH = [np.exp(value * np.log(10)) if value != 0.0 else 0.0 for value in Log_Nh]
+ 
+            NH = [np.exp(value * np.log(10)) if value != 0.0 else 0.0 for value in Log_Nh] + [0] * len(UserList)
             COLNAMES = ['Photon Index', 'Nh']
-            DATA = [Photon_Index, NH]
+            DATA = [Photon_Index + [2.0]*len(UserList), NH]
             
             for col, data in zip(COLNAMES, DATA):
                 NearbySources_Table[col] = data
-                
+
             return NearbySources_Table, INDEX_ATH

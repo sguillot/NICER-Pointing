@@ -6,7 +6,7 @@ while True:
 
                     # Arg_parser function
 
-    Object_data, PATH, SRC_VAR_LIST = F.initialization_code()
+    Object_data, PATH, UserList = F.initialization_code()
 
     # -------------------------------------------------- #
 
@@ -42,12 +42,11 @@ while True:
                        'INSTbkgd': 0.2,
                        'EXPtime': 1e6,
                        }
-    
 
     # -------------------------------------------------- #
 
     try : 
-        NearbySource = F.FindNearbySources(XMM_DR_13_CATALOG, SRCposition, Simulation_data['Object_data'])
+        NearbySource = F.FindNearbySources(XMM_DR_13_CATALOG, SRCposition, Simulation_data['Object_data'], UserList)
         if NearbySource is None:
             print(f"No sources detected close to {Object_data['ObjectName']}")
             break
@@ -56,9 +55,12 @@ while True:
             break
     except Exception as error :
         print(f"An error occured : {error}")
-    
-NearbySources_Table, Nearby_SRCposition = XMM.create_NearbySource_table(NearbySource, XMM_DR_13_CATALOG)
-NearbySources_Table, INDEX_ATH = X2A.add_nh_photon_index(NearbySources_Table=NearbySources_Table)
+        
+    # -------------------------------------------------- #
+
+
+NearbySources_Table, Nearby_SRCposition = XMM.create_NearbySource_table(NearbySource, XMM_DR_13_CATALOG, UserList)
+NearbySources_Table, INDEX_ATH = X2A.add_nh_photon_index(NearbySources_Table=NearbySources_Table, UserList=UserList)
 
 VAR_SRC_Table = F.variability_rate(NearbySource, NearbySources_Table, Simulation_data, INDEX_ATH)
 

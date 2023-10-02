@@ -183,7 +183,7 @@ def define_sources_list():
     If the user enters invalid input at any point, the function will display an error message and continue to prompt for valid input.
     
     """
-    SRC_LIST = []
+    UserList = []
 
     while True:
         try:
@@ -207,11 +207,11 @@ def define_sources_list():
                 FILE_PATH = str(input("Enter a file_path : \n"))
                 file_path = get_valid_file_path(FILE_PATH)
                 
-                col1, ra, dec = np.loadtxt(file_path, unpack=True, usecols=(0, 1, 2), dtype={'names': ('col1', 'col2', 'col3'), 'formats': ('S25', 'f8', 'f8')})
+                col1, ra, dec, valueVar = np.loadtxt(file_path, unpack=True, usecols=(0, 1, 2, 3), dtype={'names': ('col1', 'ra', 'dec', 'valueVar'), 'formats': ('S25', 'f8', 'f8', 'f4')})
                 name = [col1[data].decode().replace("_", " ") for data in range(len(col1))]
                 
                 for value in range(len(col1)):
-                    SRC_LIST.append((name[value], ra[value], dec[value]))
+                    UserList.append((name[value], ra[value], dec[value],valueVar[value]))
                     
                 break
                     
@@ -224,7 +224,10 @@ def define_sources_list():
                     name = input('Enter source name: ')
                     ra = float(input('Enter right ascension: '))
                     dec = float(input('Enter declination: '))
-                    SRC_LIST.append((name, ra, dec))
+                    valueVar = input("Enter the value of variability rate of your object, enter nan if the object is invariant")
+                    if valueVar == 'nan':
+                        valueVar = np.nan
+                    UserList.append((name, ra, dec, valueVar))
                     item += 1
                     print(f"{item} item added to the list")
 
@@ -234,7 +237,7 @@ def define_sources_list():
         except ValueError as error:
             print(f"An error occured {error}")
             
-    return SRC_LIST
+    return UserList
 
 
 def initialization_code():
@@ -327,9 +330,9 @@ def initialization_code():
                    'OBJposition' : OBJposition}
     
     
-    SRC_VAR_LIST = define_sources_list()
+    UserList = define_sources_list()
     
-    return Object_data, PATH, SRC_VAR_LIST
+    return Object_data, PATH, UserList
 
 
 def AngSeparation(reference, obj):
@@ -346,7 +349,7 @@ def AngSeparation(reference, obj):
     return reference.separation(obj)
 
 
-def FindNearbySources(catalog, SRCposition, Object_data):
+def FindNearbySources(catalog, SRCposition, Object_data, UserList):
     """
     Find nearby sources close to the observing object within a specified angular range.
 
@@ -357,11 +360,18 @@ def FindNearbySources(catalog, SRCposition, Object_data):
 
     Returns:
     list: A list of tuples containing the number and coordinates of sources close to the observing object.
-    """           
+    """  
+    RA, DEC = [UserList[item][1] for item in range(len(UserList))], [UserList[item][2] for item in range(len(UserList))]       
     OBJECTposition = Object_data['OBJposition']
-    NUMBER = [n for n in range(len(catalog))]
     
-    NearbySources = [(number, coord) for (number, coord) in zip(NUMBER, SRCposition) if AngSeparation(OBJECTposition, coord) < 8*u.arcmin]
+    if len(UserList) != 0:
+        SRCposition = SkyCoord(ra=list(SRCposition.ra) + RA, dec=list(SRCposition.dec) + DEC, unit=u.deg)
+        NUMBER = [n for n in range(len(catalog))] + [None]*len(UserList)
+        NearbySources = [(number, coord) for (number, coord) in zip(NUMBER, SRCposition) if AngSeparation(OBJECTposition, coord) < 5*u.arcmin]
+    else:
+        NUMBER = [n for n in range(len(catalog))]
+        NearbySources = [(number, coord) for (number, coord) in zip(NUMBER, SRCposition) if AngSeparation(OBJECTposition, coord) < 5*u.arcmin]
+    
     NumberOfSource = len(NearbySources)
 
     if NumberOfSource == 0:
