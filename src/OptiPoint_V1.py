@@ -46,20 +46,20 @@ while True:
     # -------------------------------------------------- #
 
     try : 
-        NearbySource = F.FindNearbySources(XMM_DR_13_CATALOG, SRCposition, Simulation_data['Object_data'], UserList)
-        if NearbySource is None:
+        NearbySource, User_NearbySource = F.FindNearbySources(XMM_DR_13_CATALOG, SRCposition, Simulation_data['Object_data'], UserList)
+        if len(NearbySource) == 0 and len(User_NearbySource) == 0:
             print(f"No sources detected close to {Object_data['ObjectName']}")
             break
         else:
-            print(f"We have detected {len(NearbySource)} sources close to {Object_data['ObjectName']}")
+            print(f"We have detected {len(NearbySource) + len(User_NearbySource)} sources close to {Object_data['ObjectName']}")
             break
     except Exception as error :
         print(f"An error occured : {error}")
         
     # -------------------------------------------------- #
 
+NearbySources_Table, Nearby_SRCposition = XMM.create_NearbySource_table(NearbySource, XMM_DR_13_CATALOG, UserList, User_NearbySource)
 
-NearbySources_Table, Nearby_SRCposition = XMM.create_NearbySource_table(NearbySource, XMM_DR_13_CATALOG, UserList)
 NearbySources_Table, INDEX_ATH = X2A.add_nh_photon_index(NearbySources_Table=NearbySources_Table, UserList=UserList)
 
 VAR_SRC_Table = F.variability_rate(NearbySource, NearbySources_Table, Simulation_data, INDEX_ATH)
@@ -67,10 +67,9 @@ VAR_SRC_Table = F.variability_rate(NearbySource, NearbySources_Table, Simulation
 # -------------------------------------------------- #
 
 # -------------------------------------------------- #
-
                 # Visualized data Matplotlib without S/N
 
-XmmCatalog.neighbourhood_of_object(NearbySources_Table, Simulation_data['Object_data'], VAR_SRC_Table)
+XMM.neighbourhood_of_object(NearbySourcesTable=NearbySources_Table, Object_data=Simulation_data['Object_data'], VAR_SRC_Table=VAR_SRC_Table)
 
 # -------------------------------------------------- #
 

@@ -212,9 +212,9 @@ def define_sources_list():
                 
                 for value in range(len(col1)):
                     UserList.append((name[value], ra[value], dec[value],valueVar[value]))
-                    
+
                 break
-                    
+
             elif open_file in ['no', 'n']:
                 
                 nbr_src = int(input("How many sources do you need to add? "))
@@ -331,8 +331,11 @@ def initialization_code():
     
     
     UserList = define_sources_list()
-    
-    return Object_data, PATH, UserList
+    if UserList == None:
+        UserList = []
+        return Object_data, PATH, UserList
+    else:
+        return Object_data, PATH, UserList
 
 
 def AngSeparation(reference, obj):
@@ -361,24 +364,23 @@ def FindNearbySources(catalog, SRCposition, Object_data, UserList):
     Returns:
     list: A list of tuples containing the number and coordinates of sources close to the observing object.
     """  
-    RA, DEC = [UserList[item][1] for item in range(len(UserList))], [UserList[item][2] for item in range(len(UserList))]       
+    User_NearbySource = []   
     OBJECTposition = Object_data['OBJposition']
     
     if len(UserList) != 0:
-        SRCposition = SkyCoord(ra=list(SRCposition.ra) + RA, dec=list(SRCposition.dec) + DEC, unit=u.deg)
-        NUMBER = [n for n in range(len(catalog))] + [None]*len(UserList)
+        NUMBER = [n for n in range(len(catalog))]
         NearbySources = [(number, coord) for (number, coord) in zip(NUMBER, SRCposition) if AngSeparation(OBJECTposition, coord) < 5*u.arcmin]
+        
+        User_RA, User_DEC = [UserList[item][1] for item in range(len(UserList))], [UserList[item][2] for item in range(len(UserList))]
+        User_SkyCoord = SkyCoord(ra=User_RA, dec=User_DEC, unit=u.deg)
+        User_NUMBER = [n for n in range(len(UserList))]
+        User_NearbySource = [(number, coord) for (number, coord) in zip(User_NUMBER, User_SkyCoord) if AngSeparation(OBJECTposition, coord) < 5*u.arcmin]
+        
     else:
         NUMBER = [n for n in range(len(catalog))]
         NearbySources = [(number, coord) for (number, coord) in zip(NUMBER, SRCposition) if AngSeparation(OBJECTposition, coord) < 5*u.arcmin]
-    
-    NumberOfSource = len(NearbySources)
-
-    if NumberOfSource == 0:
-        return None
-    else:
-        return NearbySources
-    
+        
+    return NearbySources, User_NearbySource
 
 
 def ScaledCtRate(D, OptCtRate, effareaX, effareaY):

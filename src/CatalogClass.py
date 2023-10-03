@@ -104,7 +104,7 @@ class XmmCatalog:
             return None, None  
 
 
-    def create_NearbySource_table(self, NearbySource, XMM_catalog, UserList):
+    def create_NearbySource_table(self, NearbySource, XMM_catalog, UserList, User_NearbySource):
         """
             Creates an astropy Table of all sources close to the observing object.
 
@@ -115,31 +115,38 @@ class XmmCatalog:
             :return: NearbySources_Table, SRCposition
             :rtype: astropy.table.Table, astropy.coordinates.SkyCoord
         """
-        N_SRC = len(NearbySource) - len(UserList)
-        NUMBER = [NearbySource[number][0] for number in range(N_SRC)]  
+        N_SRC = len(NearbySource)
+        User_N_SRC = len(User_NearbySource)
+        NUMBER = [NearbySource[number][0] for number in range(N_SRC)]
           
         self.NearbySources_Table = Table(names=XMM_catalog.colnames,
                                          dtype=XMM_catalog.dtype)
-        
+
         if len(UserList) != 0:
             for number in NUMBER:
                 self.NearbySources_Table.add_row(XMM_catalog[number])
 
-            for name, ra, dec, nan in UserList:
-                new_row = [0, name, ra, dec] + [0] * 28 + [nan] + [0]*11 + ['no website URL']
-                print(len(new_row))
-                self.NearbySources_Table.add_row(new_row)
+            User_NearbySources_List = []
+            User_NUMBER = [User_NearbySource[number][0] for number in range(User_N_SRC)]
+            for number in User_NUMBER:
+                User_NearbySources_List.append(UserList[number])
+                
+            for name, ra, dec, nan in User_NearbySources_List:
+                    new_row = [0, name, ra, dec] + [0] * 28 + [nan] + [0]*11 + ['no website URL']
+                    self.NearbySources_Table.add_row(new_row)
+                    
+            Nearby_SRCposition = SkyCoord(ra=self.NearbySources_Table['SC_RA'], dec=self.NearbySources_Table['SC_DEC'], unit=(u.degree, u.degree))
 
         else:
             for number in NUMBER:
                 self.NearbySources_Table.add_row(XMM_catalog[number])
         
-        Nearby_SRCposition = SkyCoord(ra=self.NearbySources_Table['SC_RA'], dec=self.NearbySources_Table['SC_DEC'], unit=(u.degree, u.degree))
+            Nearby_SRCposition = SkyCoord(ra=self.NearbySources_Table['SC_RA'], dec=self.NearbySources_Table['SC_DEC'], unit=(u.degree, u.degree))
 
         return self.NearbySources_Table, Nearby_SRCposition
         
         
-    def neighbourhood_of_object(NearbySources_Table, Object_data, VAR_SRC_Table):
+    def neighbourhood_of_object(self, NearbySourcesTable, Object_data, VAR_SRC_Table):
         """
             Plot a neighborhood map of nearby sources relative to a specified object.
 
@@ -158,7 +165,8 @@ class XmmCatalog:
             Example:
             neighbourhood_of_object(NearbySources_Table, {'PSRposition': SkyCoord(...), 'ObjectName': 'ExampleObject'})
         """
-        NBR_sources = len(NearbySources_Table)
+        self.NearbySources_Table = NearbySourcesTable
+        NBR_sources = len(self.NearbySources_Table)
         VAR_RA = [VAR_SRC_Table['RA'][number] for number in range(len(VAR_SRC_Table)) if not VAR_SRC_Table['In_Xmm2Athena'][number]]
         VAR_DEC = [VAR_SRC_Table['DEC'][number] for number in range(len(VAR_SRC_Table)) if not VAR_SRC_Table['In_Xmm2Athena'][number]]
         
@@ -170,8 +178,8 @@ class XmmCatalog:
         
         ax0, ax1 = axes[0], axes[1]
         
-        RA = [NearbySources_Table['SC_RA'][RightAsc] for RightAsc in range(NBR_sources) if NearbySources_Table['SC_RA'][RightAsc] != Object_data['OBJposition'].ra]
-        DEC = [NearbySources_Table['SC_DEC'][Decl] for Decl in range(NBR_sources) if NearbySources_Table['SC_DEC'][Decl] != Object_data['OBJposition'].dec]        
+        RA = [self.NearbySources_Table['SC_RA'][RightAsc] for RightAsc in range(NBR_sources) if self.NearbySources_Table['SC_RA'][RightAsc] != Object_data['OBJposition'].ra]
+        DEC = [self.NearbySources_Table['SC_DEC'][Decl] for Decl in range(NBR_sources) if self.NearbySources_Table['SC_DEC'][Decl] != Object_data['OBJposition'].dec]        
         
         ax0.scatter(RA, DEC, color='black', s=10, label="Sources")
         ax0.scatter(Object_data['OBJposition'].ra, Object_data['OBJposition'].dec, marker='*', s=100, color='red', label=f"{Object_data['ObjectName']}")
@@ -181,8 +189,8 @@ class XmmCatalog:
         ax0.set_title(f"Sources close to {Object_data['ObjectName']}, {NBR_sources} sources")
         
         
-        INVAR_RA = [NearbySources_Table['SC_RA'][RightAsc] for RightAsc in range(NBR_sources) if NearbySources_Table['SC_RA'][RightAsc] not in VAR_RA]
-        INVAR_DEC = [NearbySources_Table['SC_DEC'][Decl] for Decl in range(NBR_sources) if NearbySources_Table['SC_DEC'][Decl] not in VAR_DEC]
+        INVAR_RA = [self.NearbySources_Table['SC_RA'][RightAsc] for RightAsc in range(NBR_sources) if self.NearbySources_Table['SC_RA'][RightAsc] not in VAR_RA]
+        INVAR_DEC = [self.NearbySources_Table['SC_DEC'][Decl] for Decl in range(NBR_sources) if self.NearbySources_Table['SC_DEC'][Decl] not in VAR_DEC]
         
         ax1.scatter(INVAR_RA, INVAR_DEC, color='black', s=10, label=f"Invariable sources : {len(INVAR_RA)}")
         ax1.scatter(VAR_RA, VAR_DEC, color='orange', s=10, label=f"Variable sources : {len(VAR_RA)}")
@@ -193,8 +201,8 @@ class XmmCatalog:
         ax1.set_ylabel("Declination")
         ax1.set_title(f"Variable and invariable sources close to {Object_data['ObjectName']} ")
         
-        plt.show()   
-    
+        plt.show()
+
 
 class Xmm2Athena:
     """
@@ -304,7 +312,7 @@ class Xmm2Athena:
  
             NH = [np.exp(value * np.log(10)) if value != 0.0 else 0.0 for value in Log_Nh] + [0] * len(UserList)
             COLNAMES = ['Photon Index', 'Nh']
-            DATA = [Photon_Index + [2.0]*len(UserList), NH]
+            DATA = [Photon_Index + [2]*len(UserList), NH]
             
             for col, data in zip(COLNAMES, DATA):
                 NearbySources_Table[col] = data
