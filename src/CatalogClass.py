@@ -96,12 +96,28 @@ class XmmCatalog:
             :return: EffArea, OffAxisAngle
             :rtype: numpy.ndarray, numpy.ndarray
         """
-        try:
-            EffArea, OffAxisAngle = np.loadtxt(NICER_parameters_path, unpack=True, usecols=(0, 1))
-            return EffArea, OffAxisAngle
-        except Exception as err:
-            print(f"An error occurred while reading NICER parameters: {str(err)}")
-            return None, None  
+        while True: 
+            with open(NICER_parameters_path, "r") as data:
+                first_row = data.readline()
+                column = first_row.split()
+                ncol = len(column)
+               
+            try:
+                if ncol == 2:
+                    EffArea, OffAxisAngle = np.loadtxt(NICER_parameters_path, unpack=True, usecols=(0, 1))
+                    return EffArea, OffAxisAngle
+                else:
+                    raise Exception(f"The file {NICER_parameters_path} doesn't have 2 columns")
+            except Exception as error:
+                print(f"An error occured {error}")
+                NICER_parameters_path = str(input('Input another file path : \n'))
+            
+        # try:
+        #     EffArea, OffAxisAngle = np.loadtxt(NICER_parameters_path, unpack=True, usecols=(0, 1))
+        #     return EffArea, OffAxisAngle
+        # except Exception as err:
+        #     print(f"An error occurred while reading NICER parameters: {str(err)}")
+        #     return None, None  
 
 
     def create_NearbySource_table(self, NearbySource, XMM_catalog, UserList, User_NearbySource):

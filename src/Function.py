@@ -10,6 +10,7 @@ from astropy.table import Table
 import subprocess
 import sys
 import os
+from termcolor import colored
 
                 # Function
                 
@@ -129,11 +130,11 @@ def get_valid_file_path(PATH):
     value = False
     while not value:
         if is_valid_file_path(PATH):
-            print(f"The file at {PATH} is valid.")
+            print(f"The file at {colored(PATH, 'yellow')} is {colored('valid', 'green')}.")
             value = True
             return PATH
         else:
-            print(f"The file at {PATH} doesn't exist or the path is invalid.")
+            print(f"The file at {colored(PATH, 'yellow')} doesn't exist or the path is {colored('invalid', 'red')}.")
             PATH = str(input("Enter the file path : \n"))
             value = False
 
@@ -154,11 +155,15 @@ def choose_catalog(Catalog):
     try:
         if Catalog == 'DR13':
             PATH = 'Catalog/4XMM_slim_DR13cat_v1.0.fits'
+            print("-"*50)
             VALID_PATH = get_valid_file_path(PATH)
+            print("-"*50, "\n")
             return VALID_PATH
 
         elif Catalog == 'DR11':
+            print("-"*50)
             PATH = 'Catalog/4xmmdr11slim_210716.fits'
+            print("-"*50, "\n")
             VALID_PATH = get_valid_file_path(PATH)
             return VALID_PATH
         else:
@@ -190,7 +195,7 @@ def define_sources_list():
             choice = str(input("Add sources to calculation? (yes/y or no/n): ")).lower()
 
             if choice in ['no', 'n']:
-                return None
+                return UserList
             elif choice in ['yes', 'y']:
                 break
             else:
@@ -212,24 +217,24 @@ def define_sources_list():
                 
                 for value in range(len(col1)):
                     UserList.append((name[value], ra[value], dec[value],valueVar[value]))
-
                 break
 
             elif open_file in ['no', 'n']:
                 
-                nbr_src = int(input("How many sources do you need to add? "))
+                nbr_src = int(input("How many sources do you need to add ? "))
                 item = 0
+                print("\n")
                 
                 while item < nbr_src:
-                    name = input('Enter source name: ')
-                    ra = float(input('Enter right ascension: '))
-                    dec = float(input('Enter declination: '))
-                    valueVar = input("Enter the value of variability rate of your object, enter nan if the object is invariant")
+                    name = input('Enter source name : ')
+                    ra = float(input('Enter right ascension : '))
+                    dec = float(input('Enter declination : '))
+                    valueVar = input("Enter the value of variability rate of your object, enter nan if the object is invariant : ")
                     if valueVar == 'nan':
                         valueVar = np.nan
                     UserList.append((name, ra, dec, valueVar))
                     item += 1
-                    print(f"{item} item added to the list")
+                    print(f"{colored(item, 'blue')} item added to the list \n")
 
                 break
             else:
@@ -238,104 +243,6 @@ def define_sources_list():
             print(f"An error occured {error}")
             
     return UserList
-
-
-def initialization_code():
-    """
-    Initialize and configure the program based on command line arguments, searching for information about
-    a celestial object by its name or coordinates, and selecting a catalog.
-
-    Returns:
-        tuple: A tuple containing information about the celestial object:
-            - str: The name of the object.
-            - str: The coordinates of the object in the format "RA, DEC".
-            - float: The count rate of the object.
-            - str: A valid file path for the selected catalog.
-            
-    This function initializes and configures the program based on command line arguments provided by the user.
-    The command line arguments can be used to search for information about a celestial object by either its name
-    or coordinates. Additionally, the user can select a catalog by providing a catalog keyword.
-
-    If the '--info' flag is used, the function prints the PSRtable and returns None.
-
-    If the '--name' flag is used, the function searches for information using the object name. If the object name contains
-    spaces, they are replaced by underscores. If the object is not found in the Simbad Database, an error message is displayed.
-    The function then prompts the user to enter the count rate for the object.
-
-    If the '--coord' flag is used, the function searches for information using the provided coordinates (RA and DEC).
-    If no object is found at the specified coordinates in the Simbad Database, an error message is displayed.
-    The function then prompts the user to enter the count rate for the object.
-
-    After obtaining the object's name, coordinates, and count rate, the user is prompted to define a list of sources using
-    the 'define_sources_list' function.
-
-    Returns a tuple containing the following elements:
-    - str: The name of the celestial object.
-    - str: The coordinates of the object in the format "RA, DEC".
-    - float: The count rate of the object.
-    - str: A valid file path for the selected catalog.
-
-    Raises:
-    None
-    """
-    parser = argparse.ArgumentParser(description='Search for information with object name or coord')
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('--name', type=str, help='Replace spaces by _')
-    group.add_argument('--coord', type=float, nargs=2, help='ra dec (two float values)')
-    group.add_argument('--info', help="Have some information about PSR")
-    parser.add_argument("--Catalog", type=str, help="Enter a catalog keyword DR11/DR13.")
-
-    args = parser.parse_args()
-
-    if args.info:
-        print(PSRtable)
-        return
-    
-    if args.name:
-        NAME = args.name.replace("_", " ")
-        print(f"Searching for information with name : {NAME}")
-        try:
-            OBJposition = GetCoordPSR(NAME)
-            print(OBJposition)
-        except Exception as error:
-            print(f"Error: {NAME} isn't in Simbad Database")
-        PATH = choose_catalog(args.Catalog)
-    elif args.coord:
-        ra, dec = args.coord
-        print(f"Searching for information with coordinates : (RA={ra}, DEC={dec})")
-        try:
-            NAME = Simbad.query_region(f"{ra}d {dec}d", radius="1s")['MAIN_ID'][0]
-        except Exception as error:
-            print(f"Error: There is no object with these coordinates (RA={ra}, DEC={dec}) in the Simbad Database.")
-        OBJposition = GetCoordPSR(NAME)
-        PATH = choose_catalog(args.Catalog)
-
-    value = False
-    while not value:
-        if NAME in PSRfullnames:
-            CountRate = PSRtable['CountRate'][PSRtable['FullName'] == NAME][0]
-            value = True
-        else:
-            try:
-                CountRate = float(input("Enter the count rate of your object: \n"))
-                value = True  
-            except ValueError as error:
-                print(f"Error: {error}")
-                print("Please enter a valid float value for Count Rate.")
-                continue
-            
-    Object_data = {'ObjectName':NAME,
-                   'ShortName': Name_to_Short_Name(NAME),
-                   'CountRate': CountRate,
-                   'OBJposition' : OBJposition}
-    
-    
-    UserList = define_sources_list()
-    if UserList == None:
-        UserList = []
-        return Object_data, PATH, UserList
-    else:
-        return Object_data, PATH, UserList
 
 
 def AngSeparation(reference, obj):
@@ -431,7 +338,7 @@ def NominalPointingInfo(Simulation_data, Nearby_SRCposition):
     Object_data = Simulation_data['Object_data']
     Telescop_data = Simulation_data['Telescop_data']
     
-    SRCnominalDIST = AngSeparation(Nearby_SRCposition, SkyCoord(ra=Object_data['PSRposition'].ra, dec=Object_data['PSRposition'].dec)).arcmin
+    SRCnominalDIST = AngSeparation(Nearby_SRCposition, SkyCoord(ra=Object_data['OBJposition'].ra, dec=Object_data['OBJposition'].dec)).arcmin
     SRCscaleRates = ScaledCtRate(SRCnominalDIST, Simulation_data["NearbySources_Table"]["Count Rates"], Telescop_data["EffArea"], Telescop_data["OffAxisAngle"])
     PSRcountrates = Object_data['CountRate']
 
@@ -559,7 +466,7 @@ def DataMap(Simulation_data, Vector_Dictionary, OptimalPointingIdx, Nearby_SRCpo
     ax = fig.add_subplot(111)
     plt.gca().invert_xaxis()
     plt.plot(Nearby_SRCposition.ra, Nearby_SRCposition.dec, marker='.', color='black',linestyle='')    
-    plt.plot(Object_data["PSRposition"].ra, Object_data["PSRposition"].dec, marker='*', color='green',linestyle='')
+    plt.plot(Object_data["OBJposition"].ra, Object_data["OBJposition"].dec, marker='*', color='green',linestyle='')
     plt.plot(Vector_Dictionary['SampleRA'][OptimalPointingIdx], Vector_Dictionary['SampleDEC'][OptimalPointingIdx], marker='+', color='red', linestyle='')
 
     # label of the nearby sources
