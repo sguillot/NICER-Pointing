@@ -5,6 +5,7 @@ import Function as F
 import argparse
 from astropy.table import Table
 from astroquery.simbad import Simbad
+from astropy import units as u
        
 # -------------------------------------------------- #
 
@@ -21,7 +22,7 @@ PSRtable = Table([PSRfullnames, PSRshortname, PSRcoordRA, PSRcoordDEC, PSRcountr
 # -------------------------------------------------- #
 
 print("Code to find an optimal pointing point with NICER for an astrophysical object.")
-print("Here is the PSR Tabme : \n", PSRtable, "\n")
+print("Here is the PSR Table : \n", PSRtable, "\n")
 
 # -------------------------------------------------- #
 
@@ -88,6 +89,7 @@ if len(UserList) != 0:
     User_table = Table(rows=UserList, names=colnames)
     print("Here is the list given by the User : \n", User_table, "\n")
 else:
+    User_table = Table()
     print("User don't defined any additionnal sources. \n")
 
 print('-'*50)
@@ -99,7 +101,7 @@ print('-'*50)
 XMM = XmmCatalog(PATH, NICER_parameters_path)
 XMM_DR_13_CATALOG = XMM.catalog
 EffArea, OffAxisAngle = XMM.NICER_parameters
-SRCposition = XMM.SRCcoord
+
 X2A = Xmm2Athena(XMM_DR_11_path, XMM_2_ATHENA_path)
 XMMDR11 = X2A.XMM_DR11
 XMM2ATH = X2A.XMM_2_ATHENA
@@ -124,31 +126,30 @@ Simulation_data = {'Object_data': Object_data,
                    'EXPtime': 1e6
                    }
 
+
 # -------------------------------------------------- #
 
 try : 
-    NearbySource, User_NearbySource = F.FindNearbySources(XMM_DR_13_CATALOG, SRCposition, Simulation_data['Object_data'], UserList)
-    if len(NearbySource) == 0 and len(User_NearbySource) == 0:
+    NearbySRC_Table, NearbySRCposition, Nbr_Var_SRC = XMM.NearbySourcesTable(Object_data, User_table, XMM_DR_13_CATALOG)
+    if len(NearbySRC_Table) == 0:
         print(f"No sources detected close to {Object_data['ObjectName']}")
     else:
-        print(f"We have detected {len(NearbySource) + len(User_NearbySource)} sources close to {Object_data['ObjectName']}")
+        print(f"We have detected {len(NearbySRC_Table)} sources close to {Object_data['ObjectName']}")
 except Exception as error :
     print(f"An error occured : {error}")
     
 # -------------------------------------------------- #
 
-NearbySources_Table, Nearby_SRCposition = XMM.create_NearbySource_table(NearbySource, XMM_DR_13_CATALOG, UserList, User_NearbySource)
+NearbySRC_Table, INDEX_ATH = X2A.add_nh_photon_index(NearbySRC_Table, User_table)
 
-NearbySources_Table, INDEX_ATH = X2A.add_nh_photon_index(NearbySources_Table, UserList)
-
-VAR_SRC_Table = F.variability_rate(NearbySource, NearbySources_Table, Simulation_data, INDEX_ATH)
+VAR_SRC_Table = F.variability_rate(NearbySRC_Table, Simulation_data, INDEX_ATH, Nbr_Var_SRC)
 
 # -------------------------------------------------- #
 
 # -------------------------------------------------- #
                 # Visualized data Matplotlib without S/N
 
-XMM.neighbourhood_of_object(NearbySourcesTable=NearbySources_Table, Object_data=Simulation_data['Object_data'], VAR_SRC_Table=VAR_SRC_Table)
+XMM.neighbourhood_of_object(NearbySourcesTable=NearbySRC_Table, Object_data=Simulation_data['Object_data'], VAR_SRC_Table=VAR_SRC_Table)
 
 # -------------------------------------------------- #
 
@@ -156,9 +157,9 @@ XMM.neighbourhood_of_object(NearbySourcesTable=NearbySources_Table, Object_data=
 
                 # Count Rates and complete NearbySources_Table 
                 
-Count_Rates, NearbySources_Table = F.count_rates(NearbySources_Table, xmmflux=NearbySources_Table['SC_EP_8_FLUX'], NH=NearbySources_Table['Nh'], Power_Law=NearbySources_Table['Photon Index'])
+Count_Rates, NearbySRC_Table = F.count_rates(NearbySRC_Table, xmmflux=NearbySRC_Table['SC_EP_8_FLUX'], NH=NearbySRC_Table['Nh'], Power_Law=NearbySRC_Table['Photon Index'])
 
-Simulation_data['NearbySources_Table'] = NearbySources_Table
+Simulation_data['NearbySRC_Table'] = NearbySRC_Table
 
 # -------------------------------------------------- #
 
@@ -166,7 +167,7 @@ Simulation_data['NearbySources_Table'] = NearbySources_Table
 
                 # Nominal pointing infos
                 
-F.NominalPointingInfo(Simulation_data, Nearby_SRCposition)
+F.NominalPointingInfo(Simulation_data, NearbySRCposition)
 
 # -------------------------------------------------- #
 
@@ -174,7 +175,7 @@ F.NominalPointingInfo(Simulation_data, Nearby_SRCposition)
 
                 # Value of optimal pointing point and infos
                 
-OptimalPointingIdx, SRCoptimalSEPAR, SRCoptimalRATES, Vector_Dictionary = F.CalculateOptiPoint(Simulation_data, Nearby_SRCposition)
+OptimalPointingIdx, SRCoptimalSEPAR, SRCoptimalRATES, Vector_Dictionary = F.CalculateOptiPoint(Simulation_data, NearbySRCposition)
 
 F.OptimalPointInfos(Vector_Dictionary, OptimalPointingIdx, SRCoptimalRATES)
 
@@ -184,6 +185,6 @@ F.OptimalPointInfos(Vector_Dictionary, OptimalPointingIdx, SRCoptimalRATES)
 
                 # Visualized data Matplotlib with S/N
 
-F.DataMap(Simulation_data, Vector_Dictionary, OptimalPointingIdx, Nearby_SRCposition)
+F.DataMap(Simulation_data, Vector_Dictionary, OptimalPointingIdx, NearbySRCposition)
 
 # -------------------------------------------------- #

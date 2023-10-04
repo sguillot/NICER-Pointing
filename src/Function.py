@@ -13,20 +13,46 @@ import os
 from termcolor import colored
 
                 # Function
-                
-def variability_rate(NearbySource, NearbySources_Table, Simulation_data, INDEX_ATH):
+           
+def variability_rate(NearbySRC_Table, Simulation_data, INDEX_ATH, Nbr_Var_SRC):
+    """
+    Generate a table of variable sources from a NearbySRC_Table and provide summary statistics.
+
+    Parameters:
+        NearbySRC_Table (Table): A table containing information about nearby sources.
+        Simulation_data (dict): A dictionary containing simulation data, including object information.
+        INDEX_ATH (list): A list of indices representing sources in Xmm2Athena.
+        Nbr_Var_SRC (int): The number of variable sources.
+
+    Returns:
+        Table: A table containing variable source information, including IAUNAME, RA, DEC, Var_Rate, and In_Xmm2Athena.
+
+    This function processes the NearbySRC_Table to extract information about variable sources
+    and generates a table with relevant columns. It also provides summary statistics about
+    the variable sources detected and their inclusion in Xmm2Athena.
+    """
     
-    XMMDR13 = Simulation_data['Catalog']['CurrentCatalog']
+    NAME = Simulation_data["Object_data"]["ObjectName"]
+    COLUMN_VAR = NearbySRC_Table['SC_FVAR']
+    VAR_SRC_NAME, VAR_RA, VAR_DEC, VARIABILITY_RATE = [], [], [], []
+    
+    nbr_iter = len(NearbySRC_Table) - Nbr_Var_SRC
+    
+    for index, value in enumerate(COLUMN_VAR):
+        if not np.isnan(value):
+            VAR_SRC_NAME.append(NearbySRC_Table['IAUNAME'][index])
+            VAR_RA.append(NearbySRC_Table['SC_RA'][index])
+            VAR_DEC.append(NearbySRC_Table['SC_DEC'][index])
+            VARIABILITY_RATE.append(NearbySRC_Table['SC_FVAR'][index])
+            
     NAME = Simulation_data['Object_data']['ObjectName']
-    NUMBER = [NearbySource[item][0] for item in range(len(NearbySource))]
-    NBR_VAR = [number for value, number in zip(NearbySources_Table['SC_FVAR'], NUMBER) if not np.isnan(value)]
-    
-    VAR_SRC_NAME = [XMMDR13['IAUNAME'][number] for number in NBR_VAR]
-    VAR_RA = [XMMDR13['SC_RA'][number] for number in NBR_VAR]
-    VAR_DEC = [XMMDR13['SC_DEC'][number] for number in NBR_VAR]
-    VARIABILITY_RATE = [XMMDR13['SC_FVAR'][number] for number in NBR_VAR]
+    NUMBER = [NearbySRC_Table[item][0] for item in range(len(NearbySRC_Table))]
+    NBR_VAR = [number for value, number in zip(NearbySRC_Table['SC_FVAR'][: nbr_iter], NUMBER) if not np.isnan(value)]
     IN_X2A = [True if number in INDEX_ATH else False for number in NBR_VAR]
-    
+
+    for item in range(Nbr_Var_SRC):
+        IN_X2A.append(False)
+
     COLNAMES = ['IAUNAME', 'RA', 'DEC', 'Var_Rate', 'In_Xmm2Athena']
     COL_DATA = [VAR_SRC_NAME, VAR_RA, VAR_DEC, VARIABILITY_RATE, IN_X2A]
     
@@ -34,7 +60,9 @@ def variability_rate(NearbySource, NearbySources_Table, Simulation_data, INDEX_A
     for name, data in zip(COLNAMES, COL_DATA):
         VAR_SRC_Table[name] = data    
 
-    message_xmm = f"Among {len(NearbySources_Table)} sources detected close to {NAME}, {len(VAR_SRC_NAME)} of them are variable. Using DR13 Catalog."
+    print(VAR_SRC_Table)
+    
+    message_xmm = f"Among {len(NearbySRC_Table)} sources detected close to {NAME}, {len(VAR_SRC_NAME)} of them are variable. Using DR13 Catalog."
     print(message_xmm)
     message_xmm2ath = f"Among {len(VAR_SRC_Table)} variable sources, {IN_X2A.count(True)} are in Xmm2Athena and {IN_X2A.count(False)} are not in Xmm2Athena. "    
     print(message_xmm2ath)
@@ -52,9 +80,6 @@ def Name_to_Short_Name(NAME):
 
     Returns:
     str: The resulting short name after processing.
-
-    Example:
-    If NAME is "John+Doe", this function will return "ohn" as the ShortName.
 
     Note:
     This function assumes that the input NAME contains at least one of the '+' or '-' symbols.
@@ -154,7 +179,7 @@ def choose_catalog(Catalog):
     """
     try:
         if Catalog == 'DR13':
-            PATH = 'Catalog/4XMM_slim_DR13cat_v1.0.fits'
+            PATH = "Catalog/4XMM_slim_DR13cat_v1.0.fits.gz"
             print("-"*50)
             VALID_PATH = get_valid_file_path(PATH)
             print("-"*50, "\n")
@@ -162,7 +187,7 @@ def choose_catalog(Catalog):
 
         elif Catalog == 'DR11':
             print("-"*50)
-            PATH = 'Catalog/4xmmdr11slim_210716.fits'
+            PATH = "Catalog/4XMM_DR11cat_slim_v1.0.fits.gz"
             print("-"*50, "\n")
             VALID_PATH = get_valid_file_path(PATH)
             return VALID_PATH
@@ -210,7 +235,10 @@ def define_sources_list():
             if open_file in ['yes', 'y']:
                 print("Try : Catalog/exemple_src.txt")
                 FILE_PATH = str(input("Enter a file_path : \n"))
+                print("\n")
+                print('-'*50)
                 file_path = get_valid_file_path(FILE_PATH)
+                print('-'*50)
                 
                 col1, ra, dec, valueVar = np.loadtxt(file_path, unpack=True, usecols=(0, 1, 2, 3), dtype={'names': ('col1', 'ra', 'dec', 'valueVar'), 'formats': ('S25', 'f8', 'f8', 'f4')})
                 name = [col1[data].decode().replace("_", " ") for data in range(len(col1))]
@@ -259,37 +287,6 @@ def AngSeparation(reference, obj):
     return reference.separation(obj)
 
 
-def FindNearbySources(catalog, SRCposition, Object_data, UserList):
-    """
-    Find nearby sources close to the observing object within a specified angular range.
-
-    Parameters:
-    catalog (list): A list of celestial object coordinates.
-    SRCposition (list): A list of source positions.
-    obj_name (str): The name of the observing object.
-
-    Returns:
-    list: A list of tuples containing the number and coordinates of sources close to the observing object.
-    """  
-    User_NearbySource = []   
-    OBJECTposition = Object_data['OBJposition']
-    
-    if len(UserList) != 0:
-        NUMBER = [n for n in range(len(catalog))]
-        NearbySources = [(number, coord) for (number, coord) in zip(NUMBER, SRCposition) if AngSeparation(OBJECTposition, coord) < 5*u.arcmin]
-        
-        User_RA, User_DEC = [UserList[item][1] for item in range(len(UserList))], [UserList[item][2] for item in range(len(UserList))]
-        User_SkyCoord = SkyCoord(ra=User_RA, dec=User_DEC, unit=u.deg)
-        User_NUMBER = [n for n in range(len(UserList))]
-        User_NearbySource = [(number, coord) for (number, coord) in zip(User_NUMBER, User_SkyCoord) if AngSeparation(OBJECTposition, coord) < 5*u.arcmin]
-        
-    else:
-        NUMBER = [n for n in range(len(catalog))]
-        NearbySources = [(number, coord) for (number, coord) in zip(NUMBER, SRCposition) if AngSeparation(OBJECTposition, coord) < 5*u.arcmin]
-        
-    return NearbySources, User_NearbySource
-
-
 def ScaledCtRate(D, OptCtRate, effareaX, effareaY):
     """
     Scale a given count rate based on an angular distance and effective area.
@@ -323,13 +320,13 @@ def SignaltoNoise(SrcCtsRate, BkgSrcRates, InstBkgd, ExpTime):
     return SNR
 
 
-def NominalPointingInfo(Simulation_data, Nearby_SRCposition):
+def NominalPointingInfo(Simulation_data, NearbySRCposition):
     """
     Calculate and print various information related to nominal pointing.
 
     Parameters:
     SIM_parameters (dict): Dictionary containing simulation parameters.
-    Nearby_SRCposition (SkyCoord): Coordinates of nearby sources.
+    NearbySRCposition (SkyCoord): Coordinates of nearby sources.
 
     Returns:
     None
@@ -338,8 +335,8 @@ def NominalPointingInfo(Simulation_data, Nearby_SRCposition):
     Object_data = Simulation_data['Object_data']
     Telescop_data = Simulation_data['Telescop_data']
     
-    SRCnominalDIST = AngSeparation(Nearby_SRCposition, SkyCoord(ra=Object_data['OBJposition'].ra, dec=Object_data['OBJposition'].dec)).arcmin
-    SRCscaleRates = ScaledCtRate(SRCnominalDIST, Simulation_data["NearbySources_Table"]["Count Rates"], Telescop_data["EffArea"], Telescop_data["OffAxisAngle"])
+    SRCnominalDIST = AngSeparation(NearbySRCposition, SkyCoord(ra=Object_data['OBJposition'].ra, dec=Object_data['OBJposition'].dec)).arcmin
+    SRCscaleRates = ScaledCtRate(SRCnominalDIST, Simulation_data["NearbySRC_Table"]["Count Rates"], Telescop_data["EffArea"], Telescop_data["OffAxisAngle"])
     PSRcountrates = Object_data['CountRate']
 
     print('PSR S/N at Nominal Pointing ' + str(SignaltoNoise(PSRcountrates, SRCscaleRates, Simulation_data["INSTbkgd"], Simulation_data["EXPtime"])))
@@ -352,7 +349,7 @@ def NominalPointingInfo(Simulation_data, Nearby_SRCposition):
     print("--------------------------------------------------")
     
 
-def CalculateOptiPoint(Simulation_data, Nearby_SRCposition):
+def CalculateOptiPoint(Simulation_data, NearbySRCposition):
     """
     Calculate the optimal pointing for the NICER telescope to maximize the signal-to-noise ratio (S/N).
 
@@ -364,7 +361,7 @@ def CalculateOptiPoint(Simulation_data, Nearby_SRCposition):
     Args:
         SIM_parameters (dict): A dictionary containing simulation parameters, including the pulsar position,
             pulsar count rates, SRC count rates, effective area, off-axis angle, instrumental background, and exposure time.
-        Nearby_SRCposition (SkyCoord): Coordinates of the nearby SRC sources.
+        NearbySRCposition (SkyCoord): Coordinates of the nearby SRC sources.
 
     Returns:
         tuple: A tuple containing the following information:
@@ -390,12 +387,12 @@ def CalculateOptiPoint(Simulation_data, Nearby_SRCposition):
     count = 0
     for i in DeltaRA:
         for j in DeltaDEC:
-                NICERpointing = SkyCoord(ra=Object_data["PSRposition"].ra + i, dec=Object_data["PSRposition"].dec + j)
-                PSRseparation = AngSeparation(Object_data["PSRposition"], NICERpointing)
-                SRCseparation = AngSeparation(Nearby_SRCposition, NICERpointing)
+                NICERpointing = SkyCoord(ra=Object_data["OBJposition"].ra + i, dec=Object_data["OBJposition"].dec + j)
+                PSRseparation = AngSeparation(Object_data["OBJposition"], NICERpointing)
+                SRCseparation = AngSeparation(NearbySRCposition, NICERpointing)
 
                 PSRcountrateScaled = ScaledCtRate(PSRseparation.arcmin, PSRcountrates, Telescop_data["EffArea"], Telescop_data["OffAxisAngle"])
-                SRCcountrateScaled = ScaledCtRate(SRCseparation.arcmin, Simulation_data["NearbySources_Table"]["Count Rates"], Telescop_data["EffArea"], Telescop_data["OffAxisAngle"])
+                SRCcountrateScaled = ScaledCtRate(SRCseparation.arcmin, Simulation_data["NearbySRC_Table"]["Count Rates"], Telescop_data["EffArea"], Telescop_data["OffAxisAngle"])
 
                 SampleRA[count] = NICERpointing.ra.deg
                 SampleDEC[count] = NICERpointing.dec.deg
@@ -407,8 +404,8 @@ def CalculateOptiPoint(Simulation_data, Nearby_SRCposition):
                 count = count + 1
     
     OptimalPointingIdx = np.where(SNR==max(SNR))[0][0]
-    SRCoptimalSEPAR = AngSeparation(Nearby_SRCposition,SkyCoord(ra=SampleRA[OptimalPointingIdx]*u.degree, dec=SampleDEC[OptimalPointingIdx]*u.degree)).arcmin
-    SRCoptimalRATES = ScaledCtRate(SRCoptimalSEPAR,Simulation_data["NearbySources_Table"]["Count Rates"], Telescop_data["EffArea"], Telescop_data["OffAxisAngle"])
+    SRCoptimalSEPAR = AngSeparation(NearbySRCposition, SkyCoord(ra=SampleRA[OptimalPointingIdx]*u.degree, dec=SampleDEC[OptimalPointingIdx]*u.degree)).arcmin
+    SRCoptimalRATES = ScaledCtRate(SRCoptimalSEPAR,Simulation_data["NearbySRC_Table"]["Count Rates"], Telescop_data["EffArea"], Telescop_data["OffAxisAngle"])
     
     Vector_Dictionary = {'SampleRA': SampleRA,
                           'SampleDEC': SampleDEC,
@@ -429,7 +426,7 @@ def OptimalPointInfos(Vector_Dictionary, OptimalPointingIdx, SRCoptimalRATES):
 
     Args:
         Vector_Dictionary (dict): A dictionary containing result vectors, including sampled RA and DEC positions,
-            pulsar count rates, SRC count rates, and the S/N ratio for each pointing.
+                                  pulsar count rates, SRC count rates, and the S/N ratio for each pointing.
         OptimalPointingIdx (int): The index of the optimal pointing in the result vectors.
         SRCoptimalRATES (float): The SRC count rate at the optimal pointing.
     """
@@ -446,7 +443,7 @@ def OptimalPointInfos(Vector_Dictionary, OptimalPointingIdx, SRCoptimalRATES):
     print ("----------------------------------------------------------------------")
 
 
-def DataMap(Simulation_data, Vector_Dictionary, OptimalPointingIdx, Nearby_SRCposition):
+def DataMap(Simulation_data, Vector_Dictionary, OptimalPointingIdx, NearbySRCposition):
     """
     Plot the map of the Signal-to-Noise (S/N) ratio as a function of NICER pointing.
 
@@ -454,7 +451,7 @@ def DataMap(Simulation_data, Vector_Dictionary, OptimalPointingIdx, Nearby_SRCpo
     - SIM_parameters (dict): A dictionary containing simulation parameters, including the pulsar position.
     - Vector_Dictionary (dict): A dictionary containing vector data, including SampleRA, SampleDEC, and SNR.
     - OptimalPointingIdx (int): The index of the optimal pointing in Vector_Dictionary.
-    - Nearby_SRCposition (SkyCoord): SkyCoord object representing the positions of nearby sources.
+    - NearbySRCposition (SkyCoord): SkyCoord object representing the positions of nearby sources.
 
     Returns:
     None
@@ -465,7 +462,7 @@ def DataMap(Simulation_data, Vector_Dictionary, OptimalPointingIdx, Nearby_SRCpo
     fig = plt.figure(figsize=(10,6.5))
     ax = fig.add_subplot(111)
     plt.gca().invert_xaxis()
-    plt.plot(Nearby_SRCposition.ra, Nearby_SRCposition.dec, marker='.', color='black',linestyle='')    
+    plt.plot(NearbySRCposition.ra, NearbySRCposition.dec, marker='.', color='black',linestyle='')    
     plt.plot(Object_data["OBJposition"].ra, Object_data["OBJposition"].dec, marker='*', color='green',linestyle='')
     plt.plot(Vector_Dictionary['SampleRA'][OptimalPointingIdx], Vector_Dictionary['SampleDEC'][OptimalPointingIdx], marker='+', color='red', linestyle='')
 
