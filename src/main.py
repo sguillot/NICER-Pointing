@@ -11,18 +11,18 @@ from astropy import units as u
 
                 # PSR table
 
-PSRfullnames   = ['PSR J0437-4715','PSR J2124-3358','PSR J0751+1807', 'PSR J1231-1411']
-PSRshortname = [F.Name_to_Short_Name(NAME) for NAME in PSRfullnames]
-PSRcoordRA = [F.GetCoordPSR(NAME).ra for NAME in PSRfullnames]
-PSRcoordDEC = [F.GetCoordPSR(NAME).dec for NAME in PSRfullnames]
-PSRcountrates  = [1.319,0.1,0.025, 0.27]
-PSRtable = Table([PSRfullnames, PSRshortname, PSRcoordRA, PSRcoordDEC, PSRcountrates],
+psr_full_name   = ['PSR J0437-4715','PSR J2124-3358','PSR J0751+1807', 'PSR J1231-1411']
+psr_short_name = [F.name_to_short_name(NAME) for NAME in psr_full_name]
+psr_coord_ra = [F.get_coord_psr(NAME).ra for NAME in psr_full_name]
+psr_coord_dec = [F.get_coord_psr(NAME).dec for NAME in psr_full_name]
+psr_count_rates  = [1.319,0.1,0.025, 0.27]
+psr_table = Table([psr_full_name, psr_short_name, psr_coord_ra, psr_coord_dec, psr_count_rates],
                  names=('FullName', 'ShortName', 'RA', 'DEC','CountRate'))
 
 # -------------------------------------------------- #
 
 print("Code to find an optimal pointing point with NICER for an astrophysical object.")
-print("Here is the PSR Table : \n", PSRtable, "\n")
+print("Here is the PSR Table : \n", psr_table, "\n")
 
 # -------------------------------------------------- #
 
@@ -41,8 +41,8 @@ if args.name:
             NAME = args.name.replace("_", " ")
         print(f"Searching for information with name : {NAME}")
         try:
-            OBJposition = F.GetCoordPSR(NAME)
-            print(OBJposition, '\n')
+            OBJ_POSITION = F.get_coord_psr(NAME)
+            print(OBJ_POSITION, '\n')
             break
         except Exception as error:
             print(f"Error: {NAME} isn't in Simbad Database")
@@ -60,96 +60,95 @@ elif args.coord:
             print(f"Error: There is no object with these coordinates (RA={RA}, DEC={DEC}) in the Simbad Database.")
             RA = float(input('Enter new right ascension : '))
             DEC =  float(input('Enter new declination'))
-    OBJposition = F.GetCoordPSR(NAME)
+    OBJ_POSITION = F.get_coord_psr(NAME)
     PATH = F.choose_catalog(args.catalog)
 
 while True:
-    if NAME in PSRfullnames:
-        CountRate = PSRtable['CountRate'][PSRtable['FullName'] == NAME][0]
+    if NAME in psr_full_name:
+        COUNT_RATE = psr_table['CountRate'][psr_table['FullName'] == NAME][0]
         break
     else:
         try:
-            CountRate = float(input("Enter the count rate of your object: \n"))
+            COUNT_RATE = float(input("Enter the count rate of your object: \n"))
             break
         except ValueError as error:
             print(f"Error: {error}")
             print("Please enter a valid float value for Count Rate.")
             continue
         
-Object_data = {'ObjectName':NAME,
+object_data = {'ObjectName':NAME,
                #'ShortName': F.Name_to_Short_Name(NAME),
-               'CountRate': CountRate,
-               'OBJposition' : OBJposition}
+               'CountRate': COUNT_RATE,
+               'OBJposition' : OBJ_POSITION}
 
 
-UserList = F.define_sources_list() 
+user_list = F.define_sources_list() 
 
-if len(UserList) != 0:
+if len(user_list) != 0:
     colnames = ['Name', 'Right Ascension', 'Declination', 'Var Value']
-    User_table = Table(rows=UserList, names=colnames)
-    print("Here is the list given by the User : \n", User_table, "\n")
+    user_table = Table(rows=user_list, names=colnames)
+    print("Here is the list given by the User : \n", user_table, "\n")
 else:
-    User_table = Table()
+    user_table = Table()
     print("User don't defined any additionnal sources. \n")
 
 print('-'*50)
-NICER_parameters_path = F.get_valid_file_path("Catalog/NICER_PSF.dat")
-XMM_DR_11_path = F.get_valid_file_path('Catalog/4XMM_DR11cat_v1.0.fits')
-XMM_2_ATHENA_path = F.get_valid_file_path('Catalog/xmm2athena_D6.1_V3.fits')
+NICER_PARAMETERS_PATH = F.get_valid_file_path("Catalog/NICER_PSF.dat")
+XMM_DR_11_PATH = F.get_valid_file_path('Catalog/4XMM_DR11cat_v1.0.fits')
+XMM_2_ATHENA_PATH = F.get_valid_file_path('Catalog/xmm2athena_D6.1_V3.fits')
 print('-'*50)
 
-XMM = XmmCatalog(PATH, NICER_parameters_path)
-XMM_DR_13_CATALOG = XMM.catalog
-EffArea, OffAxisAngle = XMM.NICER_parameters
+XMM = XmmCatalog(PATH, NICER_PARAMETERS_PATH)
+XMM_DR_13 = XMM.catalog
+EffArea, OffAxisAngle = XMM.NICER_PARAMETERS
 
-X2A = Xmm2Athena(XMM_DR_11_path, XMM_2_ATHENA_path)
+X2A = Xmm2Athena(XMM_DR_11_PATH, XMM_2_ATHENA_PATH)
 XMMDR11 = X2A.XMM_DR11
 XMM2ATH = X2A.XMM_2_ATHENA
 
 # -------------------------------------------------- #
                 # Useful dictionary
 
-Catalog = {'CurrentCatalog': XMM_DR_13_CATALOG,
+catalog = {'CurrentCatalog': XMM_DR_13,
             'XMMDR11':XMMDR11,
             'XMM2ATH':XMM2ATH
             }
 
-Telescop_data = {'TelescopeName': 'NICER',
+telescop_data = {'TelescopeName': 'NICER',
                 'EffArea': EffArea,
                 'OffAxisAngle': OffAxisAngle
                 }
 
-Simulation_data = {'Object_data': Object_data,
-                   'Telescop_data': Telescop_data,
-                   'Catalog': Catalog,
+simulation_data = {'Object_data': object_data,
+                   'Telescop_data': telescop_data,
+                   'Catalog': catalog,
                    'INSTbkgd': 0.2,
                    'EXPtime': 1e6
                    }
 
-
 # -------------------------------------------------- #
-
+print("\n")
 try : 
-    NearbySRC_Table, NearbySRCposition, Nbr_Var_SRC = XMM.NearbySourcesTable(Object_data, User_table, XMM_DR_13_CATALOG)
-    if len(NearbySRC_Table) == 0:
-        print(f"No sources detected close to {Object_data['ObjectName']}")
+    nearby_src_table, nearby_src_position, nbr_var_src = XMM.nearby_sources_table(object_data, user_table, XMM_DR_13)
+    if len(nearby_src_table) == 0:
+        print(f"No sources detected close to {object_data['ObjectName']}")
     else:
-        print(f"We have detected {len(NearbySRC_Table)} sources close to {Object_data['ObjectName']}")
+        print(f"We have detected {len(nearby_src_table)} sources close to {object_data['ObjectName']}")
 except Exception as error :
     print(f"An error occured : {error}")
     
 # -------------------------------------------------- #
 
-NearbySRC_Table, INDEX_ATH = X2A.add_nh_photon_index(NearbySRC_Table, User_table)
+nearby_src_table, index_ath = X2A.add_nh_photon_index(nearby_src_table, user_table)
 
-VAR_SRC_Table = F.variability_rate(NearbySRC_Table, Simulation_data, INDEX_ATH, Nbr_Var_SRC)
+var_src_table = F.variability_rate(nearby_src_table, simulation_data, index_ath, nbr_var_src)
 
 # -------------------------------------------------- #
 
 # -------------------------------------------------- #
                 # Visualized data Matplotlib without S/N
 
-XMM.neighbourhood_of_object(NearbySourcesTable=NearbySRC_Table, Object_data=Simulation_data['Object_data'], VAR_SRC_Table=VAR_SRC_Table)
+XMM.neighbourhood_of_object(nearby_src_table=nearby_src_table, object_data=simulation_data['Object_data'], var_src_table=var_src_table)
 
 # -------------------------------------------------- #
 
@@ -157,9 +156,9 @@ XMM.neighbourhood_of_object(NearbySourcesTable=NearbySRC_Table, Object_data=Simu
 
                 # Count Rates and complete NearbySources_Table 
                 
-Count_Rates, NearbySRC_Table = F.count_rates(NearbySRC_Table, xmmflux=NearbySRC_Table['SC_EP_8_FLUX'], NH=NearbySRC_Table['Nh'], Power_Law=NearbySRC_Table['Photon Index'])
+Count_Rates, NearbySRC_Table = F.count_rates(nearby_src_table, xmmflux=nearby_src_table['SC_EP_8_FLUX'], NH=nearby_src_table['Nh'], Power_Law=nearby_src_table['Photon Index'])
 
-Simulation_data['NearbySRC_Table'] = NearbySRC_Table
+simulation_data['NearbySRC_Table'] = NearbySRC_Table
 
 # -------------------------------------------------- #
 
@@ -167,7 +166,7 @@ Simulation_data['NearbySRC_Table'] = NearbySRC_Table
 
                 # Nominal pointing infos
                 
-F.NominalPointingInfo(Simulation_data, NearbySRCposition)
+F.nominal_pointing_info(simulation_data, nearby_src_position)
 
 # -------------------------------------------------- #
 
@@ -175,9 +174,9 @@ F.NominalPointingInfo(Simulation_data, NearbySRCposition)
 
                 # Value of optimal pointing point and infos
                 
-OptimalPointingIdx, SRCoptimalSEPAR, SRCoptimalRATES, Vector_Dictionary = F.CalculateOptiPoint(Simulation_data, NearbySRCposition)
+OptimalPointingIdx, SRCoptimalSEPAR, SRCoptimalRATES, vector_dictionary = F.calculate_opti_point(simulation_data, nearby_src_position)
 
-F.OptimalPointInfos(Vector_Dictionary, OptimalPointingIdx, SRCoptimalRATES)
+F.optimal_point_infos(vector_dictionary, OptimalPointingIdx, SRCoptimalRATES)
 
 # -------------------------------------------------- #
 
@@ -185,6 +184,6 @@ F.OptimalPointInfos(Vector_Dictionary, OptimalPointingIdx, SRCoptimalRATES)
 
                 # Visualized data Matplotlib with S/N
 
-F.DataMap(Simulation_data, Vector_Dictionary, OptimalPointingIdx, NearbySRCposition)
+F.data_map(simulation_data, vector_dictionary, OptimalPointingIdx, nearby_src_position)
 
 # -------------------------------------------------- #
