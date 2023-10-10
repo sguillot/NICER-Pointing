@@ -127,6 +127,7 @@ simulation_data = {'Object_data': object_data,
                    }
 
 # -------------------------------------------------- #
+
 print("\n")
 try : 
     nearby_src_table, nearby_src_position, nbr_var_src = XMM.nearby_sources_table(object_data, user_table, XMM_DR_13)
@@ -139,51 +140,51 @@ except Exception as error :
     
 # -------------------------------------------------- #
 
-nearby_src_table, index_ath = X2A.add_nh_photon_index(nearby_src_table, user_table)
+nearby_src_table, index_table = X2A.add_nh_photon_index(nearby_src_table=nearby_src_table, user_table=user_table)
 
-var_src_table = F.variability_rate(nearby_src_table, simulation_data, index_ath, nbr_var_src)
+variability_table = F.variability_rate(index_table, nearby_src_table, simulation_data)
 
 # -------------------------------------------------- #
 
 # -------------------------------------------------- #
                 # Visualized data Matplotlib without S/N
 
-XMM.neighbourhood_of_object(nearby_src_table=nearby_src_table, object_data=simulation_data['Object_data'], var_src_table=var_src_table)
+XMM.neighbourhood_of_object(nearby_src_table, variability_table, simulation_data)
 
-# -------------------------------------------------- #
+# # -------------------------------------------------- #
 
-# -------------------------------------------------- #
+# # -------------------------------------------------- #
 
-                # Count Rates and complete NearbySources_Table 
-                
-Count_Rates, NearbySRC_Table = F.count_rates(nearby_src_table, xmmflux=nearby_src_table['SC_EP_8_FLUX'], NH=nearby_src_table['Nh'], Power_Law=nearby_src_table['Photon Index'])
+#                 # Count Rates and complete NearbySources_Table 
+            
+# Count_Rates, NearbySRC_Table = F.count_rates(nearby_src_table, xmmflux=nearby_src_table['SC_EP_8_FLUX'], NH=nearby_src_table['Nh'], Power_Law=nearby_src_table['Photon Index'])
 
-simulation_data['NearbySRC_Table'] = NearbySRC_Table
+# simulation_data['NearbySRC_Table'] = NearbySRC_Table
 
-# -------------------------------------------------- #
+# # -------------------------------------------------- #
 
-# -------------------------------------------------- #
+# # -------------------------------------------------- #
 
-                # Nominal pointing infos
-                
-F.nominal_pointing_info(simulation_data, nearby_src_position)
+#                 # Nominal pointing infos
+            
+# F.nominal_pointing_info(simulation_data, nearby_src_position)
 
-# -------------------------------------------------- #
+# # -------------------------------------------------- #
 
-# -------------------------------------------------- #
+# # -------------------------------------------------- #
 
-                # Value of optimal pointing point and infos
-                
-OptimalPointingIdx, SRCoptimalSEPAR, SRCoptimalRATES, vector_dictionary = F.calculate_opti_point(simulation_data, nearby_src_position)
+#                 # Value of optimal pointing point and infos
+            
+# OptimalPointingIdx, SRCoptimalSEPAR, SRCoptimalRATES, vector_dictionary = F.calculate_opti_point(simulation_data, nearby_src_position)
 
-F.optimal_point_infos(vector_dictionary, OptimalPointingIdx, SRCoptimalRATES)
+# F.optimal_point_infos(vector_dictionary, OptimalPointingIdx, SRCoptimalRATES)
 
-# -------------------------------------------------- #
+# # -------------------------------------------------- #
 
-# -------------------------------------------------- #
+# # -------------------------------------------------- #
 
-                # Visualized data Matplotlib with S/N
+#                 # Visualized data Matplotlib with S/N
 
-F.data_map(simulation_data, vector_dictionary, OptimalPointingIdx, nearby_src_position)
+# F.data_map(simulation_data, vector_dictionary, OptimalPointingIdx, nearby_src_position)
 
-# -------------------------------------------------- #
+# # -------------------------------------------------- #

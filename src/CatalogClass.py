@@ -5,6 +5,7 @@ from astropy.coordinates import SkyCoord
 import astropy.units as u
 import matplotlib.pyplot as plt
 import Function as F
+from scipy.optimize import curve_fit
 
 class XmmCatalog:
     """
@@ -150,7 +151,7 @@ class XmmCatalog:
                                  dtype=catalog.dtype)
         
         self.nearby_src_table = Table(names=catalog.colnames,
-                                     dtype=catalog.dtype)
+                                      dtype=catalog.dtype)
 
         for number in range(len(catalog)):
             if minRA/u.deg < catalog["SC_RA"][number] < maxRA/u.deg and minDEC/u.deg < catalog["SC_DEC"][number] < maxDEC/u.deg:
@@ -182,67 +183,60 @@ class XmmCatalog:
         
         return self.nearby_src_table, self.nearby_src_position, nbr_var_src
 
-
-    def neighbourhood_of_object(self, nearby_src_table, object_data, var_src_table):
-        """
-            Plot a neighborhood map of nearby sources relative to a specified object.
-
-            This function creates a scatter plot of nearby sources using their right ascension (RA) and
-            declination (DEC) coordinates. The object of interest is marked with a red dot, while other sources
-            are marked with white 'x' markers. The title of the plot includes the object's name and the count
-            of nearby sources.
-
-            :param nearby_src_table: Table of nearby sources with RA and DEC coordinates.
-            :type nearby_src_table: astropy.table.Table
-            :param object_data: Dictionary containing object information, including position and name.
-            :type object_data: dict
-
-            This function does not return any values; it displays the plot.
-
-            Example:
-            neighbourhood_of_object(NearbySources_Table, {'PSRposition': SkyCoord(...), 'ObjectName': 'ExampleObject'})
-        """
-        self.NearbySources_Table = nearby_src_table
-        nbr_sources = len(self.NearbySources_Table)
-        var_ra = [var_src_table['RA'][number] for number in range(len(var_src_table)) if not var_src_table['In_Xmm2Athena'][number]]
-        var_dec = [var_src_table['DEC'][number] for number in range(len(var_src_table)) if not var_src_table['In_Xmm2Athena'][number]]
+    
+    def neighbourhood_of_object(self, nearby_src_table, variability_table, simulation_data):
         
-        var_ra_x2a = [var_src_table['RA'][number] for number in range(len(var_src_table)) if var_src_table['In_Xmm2Athena'][number]]
-        var_dec_x2a = [var_src_table['DEC'][number] for number in range(len(var_src_table)) if var_src_table['In_Xmm2Athena'][number]]
+        self.nearby_src_table = nearby_src_table
         
-        fig, axes = plt.subplots(1, 2, figsize=(17, 7))
-        fig.suptitle(f"Neighbourhood of {object_data['ObjectName']}")
+        nbr_src_var = len(variability_table)
+        nbr_src = len(self.nearby_src_table)
+        obj_ra = simulation_data["Object_data"]["OBJposition"].ra/u.deg
+        obj_dec = simulation_data["Object_data"]["OBJposition"].dec/u.deg
+            
+        sc_ra_in_x2a, sc_dec_in_x2a = np.array([], dtype=float), np.array([], dtype=float)
+        sc_ra_in_dr11, sc_dec_in_dr11 = np.array([], dtype=float), np.array([], dtype=float)
         
-        ax0, ax1 = axes[0], axes[1]
+        for index in range(nbr_src_var):
+            if variability_table["IN_X2A"][index] == True:
+                sc_ra_in_x2a = np.append(sc_ra_in_x2a, variability_table["SC_RA"][index])
+                sc_dec_in_x2a = np.append(sc_dec_in_x2a, variability_table["SC_DEC"][index])
+            else:
+                sc_ra_in_dr11 = np.append(sc_ra_in_dr11, variability_table["SC_RA"][index])
+                sc_dec_in_dr11 = np.append(sc_dec_in_dr11, variability_table["SC_DEC"][index])
+                
+        invar_sc_ra, invar_sc_dec = np.array([], dtype=float), np.array([], dtype=float)
+        for ra in self.nearby_src_table["SC_RA"]:
+            if ra not in variability_table["SC_RA"]:
+                invar_sc_ra = np.append(invar_sc_ra, ra)
+                
+        for dec in self.nearby_src_table["SC_DEC"]:
+            if dec not in variability_table["SC_DEC"]:
+                invar_sc_dec = np.append(invar_sc_dec, dec)  
         
-        ra = [self.NearbySources_Table['SC_RA'][RightAsc] for RightAsc in range(nbr_sources) if self.NearbySources_Table['SC_RA'][RightAsc] != object_data['OBJposition'].ra]
-        dec = [self.NearbySources_Table['SC_DEC'][Decl] for Decl in range(nbr_sources) if self.NearbySources_Table['SC_DEC'][Decl] != object_data['OBJposition'].dec]        
+        fig, axes = plt.subplots(1, 2, figsize=(17, 8))
+        fig.suptitle(f"Neighbourhood of {simulation_data['Object_data']['ObjectName']}", fontsize=20)
         
+        ax0 = axes[0]
         ax0.invert_xaxis()
-        ax0.scatter(ra, dec, color='black', s=10, label="Sources")
-        ax0.scatter(object_data['OBJposition'].ra, object_data['OBJposition'].dec, marker='*', s=100, color='red', label=f"{object_data['ObjectName']}")
-        ax0.legend(loc='upper right')
+        ax0.scatter(list(self.nearby_src_table["SC_RA"]), list(self.nearby_src_table["SC_DEC"]), color='black', s=10, label="Nearby sources")
+        ax0.scatter(obj_ra, obj_dec, color='red', marker='x', s=50, label=f"Position of {simulation_data['Object_data']['ObjectName']}")
+        ax0.legend(loc="lower right", ncol=2)
         ax0.set_xlabel("Right Ascension")
         ax0.set_ylabel("Declination")
-        ax0.set_title(f"Sources close to {object_data['ObjectName']}, {nbr_sources} sources")
+        ax0.set_title(f"Sources close to {simulation_data['Object_data']['ObjectName']}, {nbr_src} sources")
         
-        
-        invar_ra = [self.NearbySources_Table['SC_RA'][RightAsc] for RightAsc in range(nbr_sources) if self.NearbySources_Table['SC_RA'][RightAsc] not in var_ra]
-        invar_dec = [self.NearbySources_Table['SC_DEC'][Decl] for Decl in range(nbr_sources) if self.NearbySources_Table['SC_DEC'][Decl] not in var_dec]
-        
+        ax1 = axes[1]
         ax1.invert_xaxis()
-        ax1.scatter(invar_ra, invar_dec, color='black', s=10, label=f"Invariable sources : {len(invar_ra)}")
-        ax1.scatter(var_ra, var_dec, color='orange', s=10, label=f"Variable sources : {len(var_ra)}")
-        ax1.scatter(var_ra_x2a, var_dec_x2a, color='blue', s=10, label=f"Variable sources in Xmm2Athena : {len(var_ra_x2a)}")
-        ax1.scatter(object_data['OBJposition'].ra, object_data['OBJposition'].dec, marker='*', s=100, color='red', label=f"{object_data['ObjectName']}")
-        ax1.legend(loc='upper right', ncol=2)
+        ax1.scatter(invar_sc_ra, invar_sc_dec, color='black', s=10, label=f"Invariant sources, {len(invar_sc_ra)}")
+        ax1.scatter(obj_ra, obj_dec, color='red', marker='x', s=50, label=f"Position of {simulation_data['Object_data']['ObjectName']}")
+        ax1.scatter(sc_ra_in_x2a, sc_dec_in_x2a, color='darkorange', marker="*", label=f"Variable sources in X2A, {len(sc_ra_in_x2a)}")
+        ax1.scatter(sc_ra_in_dr11, sc_dec_in_dr11, color='royalblue', marker="+", label=f"Variable sources not in X2A, {len(sc_ra_in_dr11)}")
+        ax1.legend(loc="lower right", ncol=2)
         ax1.set_xlabel("Right Ascension")
         ax1.set_ylabel("Declination")
-        ax1.set_title(f"Variable and invariable sources close to {object_data['ObjectName']} ")
+        ax1.set_title(f"Variable and invariable sources close to {simulation_data['Object_data']['ObjectName']} ")
         
         plt.show()
-        
-        return fig
 
 
 class Xmm2Athena:
@@ -302,60 +296,113 @@ class Xmm2Athena:
             
         return xmm_dr11, xmm_2_athena
 
-# todo modif Index
+
+    def optimization_photon_index(self, number, nearby_src_table):
+    
+        def power_law(x, constant, photon_index):
+            return constant * (x ** photon_index)
+        
+        col_names = ["SC_EP_1_FLUX", "SC_EP_2_FLUX", "SC_EP_3_FLUX", "SC_EP_4_FLUX", "SC_EP_5_FLUX"]
+        
+        for name in col_names:
+            y_data = [nearby_src_table[name][number] for name in col_names]
+            x_data = np.arange(1, len(y_data) + 1)
+
+            popt, pcov = curve_fit(power_law, x_data, y_data)
+            constant, photon_index = popt
+            
+        return photon_index, (x_data, y_data, power_law(x_data, *popt), popt)
+        
+
+    def visualization_interpolation(self, tup_data):
+        
+        nbr_of_interpolation = len(tup_data)
+        n_col = 4
+        n_row = nbr_of_interpolation/4
+
+        if n_row < 1:
+            n_row = 1
+        elif n_row % 1 == 0:
+            n_row = int(nbr_of_interpolation/4)
+        else:
+            n_row = int(nbr_of_interpolation/4) + 1
+        
+        fig, axes = plt.subplots(nrows=n_row, ncols=n_col, figsize=(17, 8))
+        fig.subplots_adjust(wspace=0.2, hspace=0.75)
+
+        x_labels = ["", "EP_1_FLUX", "EP_2_FLUX", "EP_3_FLUX", "EP_4_FLUX", "EP_5_FLUX", ""]
+        
+        count = 0
+        for row in range(n_row):
+            for col in range(n_col):
+                if count < nbr_of_interpolation:
+                    x_data = tup_data[count][0]
+                    y_data = tup_data[count][1]
+                    power_law = tup_data[count][2]
+                    
+                    constant, photon_index = tup_data[count][3]
+                    
+                    axes[row][col].plot(x_data, power_law, ls="-.", color="navy")
+                    axes[row][col].scatter(x_data, y_data, s=30, color='red', marker="+")
+                    axes[row][col].set_title(f"Gamma : {photon_index}", fontsize=7)
+                    axes[row][col].set_xticks(np.arange(len(x_labels)))
+                    axes[row][col].set_xticklabels(x_labels, fontsize=6)
+                    
+                count += 1
+
+
     def add_nh_photon_index(self, nearby_src_table, user_table):
-            """
-                Add columns for logNH and PhotonIndex to the nearby sources table
-                based on matching DETID values with XMM-Newton to Athena data.
+        user_table = []
+        nbr_src = len(nearby_src_table)
+        
+        name_list = nearby_src_table['IAUNAME']
+        
+        self.xmm_dr11_table = Table(names=self.XMM_DR11.colnames,
+                                    dtype=self.XMM_DR11.dtype)
+        
+        index_in_xd11 = []
+        for name in name_list:
+            if name in self.XMM_DR11['IAUNAME']:
+                index = list(self.XMM_DR11['IAUNAME']).index(name)
+                index_in_xd11.append(index)
+                self.xmm_dr11_table.add_row(self.XMM_DR11[index])
+            else:
+                print(f"{name} is missing")
 
-                Parameters:
-                - nearby_src_table (astropy.table.Table): The nearby sources table to which columns
-                for logNH and PhotonIndex will be added.
+        index_in_x2a = []
+        message = "No data founded"
+        for det_id in self.xmm_dr11_table["DETID"]:
+            if det_id in self.XMM_2_ATHENA["DETID"]:
+                index = list(self.XMM_2_ATHENA["DETID"]).index(det_id)
+                index_in_x2a.append(index)
+            else:
+                index_in_x2a.append(message)
 
-                Returns:
-                astropy.table.Table: The modified nearby sources table with additional columns for logNH and PhotonIndex.
-            """
-            self.nearby_src_table_dr11 = Table(names=self.XMM_DR11.colnames,
-                                               dtype=self.XMM_DR11.dtype)
-            self.nearby_src_table_x2a = Table(names=self.XMM_2_ATHENA.colnames,
-                                              dtype=self.XMM_2_ATHENA.dtype)
+        col_name = ["Index in nearby_src_table", "Index in XmmDR11", "Index in Xmm2Athena"]
+        data = [[n for n in range(nbr_src)], index_in_xd11, index_in_x2a]
+        index_table = Table(data=data,
+                            names=col_name)
 
-            iter_number = len(nearby_src_table) - len(user_table)
+        log_nh, col_photon_index, tup_data = [], [], []
+        
+        for number in range(nbr_src):
+            if index_table["Index in Xmm2Athena"][number] != message:
+                log_nh.append(self.XMM_2_ATHENA["logNH_med"][number])
+                col_photon_index.append(self.XMM_2_ATHENA["PhoIndex_med"][number])
+            else:
+                log_nh.append(0.0)
+                data, tuple_data = self.optimization_photon_index(number, nearby_src_table)
+                tup_data.append(tuple_data)
+                col_photon_index.append(data)
 
-            for item in nearby_src_table['IAUNAME'][:iter_number]:
-                if item in self.XMM_DR11['IAUNAME']:
-                    index = list(self.XMM_DR11['IAUNAME']).index(item)
-                    self.nearby_src_table_dr11.add_row(self.XMM_DR11[index])
+        col_nh = [np.exp(value * np.log(10)) if value != 0.0 else 3e20 for value in log_nh]
 
-            index_ath = []
-            for item in self.nearby_src_table_dr11['DETID']:
-                if item in self.XMM_2_ATHENA['DETID']:
-                    index = list(self.XMM_2_ATHENA['DETID']).index(item)
-                    index_ath.append(index)
-                    self.nearby_src_table_x2a.add_row(self.XMM_2_ATHENA[index])
+        col_names = ["Photon Index", "Nh"]
+        col_data = [col_photon_index, col_nh]
+        
+        for name, data in zip(col_names, col_data):
+            nearby_src_table[name] = data
 
-            log_nh, photon_index = [], []
-            for item in self.nearby_src_table_dr11['DETID']:
-                if item in self.XMM_2_ATHENA['DETID']:
-                    index = list(self.XMM_2_ATHENA['DETID']).index(item)
+        self.visualization_interpolation(tup_data)
 
-                    log_nh.append(self.XMM_2_ATHENA['logNH_med'][index])
-                    photon_index.append(self.XMM_2_ATHENA['PhoIndex_med'][index])
-                else:
-                    log_nh.append(0.0)
-                    photon_index.append(0.0)
-
-            for item in range(len(self.nearby_src_table_dr11)):
-                if photon_index[item] == 0:
-                    photon_index[item] = 2.0
- 
-            col_nh = [np.exp(value * np.log(10)) if value != 0.0 else 0.0 for value in log_nh] + [0] * len(user_table)
-            col_photon_index = photon_index + [2]*len(user_table)
-            
-            col_names = ['Photon Index', 'Nh']
-            col_data = [col_photon_index, col_nh]
-            
-            for col, data in zip(col_names, col_data):
-                nearby_src_table[col] = data
-
-            return nearby_src_table, index_ath
+        return nearby_src_table, index_table

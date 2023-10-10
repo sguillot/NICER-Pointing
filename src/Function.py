@@ -10,62 +10,49 @@ from astropy.table import Table
 import subprocess
 import sys
 import os
+from scipy.optimize import curve_fit
 from termcolor import colored
 
                 # Function
-           
-def variability_rate(nearby_src_table, simulation_data, index_ath, nbr_var_src):
-    """
-    Generate a table of variable sources from a NearbySRC_Table and provide summary statistics.
 
-    Parameters:
-        NearbySRC_Table (Table): A table containing information about nearby sources.
-        Simulation_data (dict): A dictionary containing simulation data, including object information.
-        INDEX_ATH (list): A list of indices representing sources in Xmm2Athena.
-        Nbr_Var_SRC (int): The number of variable sources.
-
-    Returns:
-        Table: A table containing variable source information, including IAUNAME, RA, DEC, Var_Rate, and In_Xmm2Athena.
-
-    This function processes the NearbySRC_Table to extract information about variable sources
-    and generates a table with relevant columns. It also provides summary statistics about
-    the variable sources detected and their inclusion in Xmm2Athena.
-    """
+def variability_rate(index_table, nearby_src_table, simulation_data):
     
+    nbr_src = len(nearby_src_table)
+    message = "No data founded"
+    XMMDR11 = simulation_data["Catalog"]["XMMDR11"]
     NAME = simulation_data["Object_data"]["ObjectName"]
-    COLUMN_VAR = nearby_src_table['SC_FVAR']
-    var_src_name, var_ra, var_dec, variability_rate = [], [], [], []
     
-    nbr_iter = len(nearby_src_table) - nbr_var_src
     
-    for index, value in enumerate(COLUMN_VAR):
-        if not np.isnan(value):
-            var_src_name.append(nearby_src_table['IAUNAME'][index])
-            var_ra.append(nearby_src_table['SC_RA'][index])
-            var_dec.append(nearby_src_table['SC_DEC'][index])
-            variability_rate.append(nearby_src_table['SC_FVAR'][index])
-
-    NUMBER = [nearby_src_table[item][0] for item in range(len(nearby_src_table))]
-    nbr_var = [number for value, number in zip(nearby_src_table['SC_FVAR'][: nbr_iter], NUMBER) if not np.isnan(value)]
-    in_x2a = [True if number in index_ath else False for number in nbr_var]
-
-    for item in range(nbr_var_src):
-        in_x2a.append(False)
-
-    col_names = ['IAUNAME', 'RA', 'DEC', 'Var_Rate', 'In_Xmm2Athena']
-    col_data = [var_src_name, var_ra, var_dec, variability_rate, in_x2a]
+    index_array, iauname_array, sc_ra_array = np.array([], dtype=int), np.array([], dtype=str), np.array([], dtype=float)
+    sc_dec_array, sc_fvar_array, in_x2a_array = np.array([], dtype=float), np.array([], dtype=float), np.array([], dtype=bool)
     
-    var_src_table = Table()
-    for name, data in zip(col_names, col_data):
-        var_src_table[name] = data    
-
+    for number in range(nbr_src):
+        if not np.isnan(XMMDR11["SC_FVAR"][index_table["Index in XmmDR11"][number]]):
+            
+            index_array = np.append(index_array, index_table["Index in nearby_src_table"][number])
+            iauname_array = np.append(iauname_array, nearby_src_table["IAUNAME"][number])
+            sc_ra_array = np.append(sc_ra_array, nearby_src_table["SC_RA"][number])
+            sc_dec_array = np.append(sc_dec_array, nearby_src_table["SC_DEC"][number])
+            sc_fvar_array = np.append(sc_fvar_array, nearby_src_table["SC_FVAR"][number])
+            
+            if index_table["Index in Xmm2Athena"][number] != message:
+                in_x2a_array = np.append(in_x2a_array, True)
+            else:
+                in_x2a_array = np.append(in_x2a_array, False)
     
-    message_xmm = f"Among {len(nearby_src_table)} sources detected close to {NAME}, {len(var_src_name)} of them are variable. Using DR13 Catalog."
+    column_names = ["INDEX", "IAUNAME", "SC_RA", "SC_DEC", "SC_FVAR", "IN_X2A"]
+    data_array = [index_array, iauname_array, sc_ra_array, sc_dec_array, sc_fvar_array, in_x2a_array]
+    variability_table = Table()
+    
+    for data, name in zip(data_array, column_names):
+        variability_table[name] = data
+        
+    message_xmm = f"Among {len(nearby_src_table)} sources detected close to {NAME}, {len(index_array)} of them are variable. Using DR13 Catalog."
     print(message_xmm)
-    message_xmm2ath = f"Among {len(var_src_table)} variable sources, {in_x2a.count(True)} are in Xmm2Athena and {in_x2a.count(False)} are not in Xmm2Athena. "    
+    message_xmm2ath = f"Among {len(index_array)} variable sources, {list(variability_table['IN_X2A']).count(True)} are in Xmm2Athena and {list(variability_table['IN_X2A']).count(False)} are not in Xmm2Athena. "    
     print(message_xmm2ath)
         
-    return var_src_table
+    return variability_table
 
                     
 def name_to_short_name(NAME):
@@ -486,3 +473,18 @@ def count_rates(Table, xmmflux, NH, Power_Law):
     Table["Count Rates"] = CountRates
 
     return CountRates, Table
+
+def interpolate_photon_index(number, nearby_src_table):
+    
+    def power_law(x, constant, photon_index):
+        return constant*(x**photon_index)
+    
+    col_names = ['SC_EP_1_FLUX', 'SC_EP_2_FLUX', 'SC_EP_3_FLUX', 'SC_EP_4_FLUX', 'SC_EP_5_FLUX']
+    y_data = [nearby_src_table[name][number] for name in col_names]
+    
+    x_data = np.arange(1, len(y_data) + 1)
+    
+    params, covariance = curve_fit(power_law, x_data, y_data)
+    constant, photon_index = params
+    
+    return photon_index
