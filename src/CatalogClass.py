@@ -241,35 +241,52 @@ class XmmCatalog:
 
 class Xmm2Athena:
     """
-        A class for processing and analyzing XMM-Newton (XMM) DR11 and XMM-Newton to Athena (X2A) catalog data.
-        
-        This class provides methods for opening XMM-Newton DR11 and XMM-Newton to Athena catalog files,
-        as well as adding columns for average logNH and PhotonIndex values to a given nearby sources table.
+    A class for performing various operations on XMM-Newton and Athena catalogs.
 
-        Parameters:
-        - XMM_DR11_path (str): The file path to the XMM-Newton DR11 catalog.
-        - XMM_2_Athena_path (str): The file path to the XMM-Newton to Athena catalog.
+    This class provides methods to open XMM-Newton and Athena catalogs, perform
+    optimizations on photon index, visualize interpolation results, and add
+    columns for photon index and column density (Nh) to a nearby source table.
 
-        Attributes:
-        - XMM_DR11 (astropy.table.Table): The XMM-Newton DR11 catalog data.
-        - XMM_2_ATHENA (astropy.table.Table): The XMM-Newton to Athena catalog data.
-        - NearbySources_Table_DR11 (astropy.table.Table): The nearby sources table based on XMM-Newton DR11 data.
-        - NearbySources_Table_X2A (astropy.table.Table): The nearby sources table based on XMM-Newton to Athena data.
-        - average_logNH_value (float): The average logNH value calculated from XMM-Newton to Athena data.
-        - average_PhotonIndex_value (float): The average PhotonIndex value calculated from XMM-Newton to Athena data.
+    Parameters:
+        XMM_DR11_PATH (str): Path to the XMM-Newton DR11 catalog FITS file.
+        XMM_2_ATHENA_PATH (str): Path to the XMM-Newton 2 Athena catalog FITS file.
 
-        Methods:
-        - open_catalog(XMM_DR11_path, XMM_2_Athena_path): Open and load XMM-Newton DR11 and XMM-Newton to Athena catalog data.
+    Attributes:
+        nearby_src_table_dr11 (None or astropy.table.Table): Table for nearby sources from XMM-Newton DR11 catalog.
+        nearby_src_table_x2a (None or astropy.table.Table): Table for nearby sources from XMM-Newton 2 Athena catalog.
 
-        - add_nh_photo_index(NearbySources_Table): Add columns for logNH and PhotonIndex to the nearby sources table
-        based on matching DETID values with XMM-Newton to Athena data.
+    Methods:
+        open_catalog(XMM_DR11_PATH, XMM_2_ATHENA_PATH):
+            Opens and reads the XMM-Newton catalogs specified by the provided paths.
 
-        Returns:
-        astropy.table.Table: The nearby sources table with additional columns for logNH and PhotonIndex.
+        optimization_photon_index(number, nearby_src_table):
+            Performs optimization on the photon index for a given nearby source.
+
+        visualization_interpolation(tup_data):
+            Visualizes interpolation results for multiple nearby sources.
+
+        add_nh_photon_index(nearby_src_table, user_table):
+            Adds columns for photon index and column density (Nh) to a nearby source table.
     """
     
-    
     def __init__(self, XMM_DR11_PATH, XMM_2_ATHENA_PATH):
+        """
+        Initialize an instance of the Xmm2Athena class.
+
+        This constructor opens and reads XMM-Newton catalogs specified by the provided
+        file paths. It also initializes attributes for nearby source tables.
+
+        Parameters:
+            XMM_DR11_PATH (str): Path to the XMM-Newton DR11 catalog FITS file.
+            XMM_2_ATHENA_PATH (str): Path to the XMM-Newton 2 Athena catalog FITS file.
+
+        Attributes:
+            XMM_DR11 (astropy.table.Table): XMM-Newton DR11 catalog table.
+            XMM_2_ATHENA (astropy.table.Table): XMM-Newton 2 Athena catalog table.
+            nearby_src_table_dr11 (None or astropy.table.Table): Table for nearby sources from XMM-Newton DR11 catalog.
+            nearby_src_table_x2a (None or astropy.table.Table): Table for nearby sources from XMM-Newton 2 Athena catalog.
+        """
+        
         self.XMM_DR11, self.XMM_2_ATHENA = self.open_catalog(XMM_DR11_PATH, XMM_2_ATHENA_PATH)
 
         self.nearby_src_table_dr11 = None
@@ -278,16 +295,22 @@ class Xmm2Athena:
 
     def open_catalog(self, XMM_DR11_PATH, XMM_2_ATHENA_PATH):
         """
-            Open and load XMM-Newton DR11 and XMM-Newton to Athena catalog data.
+        Open and read XMM-Newton catalogs.
 
-            Parameters:
-            - XMM_DR11_PATH (str): The file path to the XMM-Newton DR11 catalog.
-            - XMM_2_ATHENA_PATH (str): The file path to the XMM-Newton to Athena catalog.
+        This method opens and reads the XMM-Newton catalogs specified by the provided paths,
+        returning two astropy tables.
 
-            Returns:
-            Tuple[astropy.table.Table, astropy.table.Table]: A tuple containing the loaded XMM-Newton DR11 and
-            XMM-Newton to Athena catalog data tables.
+        Parameters:
+            XMM_DR11_PATH (str): Path to the XMM-Newton DR11 catalog FITS file.
+            XMM_2_ATHENA_PATH (str): Path to the XMM-Newton 2 Athena catalog FITS file.
+
+        Returns:
+            tuple: A tuple containing two astropy tables (XMM-Newton DR11 and XMM-Newton 2 Athena).
+
+        Notes:
+            The returned tables include data from the specified FITS files.
         """
+        
         with fits.open(XMM_DR11_PATH) as data1, fits.open(XMM_2_ATHENA_PATH) as data2:
             xmm_dr11 = Table(data1[1].data)
             xmm_2_athena = Table(data2[1].data)
@@ -298,27 +321,57 @@ class Xmm2Athena:
 
 
     def optimization_photon_index(self, number, nearby_src_table):
-    
-        def power_law(x, constant, photon_index):
-            return constant * (x ** photon_index)
-        
-        col_names = ["SC_EP_1_FLUX", "SC_EP_2_FLUX", "SC_EP_3_FLUX", "SC_EP_4_FLUX", "SC_EP_5_FLUX"]
-        
-        for name in col_names:
-            y_data = [nearby_src_table[name][number] for name in col_names]
-            x_data = np.arange(1, len(y_data) + 1)
+        """
+        Perform optimization on the photon index for a nearby source.
 
-            popt, pcov = curve_fit(power_law, x_data, y_data)
-            constant, photon_index = popt
-            
-        return photon_index, (x_data, y_data, power_law(x_data, *popt), popt)
+        This method calculates the optimized photon index for a specific nearby source,
+        using the provided source table.
+
+        Parameters:
+            number (int): Index of the nearby source in the source table.
+            nearby_src_table (astropy.table.Table): Table containing nearby sources.
+
+        Returns:
+            tuple: A tuple containing the calculated photon index and related data.
+
+        Notes:
+            The returned tuple includes the photon index, energy ranges, flux values,
+            fitted power-law curve, and optimization parameters.
+        """
+        
+        def power_law(x, constant, gamma):
+            return constant * (x ** (gamma))
+
+        col_names = ["SC_EP_1_FLUX", "SC_EP_2_FLUX", "SC_EP_3_FLUX", "SC_EP_4_FLUX", "SC_EP_5_FLUX"]
+
+        flux_values = np.array([nearby_src_table[name][number] for name in col_names])
+        energy_ranges = np.array([0.35, 0.75, 1.5, 3.25, 8.25])
+
+        popt, pcov = curve_fit(power_law, energy_ranges, flux_values)
+        constant, photon_index = popt
+        
+        return photon_index, (energy_ranges, flux_values, power_law(energy_ranges, *popt), popt)
         
 
     def visualization_interpolation(self, tup_data):
+        """
+        Visualize interpolation results for multiple nearby sources.
+
+        This method generates plots to visualize interpolation results for multiple nearby
+        sources based on the provided data.
+
+        Parameters:
+            tup_data (list of tuples): List of tuples containing interpolation data for
+            multiple nearby sources.
+
+        Notes:
+            The method generates plots showing power-law interpolation and scatter plots
+            for each nearby source's photon index.
+        """
         
         nbr_of_interpolation = len(tup_data)
         n_col = 4
-        n_row = nbr_of_interpolation/4
+        n_row = nbr_of_interpolation/n_col
 
         if n_row < 1:
             n_row = 1
@@ -328,9 +381,8 @@ class Xmm2Athena:
             n_row = int(nbr_of_interpolation/4) + 1
         
         fig, axes = plt.subplots(nrows=n_row, ncols=n_col, figsize=(17, 8))
-        fig.subplots_adjust(wspace=0.2, hspace=0.75)
-
-        x_labels = ["", "EP_1_FLUX", "EP_2_FLUX", "EP_3_FLUX", "EP_4_FLUX", "EP_5_FLUX", ""]
+        fig.subplots_adjust(wspace=0.5, hspace=1.5)
+        fig.suptitle("Interpolation Photon Index", fontsize=20)
         
         count = 0
         for row in range(n_row):
@@ -341,17 +393,36 @@ class Xmm2Athena:
                     power_law = tup_data[count][2]
                     
                     constant, photon_index = tup_data[count][3]
-                    
+
                     axes[row][col].plot(x_data, power_law, ls="-.", color="navy")
                     axes[row][col].scatter(x_data, y_data, s=30, color='red', marker="+")
-                    axes[row][col].set_title(f"Gamma : {photon_index}", fontsize=7)
-                    axes[row][col].set_xticks(np.arange(len(x_labels)))
-                    axes[row][col].set_xticklabels(x_labels, fontsize=6)
+                    axes[row][col].set_title(f"Photon_Index : {photon_index}", fontsize=7)
+                    
+                    axes[row][col].set_xlabel('Energy [keV]', fontsize=7)
+                    axes[row][col].set_ylabel('Flux [erg/cm^2/s]', fontsize=7)
                     
                 count += 1
 
 
     def add_nh_photon_index(self, nearby_src_table, user_table):
+        """
+        Add columns for photon index and column density (Nh) to a nearby source table.
+
+        This method adds new columns for photon index and column density (Nh) to a nearby
+        source table, while performing various data operations to link the tables together.
+
+        Parameters:
+            nearby_src_table (astropy.table.Table): Table containing nearby sources.
+            user_table: Not specified in the method, it seems to be an output variable.
+
+        Returns:
+            tuple: A tuple containing the modified nearby source table and an index table.
+
+        Notes:
+            This method also generates an index table linking nearby sources to XMM-Newton
+            DR11 and XMM-Newton 2 Athena catalogs. It visualizes interpolation results.
+        """
+        
         user_table = []
         nbr_src = len(nearby_src_table)
         

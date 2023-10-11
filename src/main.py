@@ -110,9 +110,9 @@ XMM2ATH = X2A.XMM_2_ATHENA
                 # Useful dictionary
 
 catalog = {'CurrentCatalog': XMM_DR_13,
-            'XMMDR11':XMMDR11,
-            'XMM2ATH':XMM2ATH
-            }
+           'XMMDR11':XMMDR11,
+           'XMM2ATH':XMM2ATH
+           }
 
 telescop_data = {'TelescopeName': 'NICER',
                 'EffArea': EffArea,
@@ -140,7 +140,7 @@ except Exception as error :
     
 # -------------------------------------------------- #
 
-nearby_src_table, index_table = X2A.add_nh_photon_index(nearby_src_table=nearby_src_table, user_table=user_table)
+nearby_src_table, index_table = X2A.add_nh_photon_index(nearby_src_table, user_table)
 
 variability_table = F.variability_rate(index_table, nearby_src_table, simulation_data)
 

@@ -473,18 +473,3 @@ def count_rates(Table, xmmflux, NH, Power_Law):
     Table["Count Rates"] = CountRates
 
     return CountRates, Table
-
-def interpolate_photon_index(number, nearby_src_table):
-    
-    def power_law(x, constant, photon_index):
-        return constant*(x**photon_index)
-    
-    col_names = ['SC_EP_1_FLUX', 'SC_EP_2_FLUX', 'SC_EP_3_FLUX', 'SC_EP_4_FLUX', 'SC_EP_5_FLUX']
-    y_data = [nearby_src_table[name][number] for name in col_names]
-    
-    x_data = np.arange(1, len(y_data) + 1)
-    
-    params, covariance = curve_fit(power_law, x_data, y_data)
-    constant, photon_index = params
-    
-    return photon_index
