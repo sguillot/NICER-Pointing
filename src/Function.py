@@ -16,6 +16,30 @@ from termcolor import colored
                 # Function
 
 def variability_rate(index_table, nearby_src_table, simulation_data):
+    """
+        Calculate the variability rate of nearby sources close to a specified object.
+
+        This function processes data from 'index_table', 'nearby_src_table', and 'simulation_data' to determine the variability rate
+        of sources detected close to a given object. It extracts information on the sources' variability and presence in the Xmm2Athena catalog.
+
+        Parameters:
+            index_table (Table): A table containing index information related to the nearby sources.
+            nearby_src_table (Table): A table with data on nearby sources, including IAUNAME, coordinates, and SC_FVAR.
+            simulation_data (dict): A dictionary with simulation data, including catalog and object data.
+
+        Returns:
+            Table: A table containing the following columns:
+                - INDEX: Index of the nearby source in 'nearby_src_table'.
+                - IAUNAME: IAUNAME of the nearby source.
+                - SC_RA: Right Ascension of the nearby source.
+                - SC_DEC: Declination of the nearby source.
+                - SC_FVAR: Variability information of the nearby source.
+                - IN_X2A: Boolean indicating if the source is present in Xmm2Athena.
+
+        The function prints two messages:
+        1. A message indicating the number of variable sources detected close to the object using the DR13 Catalog.
+        2. A message indicating the count of sources that are and are not present in Xmm2Athena among the variable sources.
+    """
     
     nbr_src = len(nearby_src_table)
     message = "No data founded"
@@ -428,6 +452,7 @@ def data_map(simulation_data, vector_dictionary, OptimalPointingIdx, NearbySRCpo
     Returns:
     None
     """
+    
     object_data = simulation_data['Object_data']
     
     # Plot the map of S/N ratio as function of NICER pointing
@@ -448,28 +473,102 @@ def data_map(simulation_data, vector_dictionary, OptimalPointingIdx, NearbySRCpo
     plt.show()
 
 
-def count_rates(Table, xmmflux, NH, Power_Law):
+def model_dictionary(nearby_src_table):
     """
-        Calculates the count rates for every source and adds them to the NearbySources_Table.
+        Create a dictionary of models and associated parameters for nearby sources.
 
-        :param Modified_NearbySources_Table: Table containing nearby sources.
-        :type Modified_NearbySources_Table: astropy.table.Table
-        :return: CountRates, Updated NearbySources_Table
-        :rtype: list, astropy.table.Table
+        This function generates a dictionary that stores information about the models and their parameters for nearby sources.
+        It extracts model information from the 'nearby_src_table', including the model type, model value, X-ray flux, and column density.
+
+        Parameters:
+            nearby_src_table (Table): A table containing data on nearby sources, including model information, X-ray flux, and column density.
+
+        Returns:
+            dict: A dictionary where each key represents a nearby source (e.g., "src_0") and maps to a sub-dictionary containing:
+                - "model": The type of the model used.
+                - "model_value": The value associated with the model.
+                - "flux": The X-ray flux of the source.
+                - "column_density": The column density value.
+
+        Note:
+        - The 'model' field indicates the type of model used, e.g., 'power,' 'black_body,' or 'temp' (the last model in PIMMS).
+        - If the model is 'black_body' or 'temp,' there may not be a valid 'model_value' provided.
     """
-    CountRates = []
+    
+    model_dictionary = {}
+    nbr_src = len(nearby_src_table)
 
-    for flux, nh, power_law in zip(xmmflux, NH, Power_Law):
-        pimms_cmds = "instrument nicer 0.3-10.0\nfrom flux ERGS 0.2-12.0\nmodel galactic nh {}\nmodel power {} 0.0\ngo {}\nexit\n".format(nh, power_law, flux)
+    model = np.array([], dtype=str)
+    model_value = np.array([], dtype=float)
+    xmm_flux = np.array([nearby_src_table["SC_EP_8_FLUX"][item] for item in range(nbr_src)], dtype=float)
+    nh_value = np.array([nearby_src_table["Nh"][item] for item in range(nbr_src)], dtype=float)
+    
+    # Pour le moment seulement 'power' indiquant le modèle a utiliser pour la commande pimms
+    for item in range(nbr_src):
+        model = np.append(model, 'power')    
+        
+    for item in range(nbr_src):
+        if model[item] == 'power':
+            model_value = np.append(model_value, nearby_src_table["Photon Index"][item])
+        elif model[item] == 'black_body':
+            pass # Pas de valeur pour le moment...
+        elif model[item] == 'temp':
+            pass # Pas de valeur pour le moment... (dernier model pimms)
+        
+    for item in range(nbr_src):
+    
+        dictionary = {
+            "model": model[item],
+            "model_value": model_value[item],
+            "flux": xmm_flux[item],
+            "column_dentsity": nh_value[item]
+        }
+    
+        model_dictionary[f"src_{item}"] = dictionary
 
+    return model_dictionary 
+
+
+def count_rates(nearby_src_table, model_dictionary):
+    """
+        Calculate X-ray count rates for nearby sources using PIMMS modeling.
+
+        This function calculates X-ray count rates for a set of nearby sources based on their model information and associated parameters.
+        It uses PIMMS (Portable, Interactive Multi-Mission Simulator) to perform the modeling and computes the count rates.
+
+        Parameters:
+            nearby_src_table (Table): A table containing data on nearby sources, including model information, X-ray flux, and column density.
+            model_dictionary (dict): A dictionary mapping sources (e.g., "src_0") to model and parameter information.
+
+        Returns:
+            tuple: A tuple containing two elements:
+                - A NumPy array of X-ray count rates for each nearby source.
+                - An updated 'nearby_src_table' with the added 'Count Rates' column.
+
+        Note:
+        - PIMMS modeling commands are generated for each source based on the model, model value, X-ray flux, and column density.
+        - The 'Count Rates' column is added to the 'nearby_src_table' with the calculated count rates.
+    """
+    
+    nbr_src = len(model_dictionary)
+    count_rates = np.array([], dtype=float)
+    
+    for item in range(nbr_src):
+        model = model_dictionary[f"src_{item}"]["model"]
+        model_value = model_dictionary[f"src_{item}"]["model_value"]
+        xmm_flux =  model_dictionary[f"src_{item}"]["flux"]
+        nh_value = model_dictionary[f"src_{item}"]["column_dentsity"]
+        
+        pimms_cmds = "instrument nicer 0.3-10.0\nfrom flux ERGS 0.2-12.0\nmodel galactic nh {}\nmodel {} {} 0.0\ngo {}\nexit\n".format(nh_value, model, model_value, xmm_flux)
+        
         with open('pimms_script.xco', 'w') as file:
             file.write(pimms_cmds)
             file.close()
 
         result = subprocess.run(['pimms', '@pimms_script.xco'], stdout=subprocess.PIPE).stdout.decode(sys.stdout.encoding)
         count_rate = float(result.split("predicts")[1].split('cps')[0])
-        CountRates.append(count_rate)
-
-    Table["Count Rates"] = CountRates
-
-    return CountRates, Table
+        count_rates = np.append(count_rates, count_rate)
+        
+    nearby_src_table["Count Rates"] = count_rates
+        
+    return count_rates, nearby_src_table

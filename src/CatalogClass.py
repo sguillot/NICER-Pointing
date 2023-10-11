@@ -339,8 +339,8 @@ class Xmm2Athena:
             fitted power-law curve, and optimization parameters.
         """
         
-        def power_law(x, constant, alpha):
-                return constant * (x ** (alpha))
+        def power_law(x, constant, gamma):
+                return constant * (x ** ( - gamma))
 
         col_names = ["SC_EP_1_FLUX", "SC_EP_2_FLUX", "SC_EP_3_FLUX", "SC_EP_4_FLUX", "SC_EP_5_FLUX"]
         col_err_names = ["SC_EP_1_FLUX_ERR", "SC_EP_2_FLUX_ERR", "SC_EP_3_FLUX_ERR", "SC_EP_4_FLUX_ERR", "SC_EP_5_FLUX_ERR"]

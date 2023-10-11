@@ -156,10 +156,12 @@ XMM.neighbourhood_of_object(nearby_src_table, variability_table, simulation_data
 # -------------------------------------------------- #
 
                 # Count Rates and complete NearbySources_Table 
-            
-Count_Rates, NearbySRC_Table = F.count_rates(nearby_src_table, xmmflux=nearby_src_table['SC_EP_8_FLUX'], NH=nearby_src_table['Nh'], Power_Law=nearby_src_table['Photon Index'])
 
-simulation_data['NearbySRC_Table'] = NearbySRC_Table
+model_dictionary = F.model_dictionary(nearby_src_table)
+
+count_rates, nearby_src_table = F.count_rates(nearby_src_table, model_dictionary)
+
+simulation_data['NearbySRC_Table'] = nearby_src_table
 
 # -------------------------------------------------- #
 
