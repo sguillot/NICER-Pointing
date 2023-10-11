@@ -339,18 +339,20 @@ class Xmm2Athena:
             fitted power-law curve, and optimization parameters.
         """
         
-        def power_law(x, constant, gamma):
-            return constant * (x ** (gamma))
+        def power_law(x, constant, alpha):
+                return constant * (x ** (alpha))
 
         col_names = ["SC_EP_1_FLUX", "SC_EP_2_FLUX", "SC_EP_3_FLUX", "SC_EP_4_FLUX", "SC_EP_5_FLUX"]
+        col_err_names = ["SC_EP_1_FLUX_ERR", "SC_EP_2_FLUX_ERR", "SC_EP_3_FLUX_ERR", "SC_EP_4_FLUX_ERR", "SC_EP_5_FLUX_ERR"]
 
         flux_values = np.array([nearby_src_table[name][number] for name in col_names])
+        flux_err_values = np.array([nearby_src_table[name][number] for name in col_err_names])
         energy_ranges = np.array([0.35, 0.75, 1.5, 3.25, 8.25])
 
-        popt, pcov = curve_fit(power_law, energy_ranges, flux_values)
+        popt, pcov = curve_fit(power_law, energy_ranges, flux_values, sigma=flux_err_values)
         constant, photon_index = popt
         
-        return photon_index, (energy_ranges, flux_values, power_law(energy_ranges, *popt), popt)
+        return photon_index, (energy_ranges, flux_values, flux_err_values, power_law(energy_ranges, *popt), popt)
         
 
     def visualization_interpolation(self, tup_data):
@@ -368,7 +370,6 @@ class Xmm2Athena:
             The method generates plots showing power-law interpolation and scatter plots
             for each nearby source's photon index.
         """
-        
         nbr_of_interpolation = len(tup_data)
         n_col = 4
         n_row = nbr_of_interpolation/n_col
@@ -383,23 +384,21 @@ class Xmm2Athena:
         fig, axes = plt.subplots(nrows=n_row, ncols=n_col, figsize=(17, 8))
         fig.subplots_adjust(wspace=0.5, hspace=1.5)
         fig.suptitle("Interpolation Photon Index", fontsize=20)
-        
         count = 0
         for row in range(n_row):
             for col in range(n_col):
                 if count < nbr_of_interpolation:
-                    x_data = tup_data[count][0]
-                    y_data = tup_data[count][1]
-                    power_law = tup_data[count][2]
+                    energy_ranges = tup_data[count][0]
+                    flux_values = tup_data[count][1]
+                    flux_err_values = tup_data[count][2]
+                    power_law = tup_data[count][3]
+                    constant, photon_index = tup_data[count][4]
                     
-                    constant, photon_index = tup_data[count][3]
-
-                    axes[row][col].plot(x_data, power_law, ls="-.", color="navy")
-                    axes[row][col].scatter(x_data, y_data, s=30, color='red', marker="+")
-                    axes[row][col].set_title(f"Photon_Index : {photon_index}", fontsize=7)
-                    
+                    axes[row][col].errorbar(energy_ranges, flux_values, flux_err_values, fmt='*', color='red', ecolor='black')
+                    axes[row][col].plot(energy_ranges, power_law, linestyle='dashdot', color="navy")
                     axes[row][col].set_xlabel('Energy [keV]', fontsize=7)
                     axes[row][col].set_ylabel('Flux [erg/cm^2/s]', fontsize=7)
+                    axes[row][col].set_title(f"Photon_Index : {photon_index:.4f}", fontsize=7)
                     
                 count += 1
 
