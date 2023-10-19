@@ -1,11 +1,12 @@
 # -------------------------------------------------- #
 
-from CatalogClass import XmmCatalog, Xmm2Athena
+from CatalogClass import XmmCatalog, Xmm2Athena, Chandra, Swift, ERosita
 import Function as F
 import argparse
 from astropy.table import Table
 from astroquery.simbad import Simbad
-from astropy import units as u
+import numpy as np
+from astropy import units as u 
        
 # -------------------------------------------------- #
 
@@ -27,13 +28,17 @@ print("Here is the PSR Table : \n", psr_table, "\n")
 # -------------------------------------------------- #
 
                 # Initialization Code   
-                            
+
 parser = argparse.ArgumentParser(description='Search for information with object name or coord')
-group = parser.add_mutually_exclusive_group(required=True)
-group.add_argument('--name', type=str, help='Replace spaces by _')
-group.add_argument('--coord', type=float, nargs=2, help='ra dec (two float values)')
-parser.add_argument("--catalog", type=str, help="Enter a catalog keyword DR11/DR13.")
+
+find_object = parser.add_mutually_exclusive_group()
+find_object.add_argument('--name', type=str, help='Replace spaces by _')
+find_object.add_argument('--coord', type=float, nargs=2, help='ra dec (two float values)')
+parser.add_argument('--catalog', type=str, help='Xmm_DR13, CSC_2.0, Swift, eRosita')
+
 args = parser.parse_args()
+
+# -------------------------------------------------- #
 
 if args.name:
     while True : 
@@ -47,7 +52,7 @@ if args.name:
         except Exception as error:
             print(f"Error: {NAME} isn't in Simbad Database")
             args.name = str(input("Enter another objet name : "))
-    PATH = F.choose_catalog(args.catalog)
+    catalog_path, catalog_name = F.choose_catalog(args.catalog)
 elif args.coord:
     ra, dec = args.coord
     RA, DEC = float(ra), float(dec)
@@ -61,7 +66,7 @@ elif args.coord:
             RA = float(input('Enter new right ascension : '))
             DEC =  float(input('Enter new declination'))
     OBJ_POSITION = F.get_coord_psr(NAME)
-    PATH = F.choose_catalog(args.catalog)
+    catalog_path, catalog_name = F.choose_catalog(args.catalog)
 
 while True:
     if NAME in psr_full_name:
@@ -75,12 +80,11 @@ while True:
             print(f"Error: {error}")
             print("Please enter a valid float value for Count Rate.")
             continue
-        
-object_data = {'ObjectName':NAME,
-               #'ShortName': F.Name_to_Short_Name(NAME),
-               'CountRate': COUNT_RATE,
-               'OBJposition' : OBJ_POSITION}
 
+object_data = {'object_name':NAME,
+               'CountRate': COUNT_RATE,
+               'object_position' : OBJ_POSITION
+               }
 
 user_list = F.define_sources_list() 
 
@@ -92,75 +96,104 @@ else:
     user_table = Table()
     print("User don't defined any additionnal sources. \n")
 
+# -------------------------------------------------- #
+                # load nicer parameters
+
 print('-'*50)
-NICER_PARAMETERS_PATH = F.get_valid_file_path("Catalog/NICER_PSF.dat")
-XMM_DR_11_PATH = F.get_valid_file_path('Catalog/4XMM_DR11cat_v1.0.fits')
-XMM_2_ATHENA_PATH = F.get_valid_file_path('Catalog/xmm2athena_D6.1_V3.fits')
+nicer_parameters_path = F.get_valid_file_path("Catalog/NICER_PSF.dat")
+EffArea, OffAxisAngle = np.loadtxt("Catalog/NICER_PSF.dat", unpack=True, usecols=(0, 1))
 print('-'*50)
 
-XMM = XmmCatalog(PATH, NICER_PARAMETERS_PATH)
-XMM_DR_13 = XMM.catalog
-EffArea, OffAxisAngle = XMM.NICER_PARAMETERS
+                # code verification fichier nicer_parameter
 
-X2A = Xmm2Athena(XMM_DR_11_PATH, XMM_2_ATHENA_PATH)
-XMMDR11 = X2A.XMM_DR11
-XMM2ATH = X2A.XMM_2_ATHENA
+# while True: 
+#     with open(nicer_parameter_path, "r") as data:
+#         first_row = data.readline()
+#         column = first_row.split()
+#         ncol = len(column)
+        
+#     try:
+#         if ncol == 2:
+#             EffArea, OffAxisAngle = np.loadtxt(nicer_parameter_path, unpack=True, usecols=(0, 1))
+#             return EffArea, OffAxisAngle
+#         else:
+#             raise Exception(f"The file {nicer_parameter_path} doesn't have 2 columns")
+#     except Exception as error:
+#         print(f"An error occured {error}")
+#         nicer_parameter_path = str(input('Input another file path : \n'))
 
 # -------------------------------------------------- #
-                # Useful dictionary
 
-catalog = {'CurrentCatalog': XMM_DR_13,
-           'XMMDR11':XMMDR11,
-           'XMM2ATH':XMM2ATH
-           }
+                # useful dictionary
 
-telescop_data = {'TelescopeName': 'NICER',
-                'EffArea': EffArea,
-                'OffAxisAngle': OffAxisAngle
-                }
+telescop_data = {'telescop_name': 'nicer',
+                 'EffArea':EffArea,
+                 'OffAxisAngle': OffAxisAngle
+                 }
 
-simulation_data = {'Object_data': object_data,
-                   'Telescop_data': telescop_data,
-                   'Catalog': catalog,
+simulation_data = {'object_data': object_data,
+                   'telescop_data': telescop_data,
                    'INSTbkgd': 0.2,
                    'EXPtime': 1e6
                    }
 
-# -------------------------------------------------- #
-
-print("\n")
-try : 
-    nearby_src_table, nearby_src_position, nbr_var_src = XMM.nearby_sources_table(object_data, user_table, XMM_DR_13)
-    if len(nearby_src_table) == 0:
-        print(f"No sources detected close to {object_data['ObjectName']}")
-    else:
-        print(f"We have detected {len(nearby_src_table)} sources close to {object_data['ObjectName']}")
-except Exception as error :
-    print(f"An error occured : {error}")
+if catalog_name == "Xmm_DR13":
+    
+    print('-'*50)
+    xmm_dr11_path = F.get_valid_file_path('Catalog/4XMM_DR11cat_v1.0.fits')
+    xmm_2_athena_path = F.get_valid_file_path('Catalog/xmm2athena_D6.1_V3.fits')
+    print('-'*50)
+    
+    radius = 5*u.arcmin
+    xmm = XmmCatalog(catalog_path=catalog_path, radius=radius, dictionary=object_data, user_table=user_table)
+    nearby_src_table, nearby_src_position = xmm.nearby_src_table, xmm.nearby_src_position
+    
+    x2a = Xmm2Athena(xmm_dr11_path=xmm_dr11_path, xmm_2_athena_path=xmm_2_athena_path)
+    
+    value_list = [0.3, 10.0, '0.2-12.0']
+    key_list = ['min_value', 'max_value', 'energy_band']
+    for key, value in zip(key_list, value_list):
+        telescop_data[key] = value
+        
+    catalog = {'current_catalog': xmm.catalog,
+               'xmm_dr11':x2a.xmm_dr11,
+               'xmm_2_ath':x2a.xmm_2_athena 
+               }
+    
+    simulation_data['catalog'] = catalog
+        
+    nearby_src_table, index_table = x2a.add_nh_photon_index(nearby_src_table, user_table)
+    variability_table = F.variability_rate(index_table, nearby_src_table, simulation_data)
+    xmm.neighbourhood_of_object(nearby_src_table, variability_table, simulation_data)
+    model_dictionary = xmm.model_dictionary()
+        
+elif catalog_name == "CSC_2.0":
+    
+    radius = 5*u.arcmin
+    csc = Chandra(catalog_path=catalog_path, radius=radius, dictionary=object_data)
+    # nearby_src_table, nearby_src_position = csc.nearby_src_table, csc.nearby_src_position
+    nearby_src_table, nearby_src_position = csc.cone_search_catalog, csc.cone_search_src_position
+    gamma = csc.powlaw_gamma()
+    model_dictionary = csc.model_dictionary(gamma)
+    
+    value_list = [0.6, 6.9, '0.5-7.0']
+    key_list = ['min_value', 'max_value', 'energy_band']
+    for key, value in zip(key_list, value_list):
+        telescop_data[key] = value
+        
+elif catalog_name == "Swift":
+    radius = 8*u.arcmin
+    swi = Swift(catalog_path=catalog_path, radius=radius, dictionary=object_data)
+    nearby_src_table, nearby_src_position = swi.nearby_src_table, swi.nearby_src_position
+    
+elif catalog_name == "eRosita":
+    radius = 8*u.arcmin
+    ero = ERosita(catalog_path=catalog_path, radius=radius, dictionary=object_data)
+    nearby_src_table, nearby_src_position = ero.nearby_src_table, ero.nearby_src_position
     
 # -------------------------------------------------- #
 
-nearby_src_table, index_table = X2A.add_nh_photon_index(nearby_src_table, user_table)
-
-variability_table = F.variability_rate(index_table, nearby_src_table, simulation_data)
-
-# -------------------------------------------------- #
-
-# -------------------------------------------------- #
-                # Visualized data Matplotlib without S/N
-
-XMM.neighbourhood_of_object(nearby_src_table, variability_table, simulation_data)
-
-# -------------------------------------------------- #
-
-# -------------------------------------------------- #
-
-                # Count Rates and complete NearbySources_Table 
-
-model_dictionary = F.model_dictionary(nearby_src_table)
-
-count_rates, nearby_src_table = F.count_rates(nearby_src_table, model_dictionary)
-
+count_rates, nearby_src_table = F.count_rates(nearby_src_table, model_dictionary, telescop_data)
 simulation_data['NearbySRC_Table'] = nearby_src_table
 
 # -------------------------------------------------- #
