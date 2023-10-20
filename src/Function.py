@@ -537,3 +537,58 @@ def count_rates(nearby_src_table, model_dictionary, telescop_data):
     nearby_src_table["Count Rates"] = count_rates
         
     return count_rates, nearby_src_table
+
+
+def sources_to_unique_sources(result_table, column_names):
+    """
+    Given a table of sources (result_table) and a list of column names (column_names), 
+    this function generates a new table that contains unique sources based on the 
+    specified column(s). If there are multiple rows with the same value in the 
+    specified column, the function computes the mean of the corresponding data 
+    in other columns.
+
+    Parameters:
+    result_table (Table): A table containing source data.
+    column_names (list): A list of column names, with the first element being 
+                         the column by which uniqueness is determined.
+
+    Returns:
+    Table: A new table with unique sources, where duplicates in the specified 
+           column(s) have been resolved by either taking the single value 
+           or computing the mean of other columns.
+    """
+    name_col = column_names[0]
+    name_list = result_table[name_col]
+    unique_name_list = list(set(result_table[name_col]))
+
+    data_list = []
+    for col in column_names:
+        data = []
+        for name in unique_name_list:
+            number_iter = list(name_list).count(name)
+            if number_iter == 1:
+                index = list(result_table[name_col]).index(name)
+                if 'IAUNAME' in col:
+                    data.append(name)
+                else:
+                    data.append(result_table[col][index])
+            else:
+                index_list = [index for index, unique_name in enumerate(name_list) if unique_name == name]
+                index = index_list[0]
+                
+                if 'IAUNAME' in col:
+                    data.append(name)
+                elif 'RA' or 'DEC' in col:
+                    data.append(result_table[col][index])
+                else:
+                    mean_data = []
+                    for item in index_list:
+                        mean_data.append(result_table[col][item])
+                    data.append(np.mean(mean_data))
+    
+        data_list.append(data)
+    
+    nearby_src_table = Table(names=column_names,
+                             data=data_list)
+    
+    return nearby_src_table

@@ -627,8 +627,8 @@ class Chandra:
         table = Table(names=self.catalog.colnames,
                       dtype=self.catalog.dtype)
 
-        self.nearby_src_table = Table(names=self.catalog.colnames,
-                                      dtype=self.catalog.dtype)
+        self.result_table = Table(names=self.catalog.colnames,
+                                  dtype=self.catalog.dtype)
 
         for number in range(len(self.catalog)):
             if min_ra/u.deg < self.catalog["RA"][number] < max_ra/u.deg and min_dec/u.deg < self.catalog["DEC"][number] < max_dec/u.deg:
@@ -638,7 +638,10 @@ class Chandra:
                 
         for number in range(len(table)):
             if F.ang_separation(object_position, src_position[number]) < radius:
-                self.nearby_src_table.add_row(table[number])
+                self.result_table.add_row(table[number])
+                
+        column_names = ['Chandra_IAUNAME', 'RA', 'DEC', 'flux_aper_b', 'flux_aper_s', 'flux_aper_m', 'flux_aper_h']       
+        self.nearby_src_table = F.sources_to_unique_sources(result_table=self.result_table, column_names=column_names)
                 
         self.nearby_src_position = SkyCoord(ra=self.nearby_src_table['RA'], dec=self.nearby_src_table['DEC'], unit=u.deg)
                 
@@ -934,6 +937,14 @@ class Swift():
         Returns:
         - astropy.table.Table: Table of nearby sources.
         - astropy.coordinates.SkyCoord: Sky coordinates of nearby sources.
+
+        This method searches for sources in the Chandra catalog that are located within
+        a given radius of the target object's position. It calculates the minimum and
+        maximum right ascension and declination values to define the search area. The
+        sources within this area are added to a table, and their positions are stored as
+        SkyCoord objects. The method also checks if any nearby sources are found and
+        prints a message accordingly. The nearby sources table and their positions are
+        returned.
         """
         field_of_view = radius + 5*u.arcmin
 
@@ -945,8 +956,8 @@ class Swift():
         table = Table(names=self.catalog.colnames,
                       dtype=self.catalog.dtype)
 
-        self.nearby_src_table = Table(names=self.catalog.colnames,
-                                      dtype=self.catalog.dtype)
+        self.result_table = Table(names=self.catalog.colnames,
+                                  dtype=self.catalog.dtype)
 
         for number in range(len(self.catalog)):
             if min_ra/u.deg < self.catalog["RA"][number] < max_ra/u.deg and min_dec/u.deg < self.catalog["DEC"][number] < max_dec/u.deg:
@@ -956,7 +967,10 @@ class Swift():
                 
         for number in range(len(table)):
             if F.ang_separation(object_position, src_position[number]) < radius:
-                self.nearby_src_table.add_row(table[number])
+                self.result_table.add_row(table[number])
+                
+        column_names = ['Swift_IAUNAME', 'RA', 'DEC', 'Flux', 'Flux1', 'Flux2', 'Flux3']    
+        self.nearby_src_table = F.sources_to_unique_sources(result_table=self.result_table, column_names=column_names)
                 
         self.nearby_src_position = SkyCoord(ra=self.nearby_src_table['RA'], dec=self.nearby_src_table['DEC'], unit=u.deg)
                 
@@ -990,7 +1004,7 @@ class Swift():
         figure_1, axes = plt.subplots(1, 1, figsize=(12, 8))
         figure_1.suptitle(f"Neighbourhood of {dictionary['object_name']}, radius = {radius}", fontsize=20)
         
-        axes.scatter(corrected_swi_ra, corrected_swi_dec, c='black', s=1, marker='*', label=f"Sources close to {dictionary['object_name']}, nbr_src : {len(corrected_swi_ra)}")
+        axes.scatter(corrected_swi_ra, corrected_swi_dec, c='black', s=10, marker='*', label=f"Sources close to {dictionary['object_name']}, nbr_src : {len(corrected_swi_ra)}")
         axes.scatter(object_position.ra, object_position.dec, c='red', s=100, marker='+', label=f"{dictionary['object_name']}")
         axes.set_xlabel('Right Ascension')
         axes.set_ylabel('Declination')
