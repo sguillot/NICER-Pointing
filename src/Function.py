@@ -203,6 +203,33 @@ def choose_catalog(args_catalog):
                 valid_path = get_valid_file_path(catalog_path)
                 print("-"*50, "\n")
                 return valid_path, args_catalog
+            elif args_catalog == "compare_catalog":
+                print("Enter catalog keyword (Xmm_DR13/CSC_2.0/Swift/eRosita)")
+                
+                catalog_1 = str(input("First catalog : "))
+                if catalog_1 == "Xmm_DR13":
+                    catalog_1_path = "Catalog/4XMM_slim_DR13cat_v1.0.fits.gz"
+                elif catalog_1 == "CSC_2.0":
+                    catalog_1_path = "Catalog/Chandra.fits"
+                elif catalog_1 == "Swift":
+                    catalog_1_path = "Catalog/Swift.fits"
+                elif catalog_1 == "eRosita":
+                    catalog_1_path = "Catalog/eRosita.fits"
+                valid_path_1 = get_valid_file_path(catalog_1_path)
+                
+                catalog_2 = str(input("Second catalog : "))
+                if catalog_2 == "Xmm_DR13":
+                    catalog_2_path = "Catalog/4XMM_slim_DR13cat_v1.0.fits.gz"
+                elif catalog_2 == "CSC_2.0":
+                    catalog_2_path = "Catalog/Chandra.fits"
+                elif catalog_2 == "Swift":
+                    catalog_2_path = "Catalog/Swift.fits"
+                elif catalog_2 == "eRosita":
+                    catalog_2_path = "Catalog/eRosita.fits"
+                valid_path_2 = get_valid_file_path(catalog_2_path)
+                
+                valid_path = (valid_path_1, valid_path_2, catalog_1, catalog_2)
+                return valid_path, args_catalog
             else:
                 raise argparse.ArgumentError(None, "invalid catalog keyword keyword. retry with Xmm_DR13, CSC_2.0, Swift, eRosita")
         except argparse.ArgumentError as error:

@@ -1,12 +1,14 @@
 # -------------------------------------------------- #
 
-from CatalogClass import XmmCatalog, Xmm2Athena, Chandra, Swift, ERosita
+from CatalogClass import *
 import Function as F
 import argparse
 from astropy.table import Table
 from astroquery.simbad import Simbad
 import numpy as np
 from astropy import units as u 
+import matplotlib.pyplot as plt
+import sys
        
 # -------------------------------------------------- #
 
@@ -34,7 +36,7 @@ parser = argparse.ArgumentParser(description='Search for information with object
 find_object = parser.add_mutually_exclusive_group()
 find_object.add_argument('--name', type=str, help='Replace spaces by _')
 find_object.add_argument('--coord', type=float, nargs=2, help='ra dec (two float values)')
-parser.add_argument('--catalog', type=str, help='Xmm_DR13, CSC_2.0, Swift, eRosita')
+parser.add_argument('--catalog', type=str, help='Xmm_DR13, CSC_2.0, Swift, eRosita, compare_catalog')
 
 args = parser.parse_args()
 
@@ -181,6 +183,12 @@ elif catalog_name == "CSC_2.0":
     for key, value in zip(key_list, value_list):
         telescop_data[key] = value
         
+    catalog = {'current_catalog': csc.catalog,
+               'cone_search_catalog': csc.cone_search_catalog.to_table()}
+    
+    nearby_src_table = nearby_src_table.to_table()
+    simulation_data['catalog'] = catalog
+        
 elif catalog_name == "Swift":
     radius = 8*u.arcmin
     swi = Swift(catalog_path=catalog_path, radius=radius, dictionary=object_data)
@@ -191,6 +199,12 @@ elif catalog_name == "eRosita":
     ero = ERosita(catalog_path=catalog_path, radius=radius, dictionary=object_data)
     nearby_src_table, nearby_src_position = ero.nearby_src_table, ero.nearby_src_position
     
+elif catalog_name == "compare_catalog":
+    radius = 5*u.arcmin
+    compare_class = CompareCatalog(catalogs_path=catalog_path, radius=radius, dictionary=object_data)
+    sys.exit()
+
+
 # -------------------------------------------------- #
 
 count_rates, nearby_src_table = F.count_rates(nearby_src_table, model_dictionary, telescop_data)
