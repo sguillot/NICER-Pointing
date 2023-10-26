@@ -2,13 +2,15 @@ import numpy as np
 import sys
 from astropy.table import Table
 from astropy.io import fits
-from astropy.coordinates import SkyCoord
+from astropy.coordinates import SkyCoord, Angle
 import astropy.units as u
 import matplotlib.pyplot as plt
 import Function as F
 from scipy.optimize import curve_fit
 import pyvo as vo
-
+import subprocess
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+from matplotlib.cm import ScalarMappable
 
 class XmmCatalog:
     """
@@ -973,6 +975,7 @@ class Swift():
         self.catalog = self.open_catalog(catalog_path)
         self.nearby_src_table, self.nearby_src_position = self.find_nearby_src(radius, dictionary)
         self.neighbourhood_of_object(dictionary=dictionary, radius=radius)
+        self.model_dictionary()
         
     
     def open_catalog(self, catalog_path):
@@ -1216,9 +1219,12 @@ class CompareCatalog():
     def __init__(self, catalogs_path, radius, dictionary):
         self.catalog_1, self.catalog_2, self.catalog_1_name, self.catalog_2_name = self.open_catalog(catalogs_path=catalogs_path, radius=radius, dictionary=dictionary)
         self.nearby_src_table_1, self.nearby_src_table_2, self.nearby_src_position_1, self.nearby_src_position_2 = self.find_nearby_src(radius=radius, dictionary=dictionary)
-        
         self.neighbourhood_of_object(dictionary)
-        
+        self.model_dictionary_1 = {}
+        self.model_dictionary_2 = {}
+        self.model_dictionary()
+        self.count_rate_1, self.count_rate_2 = self.count_rate()
+        # self.vector_dictionary, self.OptimalPointingIdx_1, self.OptimalPointingIdx_2 = self.opti_point_calcul()
         
     def open_catalog(self, catalogs_path, radius, dictionary):
         if "Catalog/Chandra.fits" not in catalogs_path:
@@ -1268,7 +1274,7 @@ class CompareCatalog():
             return constant, photon_index
          
          
-    def add_photon_nh_and_gamma(self, table):
+    def add_photon_nh_and_gamma_xmm(self, table):
         nbr_src = len(table)
         name_list = table['IAUNAME']
         xmm_dr11_table = Table(names=self.xmm_catalog.colnames,
@@ -1305,7 +1311,7 @@ class CompareCatalog():
                 col_photon_index.append(photon_index)
         print("Finish optimization")
         col_nh = [np.exp(value * np.log(10)) if value != 0.0 else 3e20 for value in log_nh]
-        col_names = ["Photon Index", "Nh"]
+        col_names = ["PhoIndex", "Nh"]
         col_data = [col_photon_index, col_nh]
         for name, data in zip(col_names, col_data):
             table[name] = data
@@ -1313,6 +1319,40 @@ class CompareCatalog():
         return table, index_table   
          
            
+    def add_pho_csc(self, table):
+        
+        def get_gamma (index, table):
+            
+            flux = np.array([], dtype=float)
+            for value in ['s', 'm', 'h']:
+                flux = np.append(flux, table[f"flux_aper_{value}"][index])
+            
+            energy_range = np.array([0.85, 1.6, 4.5], dtype=float)
+            
+            def power_law(x, constant, gamma):
+                return constant * (x ** (-gamma))
+            
+            try:
+                popt, pcov = curve_fit(power_law, energy_range, flux)
+                constant, photon_index = popt
+                return photon_index
+            except Exception:
+                constant, photon_index = 2e-15, 1.0
+                return photon_index
+        
+        pho_index = np.array([], dtype=float)
+        
+        for index, pho in enumerate(table["powlaw_gamma"]):
+            if not isinstance(pho, np.ma.core.MaskedConstant):
+                pho_index= np.append(pho_index, pho)
+            elif isinstance(pho, np.ma.core.MaskedConstant):
+                pho_index = np.append(pho_index, get_gamma(index, table))
+
+        table['PhoIndex_csc'] = pho_index
+        
+        return table
+    
+    
     def var_function(self, dictionary):
         if self.catalog_1_name == "CSC_2.0" or self.catalog_2_name == "Xmm_DR13" and self.catalog_1_name =="Xmm_DR13" or self.catalog_2_name =="CSC_2.0":
             x2a_path = "Catalog/xmm2athena_D6.1_V3.fits"
@@ -1325,10 +1365,13 @@ class CompareCatalog():
 
         
         if self.catalog_1_name == "CSC_2.0" and self.catalog_2_name == "Xmm_DR13":
+            
+            # -------------------- Cone search -------------------- #
+            
             inter, intra = self.catalog_1['var_inter_prob_b'], self.catalog_1['var_intra_prob_b']
             var_column_cs = np.array([])
             
-            # -------------------- Cone search -------------------- #
+            self.catalog_1 = self.add_pho_csc(self.catalog_1)
             
             for inter_value, intra_value in zip(inter, intra):
                 if isinstance(inter_value, np.ma.core.MaskedConstant) and isinstance(intra_value, np.ma.core.MaskedConstant):
@@ -1343,9 +1386,22 @@ class CompareCatalog():
                     var_column_cs = np.append(var_column_cs, mean_value)  
             self.catalog_1['Variability'] = var_column_cs
             
+            mean_value, new_flux_aper_b = [], []
+            for flux in self.catalog_1["flux_aper_b"]:
+                if not isinstance(flux, np.ma.core.MaskedConstant) and flux < 2e-15:
+                    mean_value.append(flux)
+            mean_flux = np.mean(mean_value)
+            
+            for flux in self.catalog_1['flux_aper_b']:
+                if not isinstance(flux, np.ma.core.MaskedConstant):
+                    new_flux_aper_b.append(flux)
+                else:
+                    new_flux_aper_b.append(mean_flux)
+            self.catalog_1['flux_aper_b'] = new_flux_aper_b
+            
             # -------------------- Xmm_catalog -------------------- #
 
-            self.nearby_src_table_2, index_table = self.add_photon_nh_and_gamma(self.nearby_src_table_2)
+            self.nearby_src_table_2, index_table = self.add_photon_nh_and_gamma_xmm(self.nearby_src_table_2)
             
             nbr_src = len(self.nearby_src_table_2)
             message = "No data founded"
@@ -1383,10 +1439,13 @@ class CompareCatalog():
             return self.catalog_1, self.nearby_src_table_2
                     
         elif self.catalog_1_name == "Xmm_DR13" and self.catalog_2_name == "CSC_2.0":
+            
+            # -------------------- Cone search -------------------- #
+            
             inter, intra = self.catalog_2['var_inter_prob_b'], self.catalog_2['var_intra_prob_b']
             var_column_cs = np.array([])
             
-            # -------------------- Cone search -------------------- #
+            self.catalog_2 = self.add_pho_csc(self.catalog_2)
             
             for inter_value, intra_value in zip(inter, intra):
                 if isinstance(inter_value, np.ma.core.MaskedConstant) and isinstance(intra_value, np.ma.core.MaskedConstant):
@@ -1401,9 +1460,22 @@ class CompareCatalog():
                     var_column_cs = np.append(var_column_cs, mean_value)
             self.catalog_2['Variability'] = var_column_cs
             
+            mean_value, new_flux_aper_b = [], []
+            for flux in self.catalog_2["flux_aper_b"]:
+                if not isinstance(flux, np.ma.core.MaskedConstant) and flux < 2e-15:
+                    mean_value.append(flux)
+            mean_flux = np.mean(mean_value)    
+        
+            for flux in self.catalog_2['flux_aper_b']:
+                if not isinstance(flux, np.ma.core.MaskedConstant):
+                    new_flux_aper_b.append(flux)
+                else:
+                    new_flux_aper_b.append(mean_flux)
+            self.catalog_2['flux_aper_b'] = new_flux_aper_b
+            
             # -------------------- Xmm_catalog -------------------- #
                     
-            self.nearby_src_table_1, index_table = self.add_photon_nh_and_gamma(self.nearby_src_table_1)
+            self.nearby_src_table_1, index_table = self.add_photon_nh_and_gamma_xmm(self.nearby_src_table_1)
             
             nbr_src = len(self.nearby_src_table_1)
             message = "No data founded"
@@ -1624,4 +1696,185 @@ class CompareCatalog():
             plt.show()
         
         
+    def model_dictionary(self):
+                    
+        if self.catalog_1_name == "Xmm_DR13" and self.catalog_2_name == "CSC_2.0":
+            flux_value_1, flux_value_2 = "SC_EP_8_FLUX", "flux_aper_b"
+            m_1, m_2 = "PhoIndex", "PhoIndex_csc"
+            nh_value_1, nh_value_2 = "Nh", "nh_gal"
+        elif self.catalog_1_name == "CSC_2.0" and self.catalog_2_name == "Xmm_DR13":
+            flux_value_1, flux_value_2 = "flux_aper_b", "SC_EP_8_FLUX"
+            m_1, m_2 = "PhoIndex_csc", "PhoIndex"
+            nh_value_1, nh_value_2 = "nh_gal", "Nh"
         
+        nbr_src_1, nbr_src_2 = len(self.nearby_src_table_1), len(self.nearby_src_table_2)
+        self.model_1, self.model_2 = {}, {}
+        
+        model_1, model_2 = np.array(['power' for item in range(nbr_src_1)], dtype=str), np.array(['power' for item in range(nbr_src_2)], dtype=str)
+        
+        model_value_1 = np.array([self.nearby_src_table_1[m_1][n_1] for n_1 in range(nbr_src_1)], dtype=float)
+        model_value_2 = np.array([self.nearby_src_table_2[m_2][n_2]for n_2 in range(nbr_src_2)], dtype=float)
+        
+        flux_1 = np.array([self.nearby_src_table_1[flux_value_1][n_1] for n_1 in range(nbr_src_1)], dtype=float)
+        flux_2 = np.array([self.nearby_src_table_2[flux_value_2][n_2] for n_2 in range(nbr_src_2)], dtype=float)
+        
+        nh_1 = np.array([self.nearby_src_table_1[nh_value_1][n_1] for n_1 in range(nbr_src_1)], dtype=float)
+        nh_2 = np.array([self.nearby_src_table_2[nh_value_2][n_2] for n_2 in range(nbr_src_2)], dtype=float)
+
+        for item in range(nbr_src_1):
+
+            dictionary = {
+                "model": model_1[item],
+                "model_value": model_value_1[item],
+                "flux": flux_1[item],
+                "column_dentsity": nh_1[item]
+            }
+
+            self.model_dictionary_1[f"src_{item}"] = dictionary
+            
+        for item in range(nbr_src_2):
+
+            dictionary = {
+                "model": model_2[item],
+                "model_value": model_value_2[item],
+                "flux": flux_2[item],
+                "column_dentsity": nh_2[item]
+            }
+
+            self.model_dictionary_2[f"src_{item}"] = dictionary
+
+
+    def count_rate(self):
+        nbr_src_1 = len(self.nearby_src_table_1)
+        nbr_src_2 = len(self.nearby_src_table_2)
+        
+        ct_rates_1, ct_rates_2 = np.array([], dtype=float), np.array([], dtype=float)
+
+        for item in range(nbr_src_1):
+            model_1 = self.model_dictionary_1[f"src_{item}"]["model"]
+            model_value_1 = self.model_dictionary_1[f"src_{item}"]["model_value"]
+            flux_1 =  self.model_dictionary_1[f"src_{item}"]["flux"]
+            nh_1 = self.model_dictionary_1[f"src_{item}"]["column_dentsity"]
+                    
+            pimms_cmds = f"instrument nicer 0.3-10.0\nfrom flux ERGS 0.2-12.0\nmodel galactic nh {nh_1}\nmodel {model_1} {model_value_1} 0.0\ngo {flux_1}\nexit\n"
+            
+            with open('pimms_script.xco', 'w') as file:
+                file.write(pimms_cmds)
+                file.close()
+                
+            result = subprocess.run(['pimms', '@pimms_script.xco'], stdout=subprocess.PIPE).stdout.decode(sys.stdout.encoding)
+            ct_rate_value = float(result.split("predicts")[1].split('cps')[0])
+            ct_rates_1 = np.append(ct_rates_1, ct_rate_value)
+            
+        for item in range(nbr_src_2):
+            model_2 = self.model_dictionary_2[f"src_{item}"]["model"]
+            model_value_2 = self.model_dictionary_2[f"src_{item}"]["model_value"]
+            flux_2 =  self.model_dictionary_2[f"src_{item}"]["flux"]
+            nh_2 = self.model_dictionary_2[f"src_{item}"]["column_dentsity"]
+                    
+            pimms_cmds = f"instrument nicer 0.3-10.0\nfrom flux ERGS 0.2-12.0\nmodel galactic nh {nh_2}\nmodel {model_2} {model_value_2} 0.0\ngo {flux_2}\nexit\n"
+            
+            with open('pimms_script.xco', 'w') as file:
+                file.write(pimms_cmds)
+                file.close()
+                
+            result = subprocess.run(['pimms', '@pimms_script.xco'], stdout=subprocess.PIPE).stdout.decode(sys.stdout.encoding)
+            ct_rate_value = float(result.split("predicts")[1].split('cps')[0])
+            ct_rates_2 = np.append(ct_rates_2, ct_rate_value)
+        
+        return ct_rates_1, ct_rates_2
+    
+    
+    def opti_point_calcul(self, simulation_data):
+        object_data = simulation_data["object_data"]
+        telescop_data = simulation_data["telescop_data"]
+            
+        Delta_RA, Delta_DEC = Angle(np.arange(-3.0, 3.1, 0.1), unit=u.deg)/60, Angle(np.arange(-3.0, 3.1, 0.1), unit=u.deg)/60
+        
+        Sample_RA, Sample_DEC, PSRrates =  np.zeros((3, len(Delta_RA) * len(Delta_DEC)))
+        
+        SNR_1, SRCrates_1 = np.zeros((2, len(Delta_RA) * len(Delta_DEC)))
+        SNR_2, SRCrates_2 = np.zeros((2, len(Delta_RA) * len(Delta_DEC)))
+        
+        PSRcountrates = object_data['CountRate']
+        
+        count = 0
+        for i in Delta_RA:
+            for j in Delta_DEC:
+                NICERpointing = SkyCoord(ra=object_data["object_position"].ra + i, dec=object_data["object_position"].dec + j)
+                PSRseparation = F.ang_separation(object_data["object_position"], NICERpointing)
+                
+                SRCseparation_1 = F.ang_separation(self.nearby_src_position_1, NICERpointing)
+                SRCseparation_2 = F.ang_separation(self.nearby_src_position_2, NICERpointing)
+                
+                PSRcountrateScaled = F.scaled_ct_rate(PSRseparation.arcmin, PSRcountrates, telescop_data["EffArea"], telescop_data["OffAxisAngle"])
+                
+                SRCcountrateScaled_1 = F.scaled_ct_rate(SRCseparation_1.arcmin, self.count_rate_1, telescop_data["EffArea"], telescop_data["OffAxisAngle"])
+                SRCcountrateScaled_2 = F.scaled_ct_rate(SRCseparation_2.arcmin, self.count_rate_2, telescop_data["EffArea"], telescop_data["OffAxisAngle"])
+                
+                Sample_RA[count] = NICERpointing.ra.deg
+                Sample_DEC[count] = NICERpointing.dec.deg
+
+                PSRrates[count] = PSRcountrateScaled
+                
+                SRCrates_1[count] = np.sum(SRCcountrateScaled_1)
+                SRCrates_2[count] = np.sum(SRCcountrateScaled_2)
+
+                SNR_1[count] = F.signal_to_noise(PSRcountrateScaled, SRCcountrateScaled_1, simulation_data["INSTbkgd"], simulation_data["EXPtime"])
+                SNR_2[count] = F.signal_to_noise(PSRcountrateScaled, SRCcountrateScaled_2, simulation_data["INSTbkgd"], simulation_data["EXPtime"])
+                count +=  1
+                
+        self.OptimalPointingIdx_1 = np.where(SNR_1==max(SNR_1))[0][0]
+        SRCoptimalSEPAR_1 = F.ang_separation(self.nearby_src_position_1, SkyCoord(ra=Sample_RA[self.OptimalPointingIdx_1]*u.degree, dec=Sample_DEC[self.OptimalPointingIdx_1]*u.degree)).arcmin
+        SRCoptimalRATES_1 = F.scaled_ct_rate(SRCoptimalSEPAR_1, self.count_rate_1, telescop_data["EffArea"], telescop_data["OffAxisAngle"])
+        
+        self.OptimalPointingIdx_2 = np.where(SNR_2==max(SNR_2))[0][0]
+        SRCoptimalSEPAR_2 = F.ang_separation(self.nearby_src_position_2, SkyCoord(ra=Sample_RA[self.OptimalPointingIdx_1]*u.degree, dec=Sample_DEC[self.OptimalPointingIdx_2]*u.degree)).arcmin
+        SRCoptimalRATES_2 = F.scaled_ct_rate(SRCoptimalSEPAR_2, self.count_rate_2, telescop_data["EffArea"], telescop_data["OffAxisAngle"])     
+
+        self.vector_dictionary = {'Sample_RA': Sample_RA,
+                                  'Sample_DEC': Sample_DEC,
+                                  'PSRrates': PSRrates,
+                                  'vecteur_1':{'SRCrates_1': SRCrates_1,
+                                               'SRCoptimalRATES_1':SRCoptimalRATES_1,
+                                               'SNR_1': SNR_1
+                                               },
+                                  'vecteur_2':{'SRCrates_1': SRCrates_1,
+                                               'SRCoptimalRATES_2': SRCoptimalRATES_2,
+                                               'SNR_2': SNR_2
+                                               }
+                                  }
+
+        if self.catalog_1_name == "Xmm_DR13" and self.catalog_2_name == "CSC_2.0":
+            title_0, title_1 = f"Xmm_DR13\nopti_point : {self.vector_dictionary['Sample_RA'][self.OptimalPointingIdx_1]}, {self.vector_dictionary['Sample_DEC'][self.OptimalPointingIdx_1]}", f"CSC_2.0\nopti_point: {self.vector_dictionary['Sample_RA'][self.OptimalPointingIdx_2]}, {self.vector_dictionary['Sample_DEC'][self.OptimalPointingIdx_2]}"
+        elif self.catalog_1_name == "CSC_2.0" and self.catalog_2_name == "Xmm_DR13":
+            title_0, title_1 = f"CSC_2.0\nopti_point : {self.vector_dictionary['Sample_RA'][self.OptimalPointingIdx_1]}, {self.vector_dictionary['Sample_DEC'][self.OptimalPointingIdx_1]}", f"Xmm_DR13\nopti_point: {self.vector_dictionary['Sample_RA'][self.OptimalPointingIdx_2]}, {self.vector_dictionary['Sample_DEC'][self.OptimalPointingIdx_2]}"
+        
+        figure_map, axes = plt.subplots(1, 2, figsize=(15, 8), sharey=True)
+        figure_map.suptitle(f"S/N map for {object_data['object_name']}")
+        figure_map.text(0.5, 0.04, 'Right Ascension [deg]', ha='center', va='center', fontsize=16)
+        figure_map.text(0.04, 0.5, 'Declination [deg]', ha='center', va='center', rotation='vertical', fontsize=16)
+
+        ax0 = axes[0]
+        ax0.plot(self.nearby_src_position_1.ra, self.nearby_src_position_1.dec, marker='.', color='black', linestyle='')
+        ax0.plot(object_data["object_position"].ra, object_data["object_position"].dec, marker='*', color="green", linestyle='')
+        ax0.plot(self.vector_dictionary['Sample_RA'][self.OptimalPointingIdx_1], self.vector_dictionary['Sample_DEC'][self.OptimalPointingIdx_1], marker="+", color='red', linestyle='')
+        ax0.scatter(self.vector_dictionary['Sample_RA'], self.vector_dictionary['Sample_DEC'], c=self.vector_dictionary["vecteur_1"]["SNR_1"], s=10, edgecolor='face')
+        ax0.set_title(title_0)
+
+        ax1 = axes[1]
+        ax1.plot(self.nearby_src_position_2.ra, self.nearby_src_position_2.dec, marker='.', color='black', linestyle='')
+        ax1.plot(object_data["object_position"].ra, object_data["object_position"].dec, marker='*', color="green", linestyle='')
+        ax1.plot(self.vector_dictionary['Sample_RA'][self.OptimalPointingIdx_2], self.vector_dictionary['Sample_DEC'][self.OptimalPointingIdx_2], marker="+", color='red', linestyle='')
+        ax1.scatter(self.vector_dictionary['Sample_RA'], self.vector_dictionary['Sample_DEC'], c=self.vector_dictionary["vecteur_2"]["SNR_2"], s=10, edgecolor='face')
+        ax1.set_title(title_1)
+ 
+        norm = plt.Normalize(vmin=min(self.vector_dictionary["vecteur_1"]["SNR_1"] + self.vector_dictionary["vecteur_2"]["SNR_2"]), vmax=max(self.vector_dictionary["vecteur_1"]["SNR_1"] + self.vector_dictionary["vecteur_2"]["SNR_2"]))
+        sm = ScalarMappable(cmap='viridis', norm=norm)
+        divider = make_axes_locatable(ax1)
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        color_bar = figure_map.colorbar(sm, cax=cax)
+        color_bar.set_label("S/N")
+        
+        plt.show()
+

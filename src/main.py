@@ -202,6 +202,7 @@ elif catalog_name == "eRosita":
 elif catalog_name == "compare_catalog":
     radius = 5*u.arcmin
     compare_class = CompareCatalog(catalogs_path=catalog_path, radius=radius, dictionary=object_data)
+    compare_class.opti_point_calcul(simulation_data=simulation_data)
     sys.exit()
 
 
