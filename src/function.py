@@ -1,119 +1,21 @@
-                # Python's Module
+# --------------- Packages --------------- #
 
-import numpy as np
-from astropy.coordinates import SkyCoord, Angle
-from astroquery.simbad import Simbad
-from astropy import units as u
-import matplotlib.pyplot as plt
-import argparse
 from astropy.table import Table
-import subprocess
-import sys
-import os
+from astropy.io import fits
+from astropy.coordinates import SkyCoord, Angle
+from astropy import units as u
 from scipy.optimize import curve_fit
 from termcolor import colored
+from astroquery.simbad import Simbad
 
-                # Function
+import sys
+import os
+import argparse
+import numpy as np
+import subprocess
+import matplotlib.pyplot as plt
 
-def variability_rate(index_table, nearby_src_table, simulation_data):
-    """
-        Calculate the variability rate of nearby sources close to a specified object.
-
-        This function processes data from 'index_table', 'nearby_src_table', and 'simulation_data' to determine the variability rate
-        of sources detected close to a given object. It extracts information on the sources' variability and presence in the Xmm2Athena catalog.
-
-        Parameters:
-            index_table (Table): A table containing index information related to the nearby sources.
-            nearby_src_table (Table): A table with data on nearby sources, including IAUNAME, coordinates, and SC_FVAR.
-            simulation_data (dict): A dictionary with simulation data, including catalog and object data.
-
-        Returns:
-            Table: A table containing the following columns:
-                - INDEX: Index of the nearby source in 'nearby_src_table'.
-                - IAUNAME: IAUNAME of the nearby source.
-                - SC_RA: Right Ascension of the nearby source.
-                - SC_DEC: Declination of the nearby source.
-                - SC_FVAR: Variability information of the nearby source.
-                - IN_X2A: Boolean indicating if the source is present in Xmm2Athena.
-
-        The function prints two messages:
-        1. A message indicating the number of variable sources detected close to the object using the DR13 Catalog.
-        2. A message indicating the count of sources that are and are not present in Xmm2Athena among the variable sources.
-    """
-
-    nbr_src = len(nearby_src_table)
-    message = "No data founded"
-    xmm_dr_11 = simulation_data["catalog"]["xmm_dr11"]
-    NAME = simulation_data["object_data"]["object_name"]
-
-
-    index_array, iauname_array, sc_ra_array = np.array([], dtype=int), np.array([], dtype=str), np.array([], dtype=float)
-    sc_dec_array, sc_fvar_array, in_x2a_array = np.array([], dtype=float), np.array([], dtype=float), np.array([], dtype=bool)
-
-    for number in range(nbr_src):
-        if not np.isnan(xmm_dr_11["SC_FVAR"][index_table["Index in XmmDR11"][number]]):
-
-            index_array = np.append(index_array, index_table["Index in nearby_src_table"][number])
-            iauname_array = np.append(iauname_array, nearby_src_table["IAUNAME"][number])
-            sc_ra_array = np.append(sc_ra_array, nearby_src_table["SC_RA"][number])
-            sc_dec_array = np.append(sc_dec_array, nearby_src_table["SC_DEC"][number])
-            sc_fvar_array = np.append(sc_fvar_array, nearby_src_table["SC_FVAR"][number])
-
-            if index_table["Index in Xmm2Athena"][number] != message:
-                in_x2a_array = np.append(in_x2a_array, True)
-            else:
-                in_x2a_array = np.append(in_x2a_array, False)
-
-    column_names = ["INDEX", "IAUNAME", "SC_RA", "SC_DEC", "SC_FVAR", "IN_X2A"]
-    data_array = [index_array, iauname_array, sc_ra_array, sc_dec_array, sc_fvar_array, in_x2a_array]
-    variability_table = Table()
-
-    for data, name in zip(data_array, column_names):
-        variability_table[name] = data
-
-    message_xmm = f"Among {len(nearby_src_table)} sources detected close to {NAME}, {len(index_array)} of them are variable. Using DR13 Catalog."
-    print(message_xmm)
-    message_xmm2ath = f"Among {len(index_array)} variable sources, {list(variability_table['IN_X2A']).count(True)} are in Xmm2Athena and {list(variability_table['IN_X2A']).count(False)} are not in Xmm2Athena. "    
-    print(message_xmm2ath)
-
-    return variability_table
-
-                    
-def name_to_short_name(NAME):
-    """
-    Converts a given NAME into a shorter version (ShortName) by removing 'J' characters,
-    splitting it based on '+' or '-' symbols, and removing spaces from the first part.
-
-    Args:
-    NAME (str): The input name to be converted.
-
-    Returns:
-    str: The resulting short name after processing.
-
-    Note:
-    This function assumes that the input NAME contains at least one of the '+' or '-' symbols.
-    """
-    Word_wihtout_J = NAME.replace("J", "")
-    if '+' in NAME:
-        Word_wihtout_symbol = Word_wihtout_J.split('+')
-    elif '-' in NAME:
-        Word_wihtout_symbol = Word_wihtout_J.split('-')
-    ShortName = Word_wihtout_symbol[0].replace(" ", "")
-    return ShortName
-
-
-def get_coord_psr(name):
-    """
-    Get the PSR coordinates from the SIMBAD database.
-
-    Parameters:
-    name (str): The name of the pulsar object.
-
-    Returns:
-    SkyCoord: A SkyCoord object representing the coordinates (RA and DEC) of the pulsar.
-    """
-    return SkyCoord(ra=Simbad.query_object(name)['RA'][0], dec=Simbad.query_object(name)['DEC'][0], unit=(u.hourangle, u.deg))
-
+# ---------------------------------------- #
 
 def is_valid_file_path(file_path):
     """
@@ -176,56 +78,74 @@ def choose_catalog(args_catalog):
     while True:
         try:
             if args_catalog == 'Xmm_DR13':
+                print("\n")
                 print(f"{colored(args_catalog, 'yellow')} catalog is loading")
-                catalog_path = "Catalog/4XMM_slim_DR13cat_v1.0.fits.gz"
+                catalog_path = "data/4XMM_slim_DR13cat_v1.0.fits.gz"
                 print("-"*50)
                 valid_path = get_valid_file_path(catalog_path)
                 print("-"*50, "\n")
                 return valid_path, args_catalog
             elif args_catalog == 'CSC_2.0':
+                print("\n")
                 print(f"{colored(args_catalog, 'yellow')} catalog is loading")
                 print("-"*50)
-                valid_path = get_valid_file_path("Catalog\Chandra.fits")
+                valid_path = get_valid_file_path("data\Chandra.fits")
                 print((f"The file at {colored(valid_path, 'yellow')} is {colored('valid', 'green')}."))
                 print("-"*50, "\n")
                 return valid_path, args_catalog
             elif args_catalog == 'Swift':
+                print("\n")
                 print(f"{colored(args_catalog, 'yellow')} catalog is loading")
-                catalog_path = "Catalog/Swift.fits"
+                catalog_path = "data/Swift.fits"
                 print("-"*50)
                 valid_path = get_valid_file_path(catalog_path)
                 print("-"*50, "\n")
                 return valid_path, args_catalog
             elif args_catalog == 'eRosita':
+                print("\n")
                 print(f"{colored(args_catalog, 'yellow')} catalog is loading")
-                catalog_path = "Catalog/eRosita.fits"
+                catalog_path = "data/eRosita.fits"
                 print("-"*50)
                 valid_path = get_valid_file_path(catalog_path)
                 print("-"*50, "\n")
                 return valid_path, args_catalog
             elif args_catalog == "compare_catalog":
+                print("\n")
                 print("Enter catalog keyword (Xmm_DR13/CSC_2.0/Swift/eRosita)")
-                
                 catalog_1 = str(input("First catalog : "))
-                if catalog_1 == "Xmm_DR13":
-                    catalog_1_path = "Catalog/4XMM_slim_DR13cat_v1.0.fits.gz"
-                elif catalog_1 == "CSC_2.0":
-                    catalog_1_path = "Catalog/Chandra.fits"
-                elif catalog_1 == "Swift":
-                    catalog_1_path = "Catalog/Swift.fits"
-                elif catalog_1 == "eRosita":
-                    catalog_1_path = "Catalog/eRosita.fits"
+                while True:
+                    if catalog_1 == "Xmm_DR13":
+                        catalog_1_path = "data/4XMM_slim_DR13cat_v1.0.fits.gz"
+                        break
+                    elif catalog_1 == "CSC_2.0":
+                        catalog_1_path = "data/Chandra.fits"
+                        break
+                    elif catalog_1 == "Swift":
+                        catalog_1_path = "data/Swift.fits"
+                        break
+                    elif catalog_1 == "eRosita":
+                        catalog_1_path = "data/eRosita.fits"
+                        break
+                    else:
+                        catalog_1 = str(input("Keyword unnaccepted, retry : "))
                 valid_path_1 = get_valid_file_path(catalog_1_path)
                 
                 catalog_2 = str(input("Second catalog : "))
-                if catalog_2 == "Xmm_DR13":
-                    catalog_2_path = "Catalog/4XMM_slim_DR13cat_v1.0.fits.gz"
-                elif catalog_2 == "CSC_2.0":
-                    catalog_2_path = "Catalog/Chandra.fits"
-                elif catalog_2 == "Swift":
-                    catalog_2_path = "Catalog/Swift.fits"
-                elif catalog_2 == "eRosita":
-                    catalog_2_path = "Catalog/eRosita.fits"
+                while True:
+                    if catalog_2 == "Xmm_DR13":
+                        catalog_2_path = "data/4XMM_slim_DR13cat_v1.0.fits.gz"
+                        break
+                    elif catalog_2 == "CSC_2.0":
+                        catalog_2_path = "data/Chandra.fits"
+                        break
+                    elif catalog_2 == "Swift":
+                        catalog_2_path = "data/Swift.fits"
+                        break
+                    elif catalog_2 == "eRosita":
+                        catalog_2_path = "data/eRosita.fits"
+                        break
+                    else:
+                        catalog_2 = str(input("Keyword unnaccepted, retry : "))
                 valid_path_2 = get_valid_file_path(catalog_2_path)
                 
                 valid_path = (valid_path_1, valid_path_2, catalog_1, catalog_2)
@@ -313,18 +233,17 @@ def define_sources_list():
     return UserList
 
 
-def ang_separation(reference, obj):
+def get_coord_psr(name):
     """
-    Calculate the angular separation between two celestial objects.
+    Get the PSR coordinates from the SIMBAD database.
 
     Parameters:
-    reference (SkyCoord): The reference object's coordinates.
-    obj (SkyCoord): The coordinates of the object to which the separation is calculated.
+    name (str): The name of the pulsar object.
 
     Returns:
-    Quantity: The angular separation between the two objects.
+    SkyCoord: A SkyCoord object representing the coordinates (RA and DEC) of the pulsar.
     """
-    return reference.separation(obj)
+    return SkyCoord(ra=Simbad.query_object(name)['RA'][0], dec=Simbad.query_object(name)['DEC'][0], unit=(u.hourangle, u.deg))
 
 
 def scaled_ct_rate(D, OptCtRate, effareaX, effareaY):
@@ -341,6 +260,20 @@ def scaled_ct_rate(D, OptCtRate, effareaX, effareaY):
     float: The scaled count rate.
     """
     return OptCtRate * np.interp(D,effareaX,effareaY)
+
+
+def ang_separation(reference, obj):
+    """
+    Calculate the angular separation between two celestial objects.
+
+    Parameters:
+    reference (SkyCoord): The reference object's coordinates.
+    obj (SkyCoord): The coordinates of the object to which the separation is calculated.
+
+    Returns:
+    Quantity: The angular separation between the two objects.
+    """
+    return reference.separation(obj)
 
 
 def signal_to_noise(SrcCtsRate, BkgSrcRates, InstBkgd, ExpTime):
@@ -537,7 +470,7 @@ def count_rates(nearby_src_table, model_dictionary, telescop_data):
         - PIMMS modeling commands are generated for each source based on the model, model value, X-ray flux, and column density.
         - The 'Count Rates' column is added to the 'nearby_src_table' with the calculated count rates.
     """
-    nbr_src = len(model_dictionary)
+    number_source = len(model_dictionary)
     count_rates = np.array([], dtype=float)
     
     telescop_name = telescop_data['telescop_name']
@@ -545,7 +478,7 @@ def count_rates(nearby_src_table, model_dictionary, telescop_data):
     max_value = telescop_data['max_value']
     energy_band = telescop_data['energy_band']
     
-    for item in range(nbr_src):
+    for item in range(number_source):
         model = model_dictionary[f"src_{item}"]["model"]
         model_value = model_dictionary[f"src_{item}"]["model_value"]
         xmm_flux =  model_dictionary[f"src_{item}"]["flux"]
