@@ -309,8 +309,8 @@ def nominal_pointing_info(simulation_data, NearbySRCposition):
     telescop_data = simulation_data['telescop_data']
     
     SRCnominalDIST = ang_separation(NearbySRCposition, SkyCoord(ra=object_data['object_position'].ra, dec=object_data['object_position'].dec)).arcmin
-    SRCscaleRates = scaled_ct_rate(SRCnominalDIST, simulation_data["NearbySRC_Table"]["Count Rates"], telescop_data["EffArea"], telescop_data["OffAxisAngle"])
-    PSRcountrates = object_data['CountRate']
+    SRCscaleRates = scaled_ct_rate(SRCnominalDIST, simulation_data["nearby_soucres_table"]["count_rate"], telescop_data["EffArea"], telescop_data["OffAxisAngle"])
+    PSRcountrates = object_data['count_rate']
 
     print('PSR S/N at Nominal Pointing ' + str(signal_to_noise(PSRcountrates, SRCscaleRates, simulation_data["INSTbkgd"], simulation_data["EXPtime"])))
     print("PSR count rate at Nominal pointing = " + str(PSRcountrates) + "cts/sec")
@@ -355,7 +355,7 @@ def calculate_opti_point(simulation_data, nearby_src_position):
     DeltaDEC = Angle(np.arange(-3.0, 3.1, 0.1), unit=u.deg)/60
 
     SampleRA, SampleDEC, SNR, PSRrates, SRCrates = np.zeros((5, len(DeltaRA) * len(DeltaDEC)))
-    PSRcountrates = object_data['CountRate']
+    PSRcountrates = object_data['count_rate']
 
     count = 0
     for i in DeltaRA:
@@ -365,7 +365,7 @@ def calculate_opti_point(simulation_data, nearby_src_position):
                 SRCseparation = ang_separation(nearby_src_position, NICERpointing)
 
                 PSRcountrateScaled = scaled_ct_rate(PSRseparation.arcmin, PSRcountrates, telescop_data["EffArea"], telescop_data["OffAxisAngle"])
-                SRCcountrateScaled = scaled_ct_rate(SRCseparation.arcmin, simulation_data["NearbySRC_Table"]["Count Rates"], telescop_data["EffArea"], telescop_data["OffAxisAngle"])
+                SRCcountrateScaled = scaled_ct_rate(SRCseparation.arcmin, simulation_data["nearby_soucres_table"]["count_rate"], telescop_data["EffArea"], telescop_data["OffAxisAngle"])
 
                 SampleRA[count] = NICERpointing.ra.deg
                 SampleDEC[count] = NICERpointing.dec.deg
@@ -378,7 +378,7 @@ def calculate_opti_point(simulation_data, nearby_src_position):
 
     OptimalPointingIdx = np.where(SNR==max(SNR))[0][0]
     SRCoptimalSEPAR = ang_separation(nearby_src_position, SkyCoord(ra=SampleRA[OptimalPointingIdx]*u.degree, dec=SampleDEC[OptimalPointingIdx]*u.degree)).arcmin
-    SRCoptimalRATES = scaled_ct_rate(SRCoptimalSEPAR, simulation_data["NearbySRC_Table"]["Count Rates"], telescop_data["EffArea"], telescop_data["OffAxisAngle"])
+    SRCoptimalRATES = scaled_ct_rate(SRCoptimalSEPAR, simulation_data["nearby_soucres_table"]["count_rate"], telescop_data["EffArea"], telescop_data["OffAxisAngle"])
 
     Vector_Dictionary = {'SampleRA': SampleRA,
                          'SampleDEC': SampleDEC,
@@ -494,7 +494,7 @@ def count_rates(nearby_src_table, model_dictionary, telescop_data):
         count_rate = float(result.split("predicts")[1].split('cps')[0])
         count_rates = np.append(count_rates, count_rate)
         
-    nearby_src_table["Count Rates"] = count_rates
+    nearby_src_table["count_rate"] = count_rates
         
     return count_rates, nearby_src_table
 

@@ -139,24 +139,26 @@ radius = args.radius*u.arcmin
 if args.catalog == "Xmm_DR13":
     # Find the optimal pointing point with the Xmm_DR13 catalog
     xmm = XmmCatalog(catalog_path=catalog_path, radius=radius, dictionary=object_data, user_table=user_table)
-    nearby_soucres_table, nearby_sources_position = xmm.nearby_sources_table,  xmm.nearby_sources_position
+    nearby_sources_table, nearby_sources_position = xmm.nearby_sources_table,  xmm.nearby_sources_position
     model_dictionary = xmm.model_dictionary
 elif args.catalog == "CSC_2.0":
     # Find the optimal pointing point with the Chandra catalog
                     # cs = cone search (Harvard features)
     csc = Chandra(catalog_path=catalog_path, radius=radius, dictionary=object_data, user_table=user_table)
-    nearby_soucres_table, nearby_sources_position = csc.nearby_soucres_table, csc.nearby_sources_position
-    cs_nearby_soucres_table, cs_nearby_sources_position = csc.cs_nearby_soucres_table, csc.cs_nearby_sources_position
+    # nearby_sources_table, nearby_sources_position = csc.nearby_sources_table, csc.nearby_sources_position
+    cs_nearby_soucres_table, cs_nearby_sources_position = csc.cs_nearby_sources_table, csc.cs_nearby_sources_position
+    nearby_sources_table, nearby_sources_position = cs_nearby_soucres_table, cs_nearby_sources_position
+    # nearby_soucres_table = csc.cone_search_catalog.to_table()
     model_dictionary = csc.model_dictionary
 elif args.catalog == "Swift":
     # Find the optimal pointing point with the Swift catalog
     swi = Swift(catalog_path=catalog_path, radius=radius, dictionary=object_data, user_table=user_table)
-    nearby_soucres_table, nearby_sources_position = swi.nearby_soucres_table, swi.nearby_sources_position
+    nearby_sources_table, nearby_sources_position = swi.nearby_sources_table, swi.nearby_sources_position
     model_dictionary = swi.dictionary_model
 elif args.catalog == "eRosita":
     # Find the optimal pointing with the eRosita catalog
     eRo = eRosita(catalog_path=catalog_path, radius=radius, dictionary=object_data, user_table=user_table)
-    nearby_soucres_table, nearby_sources_position = eRo.nearby_soucres_table, eRo.nearby_sources_position
+    nearby_sources_table, nearby_sources_position = eRo.nearby_sources_table, eRo.nearby_sources_position
     model_dictionary = eRo.dictionary_model
 elif args.catalog == "compare_catalog":
     # Find the optimal pointing point with two catalogs to compare data
@@ -166,8 +168,8 @@ elif args.catalog == "compare_catalog":
     
 # -------------------------------------------------- #
 
-count_rates, nearby_soucres_table = f.count_rates(nearby_soucres_table, model_dictionary, telescop_data)
-simulation_data['NearbySRC_Table'] = nearby_soucres_table
+count_rates, nearby_soucres_table = f.count_rates(nearby_sources_table, model_dictionary, telescop_data)
+simulation_data['nearby_soucres_table'] = nearby_soucres_table
 
 # -------------------------------------------------- #
 

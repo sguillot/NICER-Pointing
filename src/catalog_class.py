@@ -580,6 +580,7 @@ class Chandra:
         Generate and return a dictionary containing models and parameters for each source.
     """
 
+
     def __init__(self, catalog_path, radius, dictionary, user_table) -> None:
         """
         Initialize the Chandra class by loading catalogs, finding nearby sources, 
@@ -616,11 +617,11 @@ class Chandra:
             Dictionary containing models and parameters for each source.
         """
         self.chandra_catalog = self.open_catalog(catalog_path=catalog_path)
-        self.nearby_soucres_table, self.nearby_sources_position = self.find_nearby_sources(radius=radius, dictionary=dictionary, user_table=user_table)
+        self.nearby_sources_table, self.nearby_sources_position = self.find_nearby_sources(radius=radius, dictionary=dictionary, user_table=user_table)
 
         self.cone_search_catalog = self.load_cs_catalog(radius=radius, dictionary=dictionary)
         self.cs_nearby_sources_position = SkyCoord(ra=list(self.cone_search_catalog['ra']), dec=list(self.cone_search_catalog['dec']), unit=u.deg)
-        self.cs_nearby_soucres_table = self.cone_catalog()
+        self.cs_nearby_sources_table = self.cone_catalog()
         
         self.neighbourhood_of_object(radius=radius, dictionary=dictionary)
         self.photon_index = self.power_law_pho_index()
@@ -786,8 +787,8 @@ class Chandra:
         cs_csc_ra = np.array(list(self.cone_search_catalog['ra']), dtype=float)
         cs_csc_dec = np.array(list(self.cone_search_catalog['dec']), dtype=float)
         
-        csc_ra = np.array(self.nearby_soucres_table['RA'], dtype=float)
-        csc_dec = np.array(self.nearby_soucres_table['DEC'], dtype=float)
+        csc_ra = np.array(self.nearby_sources_table['RA'], dtype=float)
+        csc_dec = np.array(self.nearby_sources_table['DEC'], dtype=float)
         csc_ra = list(set(csc_ra))
         csc_dec = list(set(csc_dec))
         
@@ -1007,7 +1008,8 @@ class Swift:
     - nearby_sources_position (SkyCoord): Sky coordinates of the nearby sources.
     - model_dictionary (dict): A dictionary model containing information about the sources.
     """
-    
+
+
     def __init__(self, catalog_path, radius, dictionary, user_table) -> None:
         """
         Initializes the Swift class with a catalog path, search radius, dictionary of target object information, 
@@ -1020,7 +1022,7 @@ class Swift:
         - user_table (Table): A user-defined table of sources.
         """
         self.swi_catalog = self.open_catalog(catalog_path)
-        self.nearby_soucres_table, self.nearby_sources_position = self.find_nearby_sources(radius=radius, dictionary=dictionary)
+        self.nearby_sources_table, self.nearby_sources_position = self.find_nearby_sources(radius=radius, dictionary=dictionary)
         
         self.neighbourhood_of_object(radius=radius, dictionary=dictionary)
         self.model_dictionary = self.dictionary_model()
@@ -1103,8 +1105,8 @@ class Swift:
 
         object_position = dictionary['object_position']
     
-        swi_ra = self.nearby_soucres_table['RA']
-        swi_dec = self.nearby_soucres_table['DEC']
+        swi_ra = self.nearby_sources_table['RA']
+        swi_dec = self.nearby_sources_table['DEC']
         
         corrected_swi_ra = list(set(swi_ra))
         corrected_swi_dec = list(set(swi_dec))
@@ -1136,7 +1138,8 @@ class eRosita:
     - nearby_sources_position (SkyCoord): Sky coordinates of the nearby sources.
     - model_dictionary (dict): A dictionary model containing information about the sources.
     """
-    
+
+
     def __init__(self, catalog_path, radius, dictionary, user_table) -> None:
         """
         Initializes the eRosita class with a catalog path, search radius, dictionary of target object information,
@@ -1149,7 +1152,7 @@ class eRosita:
         - user_table (Table): A user-defined table of sources.
         """
         self.eRo_catalog = self.open_catalog(catalog_path)
-        self.nearby_soucres_table, self.nearby_sources_position = self.find_nearby_sources(radius=radius, dictionary=dictionary)
+        self.nearby_sources_table, self.nearby_sources_position = self.find_nearby_sources(radius=radius, dictionary=dictionary)
         
         self.neighbourhood_of_object(radius=radius, dictionary=dictionary)
         self.model_dictionary = self.dictionary_model()
@@ -1228,8 +1231,8 @@ class eRosita:
         """
         object_position = dictionary['object_position']
     
-        ero_ra = self.nearby_soucres_table['RA']
-        ero_dec = self.nearby_soucres_table['DEC']
+        ero_ra = self.nearby_sources_table['RA']
+        ero_dec = self.nearby_sources_table['DEC']
         
         figure_1, axes = plt.subplots(1, 1, figsize=(12, 8))
         figure_1.suptitle(f"Neighbourhood of {dictionary['object_name']}, radius = {radius}", fontsize=20)
@@ -1308,7 +1311,9 @@ class CompareCatalog:
         Calculates the count rate for each source in both catalogs.
     opti_point_calcul(self, simulation_data) -> None:
         Calculates the optimal pointing based on simulation data (method not fully provided).
-    """   
+    """
+
+ 
     def __init__(self, catalog_path, radius, dictionary, user_table) -> None:
         self.catalog_1, self.catalog_2, self.catalog_1_name, self.catalog_2_name = self.open_catalog(catalogs_path=catalog_path, radius=radius, dictionary=dictionary)
         self.nearby_src_table_1, self.nearby_src_table_2, self.nearby_src_position_1, self.nearby_src_position_2 = self.find_nearby_sources(radius=radius, dictionary=dictionary)
@@ -1316,7 +1321,6 @@ class CompareCatalog:
         
         self.model_dictionary_1, self.model_dictionary_2 = self.model_dictionary()
         self.count_rate_1, self.count_rate_2 = self.count_rate()
-        self.vector_dictionary, self.OptimalPointingIdx_1, self.OptimalPointingIdx_2 = self.opti_point_calcul()
 
     
     def open_catalog(self, catalogs_path, radius, dictionary) -> Tuple[Table, Table, str, str]:
@@ -1710,11 +1714,14 @@ class CompareCatalog:
             norm = ImageNormalize(image, interval=PercentileInterval(98.0), stretch=LinearStretch())
             
             if self.catalog_1_name == "Xmm_DR13" and self.catalog_2_name == "CSC_2.0":
+                title_1, title_2 = "Xmm_DR13", "CSC_2.0"
                 axes_0 = figure.add_subplot(221, projection=_wcs_)
                 axes_1 = figure.add_subplot(223, projection=_wcs_, sharex=axes_0, sharey=axes_0)
                 axes_2 = figure.add_subplot(222)
                 axes_3 = figure.add_subplot(224)
                 axes_2.tick_params(axis='x', which='both', labelbottom=False)
+                axes_0.set_title(f"{title_1}")
+                axes_2.set_title(f"{title_2}")
                 
                 xmm_ra = list(self.nearby_src_table_1['SC_RA'])
                 xmm_dec = list(self.nearby_src_table_1['SC_DEC'])
@@ -1726,12 +1733,15 @@ class CompareCatalog:
                 cs_dec_invar = [dec for index, dec in enumerate(list(self.nearby_src_table_2['dec'])) if self.nearby_src_table_2['Variability'][index] == 0.0]
                 
             elif self.catalog_1_name == "CSC_2.0" and self.catalog_2_name == "Xmm_DR13":
+                title_1, title_2 = "CSC_2.0", "Xmm_DR13"
                 axes_0 = figure.add_subplot(222, projection=_wcs_)
                 axes_1 = figure.add_subplot(224, projection=_wcs_, sharex=axes_0, sharey=axes_0)
                 axes_2 = figure.add_subplot(221)
                 axes_3 = figure.add_subplot(223)
                 axes_2.tick_params(axis='x', which='both', labelbottom=False)
-                
+                axes_0.set_title(f"{title_2}")
+                axes_2.set_title(f"{title_1}")
+
                 xmm_ra = list(self.nearby_src_table_2['SC_RA'])
                 xmm_dec = list(self.nearby_src_table_2['SC_DEC'])
                 csc_ra = list(self.nearby_src_table_1["ra"])
@@ -1766,6 +1776,7 @@ class CompareCatalog:
             figure.text(0.04, 0.5, 'Declination [deg]', ha='center', va='center', rotation='vertical', fontsize=16)
             
             if self.catalog_1_name == "Xmm_DR13" and self.catalog_2_name == "CSC_2.0":
+                title_1, title_2 = "Xmm_DR13", "CSC_2.0"
                 axes_0 = figure.add_subplot(221)
                 axes_1 = figure.add_subplot(223)
                 axes_2 = figure.add_subplot(222)
@@ -1773,6 +1784,8 @@ class CompareCatalog:
                 axes_0.tick_params(axis='x', which='both', labelbottom=False)
                 axes_2.tick_params(axis='both', which='both', labelbottom=False, labelleft=False)
                 axes_3.tick_params(axis='y', which='both', labelleft=False)
+                axes_0.set_title(f"{title_1}")
+                axes_2.set_title(f"{title_2}")
                 
                 xmm_ra = list(self.nearby_src_table_1['SC_RA'])
                 xmm_dec = list(self.nearby_src_table_1['SC_DEC'])
@@ -1784,6 +1797,7 @@ class CompareCatalog:
                 cs_dec_invar = [dec for index, dec in enumerate(list(self.nearby_src_table_2['dec'])) if self.nearby_src_table_2['Variability'][index] == 0.0]
                 
             elif self.catalog_1_name == "CSC_2.0" and self.catalog_2_name == "Xmm_DR13":
+                title_1, title_2 = "CSC_2.0", "Xmm_DR13"
                 axes_0 = figure.add_subplot(222)
                 axes_1 = figure.add_subplot(224)
                 axes_2 = figure.add_subplot(221)
@@ -1791,6 +1805,8 @@ class CompareCatalog:
                 axes_0.tick_params(axis='both', which='both', labelbottom=False, labelleft=False)
                 axes_2.tick_params(axis='x', which='both', labelbottom=False)
                 axes_1.tick_params(axis='y', which='both', labelleft=False)
+                axes_0.set_title(f"{title_2}")
+                axes_2.set_title(f"{title_1}")
                 
                 xmm_ra = list(self.nearby_src_table_2['SC_RA'])
                 xmm_dec = list(self.nearby_src_table_2['SC_DEC'])
@@ -1810,14 +1826,12 @@ class CompareCatalog:
             axes_1.scatter(obj_ra, obj_dec, s=100, marker="*", facecolors='none', edgecolors='red', label=f"{name}")
         
         axes_0.legend(loc="upper right", fontsize=8)
-        axes_0.set_title(f"{self.catalog_1_name}")
         
         axes_1.legend(loc='upper right', ncol=2, fontsize=8)
         
         axes_2.scatter(csc_ra, csc_dec, facecolors='none', edgecolors='black', s=30, label=f"Nearby sources : {len(csc_ra)}")
         axes_2.scatter(dictionary["object_position"].ra, dictionary["object_position"].dec, s=100, marker="*", facecolors='none', edgecolors='red', label=f"{dictionary['object_name']}")
         axes_2.legend(loc="upper right", fontsize=8)
-        axes_2.set_title(f"{self.catalog_2_name}")
         
         axes_3.scatter(cs_ra_var, cs_dec_var, s=30, facecolors='none', edgecolors='darkorange', label=f"Var src : {len(cs_ra_var)} sources")
         axes_3.scatter(cs_ra_invar, cs_dec_invar, s=30, facecolors='none', edgecolors='blue', label=f"Invar src : {len(cs_ra_invar)} sources")
@@ -1932,7 +1946,7 @@ class CompareCatalog:
         SNR_1, SRCrates_1 = np.zeros((2, len(Delta_RA) * len(Delta_DEC)))
         SNR_2, SRCrates_2 = np.zeros((2, len(Delta_RA) * len(Delta_DEC)))
         
-        PSRcountrates = object_data['CountRate']
+        PSRcountrates = object_data['count_rate']
         
         count = 0
         for i in Delta_RA:
