@@ -9,6 +9,8 @@ from astroquery.simbad import Simbad
 import argparse
 import function as f
 import numpy as np
+import os
+import subprocess
 import sys
 
 # ---------------------------------------- #
@@ -107,7 +109,7 @@ else:
 # --------------- Load Nicer parameters --------------- #
 
 print('-'*50)
-nicer_parameters_path = f.get_valid_file_path("data/NICER_PSF.dat")
+nicer_parameters_path = f.get_valid_file_path("catalog_data/NICER_PSF.dat")
 EffArea, OffAxisAngle = np.loadtxt(nicer_parameters_path, unpack=True, usecols=(0, 1))
 print('-'*50)
 
@@ -120,11 +122,35 @@ telescop_data = {"telescop_name": "nicer",
 
 # ----------------------------------------------------- #
 
-# --------------- Useful dictionary --------------- #
+# --------------- object_data --------------- #
 
 object_data = {"object_name": object_name,
                "object_position": object_position,
                "count_rate": count_rate}
+
+# ------------------------------------------- #
+
+# --------------- modeling file --------------- #
+
+# get the active workflow path
+active_workflow = os.getcwd()
+active_workflow = active_workflow.replace("\\","/")
+
+# path of stilts software
+stilts_software_path = os.path.join(active_workflow, 'softwares/stilts.jar').replace("\\", "/")
+
+# creation of modeling file 
+name = object_data['object_name'].replace(" ", "_")
+modeling_file_path = os.path.join(active_workflow, 'modeling_result', name).replace("\\", "/")
+
+if not os.path.exists(modeling_file_path):
+    os.mkdir(modeling_file_path)
+
+os_dictionary = {"modeling_file_path": modeling_file_path}
+
+# --------------------------------------------- #
+
+# --------------- simulation_data --------------- #
 
 simulation_data = {"object_data": object_data,
                    "telescop_data": telescop_data,
@@ -132,24 +158,62 @@ simulation_data = {"object_data": object_data,
                    "EXPtime": 1e6
                    }
 
-# ------------------------------------------------- #
+# ----------------------------------------------- #
 
 radius = args.radius*u.arcmin
 
 if args.catalog == "Xmm_DR13":
     # Find the optimal pointing point with the Xmm_DR13 catalog
-    xmm = XmmCatalog(catalog_path=catalog_path, radius=radius, dictionary=object_data, user_table=user_table)
+    
+    # creation of 4XMM_DR13 directory
+    xmm_directory = os.path.join(modeling_file_path, '4XMM_DR13'.replace("\\", "/"))
+    xmm_img = os.path.join(xmm_directory, 'img'.replace("\\", "/"))
+    xmm_closest_catalog = os.path.join(xmm_directory, "closest_catalog")
+    if not os.path.exists(xmm_directory):
+        os.mkdir(xmm_directory)
+        os.mkdir(xmm_img)
+        os.mkdir(xmm_closest_catalog)
+    
+    os_dictionary = {"modeling_file_path": modeling_file_path,
+                     "cloesest_dataset_path": xmm_closest_catalog,
+                     "img": xmm_img}
+    
+    simulation_data["os_dictionary"] = os_dictionary
+    
+    xmm = XmmCatalog(catalog_path=catalog_path, radius=radius, dictionary=object_data, user_table=user_table, os_dictionary=os_dictionary)
     nearby_sources_table, nearby_sources_position = xmm.nearby_sources_table,  xmm.nearby_sources_position
     model_dictionary = xmm.model_dictionary
+    
+    column_dictionary = {"flux_obs" : [f"SC_EP_{item+1}_FLUX" for item in range(5)],
+                         "err_flux_obs": [f"SC_EP_{item+1}_FLUX_ERR" for item in range(5)],
+                         "energy_band": [0.35, 0.75, 1.5, 3.25, 8.25],
+                         "sigma" : np.array([1e-20, 5e-21, 1e-22, 1e-23, 1e-24], dtype=float),
+                         "data_to_vignetting": ["SC_RA", "SC_DEC", "IAUNAME"]}
+    
 elif args.catalog == "CSC_2.0":
     # Find the optimal pointing point with the Chandra catalog
+    
+    # creation of Chandra directory
+    chandra_directory = os.path.join(modeling_file_path, 'Chandra'.replace("\\", "/"))
+    chandra_img = os.path.join(chandra_directory, 'img'.replace("\\", "/"))
+    chandra_closest_catalog = os.path.join(chandra_directory, "closest_catalog")
+    if not os.path.exists(chandra_directory):
+        os.mkdir(chandra_directory)
+        os.mkdir(chandra_img)
+        os.mkdir(chandra_closest_catalog)
+    
+    os_dictionary = {"modeling_file_path": modeling_file_path,
+                     "cloesest_dataset_path": chandra_closest_catalog,
+                     "img": chandra_img}
+    
                     # cs = cone search (Harvard features)
-    csc = Chandra(catalog_path=catalog_path, radius=radius, dictionary=object_data, user_table=user_table)
+    csc = Chandra(catalog_path=catalog_path, radius=radius, dictionary=object_data, user_table=user_table, os_dictionary=os_dictionary)
     # nearby_sources_table, nearby_sources_position = csc.nearby_sources_table, csc.nearby_sources_position
     cs_nearby_soucres_table, cs_nearby_sources_position = csc.cs_nearby_sources_table, csc.cs_nearby_sources_position
     nearby_sources_table, nearby_sources_position = cs_nearby_soucres_table, cs_nearby_sources_position
     # nearby_soucres_table = csc.cone_search_catalog.to_table()
     model_dictionary = csc.model_dictionary
+    
 elif args.catalog == "Swift":
     # Find the optimal pointing point with the Swift catalog
     swi = Swift(catalog_path=catalog_path, radius=radius, dictionary=object_data, user_table=user_table)
@@ -166,35 +230,52 @@ elif args.catalog == "compare_catalog":
     compare_class.opti_point_calcul(simulation_data=simulation_data)
     sys.exit()
     
+# --------------- count_rates --------------- #
+
+excel_data_path = os.path.join(active_workflow, 'excel_data').replace("\\", "/")
+count_rates, nearby_sources_table = f.count_rates(nearby_sources_table, model_dictionary, telescop_data)
+f.py_to_xlsx(excel_data_path=excel_data_path, count_rates=count_rates, object_data=object_data, args=args.catalog)
+# count_rates, nearby_sources_table = f.xlsx_to_py(excel_data_path=excel_data_path, nearby_sources_table=nearby_sources_table, object_data=object_data)
+
+simulation_data['nearby_sources_table'] = nearby_sources_table
+
 # -------------------------------------------------- #
 
-count_rates, nearby_soucres_table = f.count_rates(nearby_sources_table, model_dictionary, telescop_data)
-simulation_data['nearby_soucres_table'] = nearby_soucres_table
-
-# -------------------------------------------------- #
-
-# -------------------------------------------------- #
-
-                # Nominal pointing infos
+# --------------- Nominal pointing infos --------------- #
             
 f.nominal_pointing_info(simulation_data, nearby_sources_position)
 
-# -------------------------------------------------- #
+# ------------------------------------------------------ #
 
-# -------------------------------------------------- #
+# --------------- Value of optimal pointing point and infos --------------- #
 
-                # Value of optimal pointing point and infos
             
 OptimalPointingIdx, SRCoptimalSEPAR, SRCoptimalRATES, vector_dictionary = f.calculate_opti_point(simulation_data, nearby_sources_position)
 
 f.optimal_point_infos(vector_dictionary, OptimalPointingIdx, SRCoptimalRATES)
 
-# -------------------------------------------------- #
+# ------------------------------------------------------------------------- #
 
-# -------------------------------------------------- #
-
-                # Visualized data Matplotlib with S/N
+# --------------- Visualized data Matplotlib with S/N --------------- #
 
 f.data_map(simulation_data, vector_dictionary, OptimalPointingIdx, nearby_sources_position)
 
-# -------------------------------------------------- #
+# ------------------------------------------------------------------- #
+
+# --------------- Calculate vignetting factor --------------- #
+
+vignetting_factor, nearby_sources_table = f.vignetting_factor(OptimalPointingIdx=OptimalPointingIdx, vector_dictionary=vector_dictionary, simulation_data=simulation_data, data=column_dictionary["data_to_vignetting"])
+
+# ----------------------------------------------------------- #
+
+# --------------- Modeling nearby sources --------------- #
+
+f.modeling(vignetting_factor=vignetting_factor, simulation_data=simulation_data, column_dictionary=column_dictionary)
+
+# ------------------------------------------------------- #
+
+# --------------- write fits file --------------- #
+
+f.write_fits_file(nearby_sources_table=nearby_sources_table, simulation_data=simulation_data)
+
+# ----------------------------------------------- #

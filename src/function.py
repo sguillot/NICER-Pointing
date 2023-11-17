@@ -1,12 +1,12 @@
 # --------------- Packages --------------- #
 
 from astropy.table import Table
-from astropy.io import fits
 from astropy.coordinates import SkyCoord, Angle
 from astropy import units as u
-from scipy.optimize import curve_fit
 from termcolor import colored
 from astroquery.simbad import Simbad
+from typing import Dict, Tuple, Union, List
+from scipy.optimize import curve_fit
 
 import sys
 import os
@@ -14,10 +14,11 @@ import argparse
 import numpy as np
 import subprocess
 import matplotlib.pyplot as plt
+import openpyxl
 
 # ---------------------------------------- #
 
-def is_valid_file_path(file_path):
+def is_valid_file_path(file_path) -> bool:
     """
     Check if a file exists at the given file path.
 
@@ -39,12 +40,12 @@ def is_valid_file_path(file_path):
         print(f"An error occured: {error}")
 
 
-def get_valid_file_path(PATH):
+def get_valid_file_path(path) -> str:
     """
     Prompt the user for a valid file path until a valid one is provided.
 
     Parameters:
-        PATH (str): The initial file path.
+        path (str): The initial file path.
 
     Returns:
         str: A valid file path that exists.
@@ -53,16 +54,16 @@ def get_valid_file_path(PATH):
         None
     """
     while True :
-        if is_valid_file_path(PATH):
-            print(f"The file at {colored(PATH, 'yellow')} is {colored('valid', 'green')}.")
+        if is_valid_file_path(path):
+            print(f"The file at {colored(path, 'yellow')} is {colored('valid', 'green')}.")
             break
         else:
-            print(f"The file at {colored(PATH, 'yellow')} doesn't exist or the path is {colored('invalid', 'red')}.")
-            PATH = str(input("Enter the file path : \n"))
-    return PATH
+            print(f"The file at {colored(path, 'yellow')} doesn't exist or the path is {colored('invalid', 'red')}.")
+            path = str(input("Enter the file path : \n"))
+    return path
 
 
-def choose_catalog(args_catalog):
+def choose_catalog(args_catalog) -> Tuple[str, str]:
     """
     Choose a catalog based on the provided keyword and return a valid file path for it.
 
@@ -80,7 +81,7 @@ def choose_catalog(args_catalog):
             if args_catalog == 'Xmm_DR13':
                 print("\n")
                 print(f"{colored(args_catalog, 'yellow')} catalog is loading")
-                catalog_path = "data/4XMM_slim_DR13cat_v1.0.fits.gz"
+                catalog_path = "catalog_data/4XMM_slim_DR13cat_v1.0.fits.gz"
                 print("-"*50)
                 valid_path = get_valid_file_path(catalog_path)
                 print("-"*50, "\n")
@@ -89,14 +90,14 @@ def choose_catalog(args_catalog):
                 print("\n")
                 print(f"{colored(args_catalog, 'yellow')} catalog is loading")
                 print("-"*50)
-                valid_path = get_valid_file_path("data\Chandra.fits")
+                valid_path = get_valid_file_path("catalog_data\Chandra.fits")
                 print((f"The file at {colored(valid_path, 'yellow')} is {colored('valid', 'green')}."))
                 print("-"*50, "\n")
                 return valid_path, args_catalog
             elif args_catalog == 'Swift':
                 print("\n")
                 print(f"{colored(args_catalog, 'yellow')} catalog is loading")
-                catalog_path = "data/Swift.fits"
+                catalog_path = "catalog_data/Swift.fits"
                 print("-"*50)
                 valid_path = get_valid_file_path(catalog_path)
                 print("-"*50, "\n")
@@ -104,7 +105,7 @@ def choose_catalog(args_catalog):
             elif args_catalog == 'eRosita':
                 print("\n")
                 print(f"{colored(args_catalog, 'yellow')} catalog is loading")
-                catalog_path = "data/eRosita.fits"
+                catalog_path = "catalog_data/eRosita.fits"
                 print("-"*50)
                 valid_path = get_valid_file_path(catalog_path)
                 print("-"*50, "\n")
@@ -115,16 +116,16 @@ def choose_catalog(args_catalog):
                 catalog_1 = str(input("First catalog : "))
                 while True:
                     if catalog_1 == "Xmm_DR13":
-                        catalog_1_path = "data/4XMM_slim_DR13cat_v1.0.fits.gz"
+                        catalog_1_path = "catalog_data/4XMM_slim_DR13cat_v1.0.fits.gz"
                         break
                     elif catalog_1 == "CSC_2.0":
-                        catalog_1_path = "data/Chandra.fits"
+                        catalog_1_path = "catalog_data/Chandra.fits"
                         break
                     elif catalog_1 == "Swift":
-                        catalog_1_path = "data/Swift.fits"
+                        catalog_1_path = "catalog_data/Swift.fits"
                         break
                     elif catalog_1 == "eRosita":
-                        catalog_1_path = "data/eRosita.fits"
+                        catalog_1_path = "catalog_data/eRosita.fits"
                         break
                     else:
                         catalog_1 = str(input("Keyword unnaccepted, retry : "))
@@ -133,16 +134,16 @@ def choose_catalog(args_catalog):
                 catalog_2 = str(input("Second catalog : "))
                 while True:
                     if catalog_2 == "Xmm_DR13":
-                        catalog_2_path = "data/4XMM_slim_DR13cat_v1.0.fits.gz"
+                        catalog_2_path = "catalog_data/4XMM_slim_DR13cat_v1.0.fits.gz"
                         break
                     elif catalog_2 == "CSC_2.0":
-                        catalog_2_path = "data/Chandra.fits"
+                        catalog_2_path = "catalog_data/Chandra.fits"
                         break
                     elif catalog_2 == "Swift":
-                        catalog_2_path = "data/Swift.fits"
+                        catalog_2_path = "catalog_data/Swift.fits"
                         break
                     elif catalog_2 == "eRosita":
-                        catalog_2_path = "data/eRosita.fits"
+                        catalog_2_path = "catalog_data/eRosita.fits"
                         break
                     else:
                         catalog_2 = str(input("Keyword unnaccepted, retry : "))
@@ -157,7 +158,7 @@ def choose_catalog(args_catalog):
             args_catalog = str(input("Enter a new key word : \n"))
 
 
-def define_sources_list():
+def define_sources_list() -> Table:
     """
     Prompts the user to define a list of sources for calculations. This function allows users to add sources either manually or by importing data from a file.
 
@@ -233,7 +234,7 @@ def define_sources_list():
     return UserList
 
 
-def get_coord_psr(name):
+def get_coord_psr(name) -> SkyCoord:
     """
     Get the PSR coordinates from the SIMBAD database.
 
@@ -246,7 +247,7 @@ def get_coord_psr(name):
     return SkyCoord(ra=Simbad.query_object(name)['RA'][0], dec=Simbad.query_object(name)['DEC'][0], unit=(u.hourangle, u.deg))
 
 
-def scaled_ct_rate(D, OptCtRate, effareaX, effareaY):
+def scaled_ct_rate(D, OptCtRate, effareaX, effareaY) -> float:
     """
     Scale a given count rate based on an angular distance and effective area.
 
@@ -262,7 +263,7 @@ def scaled_ct_rate(D, OptCtRate, effareaX, effareaY):
     return OptCtRate * np.interp(D,effareaX,effareaY)
 
 
-def ang_separation(reference, obj):
+def ang_separation(reference, obj) -> Angle:
     """
     Calculate the angular separation between two celestial objects.
 
@@ -276,7 +277,7 @@ def ang_separation(reference, obj):
     return reference.separation(obj)
 
 
-def signal_to_noise(SrcCtsRate, BkgSrcRates, InstBkgd, ExpTime):
+def signal_to_noise(SrcCtsRate, BkgSrcRates, InstBkgd, ExpTime) -> float:
     """
     Calculate the signal-to-noise ratio (S/N) given various parameters.
 
@@ -293,7 +294,7 @@ def signal_to_noise(SrcCtsRate, BkgSrcRates, InstBkgd, ExpTime):
     return SNR
 
 
-def nominal_pointing_info(simulation_data, NearbySRCposition):
+def nominal_pointing_info(simulation_data, NearbySRCposition) -> None:
     """
     Calculate and print various information related to nominal pointing.
 
@@ -309,7 +310,7 @@ def nominal_pointing_info(simulation_data, NearbySRCposition):
     telescop_data = simulation_data['telescop_data']
     
     SRCnominalDIST = ang_separation(NearbySRCposition, SkyCoord(ra=object_data['object_position'].ra, dec=object_data['object_position'].dec)).arcmin
-    SRCscaleRates = scaled_ct_rate(SRCnominalDIST, simulation_data["nearby_soucres_table"]["count_rate"], telescop_data["EffArea"], telescop_data["OffAxisAngle"])
+    SRCscaleRates = scaled_ct_rate(SRCnominalDIST, simulation_data["nearby_sources_table"]["count_rate"], telescop_data["EffArea"], telescop_data["OffAxisAngle"])
     PSRcountrates = object_data['count_rate']
 
     print('PSR S/N at Nominal Pointing ' + str(signal_to_noise(PSRcountrates, SRCscaleRates, simulation_data["INSTbkgd"], simulation_data["EXPtime"])))
@@ -322,7 +323,7 @@ def nominal_pointing_info(simulation_data, NearbySRCposition):
     print("--------------------------------------------------")
 
 
-def calculate_opti_point(simulation_data, nearby_src_position):
+def calculate_opti_point(simulation_data, nearby_src_position) -> Tuple[int, float, float, dict]:
     """
     Calculate the optimal pointing for the NICER telescope to maximize the signal-to-noise ratio (S/N).
 
@@ -351,8 +352,9 @@ def calculate_opti_point(simulation_data, nearby_src_position):
     object_data = simulation_data['object_data']
     telescop_data = simulation_data['telescop_data']
 
-    DeltaRA = Angle(np.arange(-3.0, 3.1, 0.1), unit=u.deg)/60
-    DeltaDEC = Angle(np.arange(-3.0, 3.1, 0.1), unit=u.deg)/60
+    min_value, max_value, step = -5.0, 5.0, 0.01
+    DeltaRA = Angle(np.arange(min_value, max_value, step), unit=u.deg)/60
+    DeltaDEC = Angle(np.arange(min_value, max_value, step), unit=u.deg)/60
 
     SampleRA, SampleDEC, SNR, PSRrates, SRCrates = np.zeros((5, len(DeltaRA) * len(DeltaDEC)))
     PSRcountrates = object_data['count_rate']
@@ -365,7 +367,7 @@ def calculate_opti_point(simulation_data, nearby_src_position):
                 SRCseparation = ang_separation(nearby_src_position, NICERpointing)
 
                 PSRcountrateScaled = scaled_ct_rate(PSRseparation.arcmin, PSRcountrates, telescop_data["EffArea"], telescop_data["OffAxisAngle"])
-                SRCcountrateScaled = scaled_ct_rate(SRCseparation.arcmin, simulation_data["nearby_soucres_table"]["count_rate"], telescop_data["EffArea"], telescop_data["OffAxisAngle"])
+                SRCcountrateScaled = scaled_ct_rate(SRCseparation.arcmin, simulation_data["nearby_sources_table"]["count_rate"], telescop_data["EffArea"], telescop_data["OffAxisAngle"])
 
                 SampleRA[count] = NICERpointing.ra.deg
                 SampleDEC[count] = NICERpointing.dec.deg
@@ -378,7 +380,7 @@ def calculate_opti_point(simulation_data, nearby_src_position):
 
     OptimalPointingIdx = np.where(SNR==max(SNR))[0][0]
     SRCoptimalSEPAR = ang_separation(nearby_src_position, SkyCoord(ra=SampleRA[OptimalPointingIdx]*u.degree, dec=SampleDEC[OptimalPointingIdx]*u.degree)).arcmin
-    SRCoptimalRATES = scaled_ct_rate(SRCoptimalSEPAR, simulation_data["nearby_soucres_table"]["count_rate"], telescop_data["EffArea"], telescop_data["OffAxisAngle"])
+    SRCoptimalRATES = scaled_ct_rate(SRCoptimalSEPAR, simulation_data["nearby_sources_table"]["count_rate"], telescop_data["EffArea"], telescop_data["OffAxisAngle"])
 
     Vector_Dictionary = {'SampleRA': SampleRA,
                          'SampleDEC': SampleDEC,
@@ -390,7 +392,7 @@ def calculate_opti_point(simulation_data, nearby_src_position):
     return OptimalPointingIdx, SRCoptimalSEPAR, SRCoptimalRATES, Vector_Dictionary
 
 
-def optimal_point_infos(vector_dictionary, OptimalPointingIdx, SRCoptimalRATES):
+def optimal_point_infos(vector_dictionary, OptimalPointingIdx, SRCoptimalRATES) -> None:
     """
     Print information for the optimal NICER pointing that maximizes the signal-to-noise ratio (S/N).
 
@@ -416,7 +418,7 @@ def optimal_point_infos(vector_dictionary, OptimalPointingIdx, SRCoptimalRATES):
     print ("----------------------------------------------------------------------")
 
 
-def data_map(simulation_data, vector_dictionary, OptimalPointingIdx, NearbySRCposition):
+def data_map(simulation_data, vector_dictionary, OptimalPointingIdx, NearbySRCposition) -> None:
     """
     Plot the map of the Signal-to-Noise (S/N) ratio as a function of NICER pointing.
 
@@ -429,28 +431,37 @@ def data_map(simulation_data, vector_dictionary, OptimalPointingIdx, NearbySRCpo
     Returns:
     None
     """
-
+    os_dictionary = simulation_data["os_dictionary"]
     object_data = simulation_data['object_data']
 
     # Plot the map of S/N ratio as function of NICER pointing
-    fig = plt.figure(figsize=(10,6.5))
-    ax = fig.add_subplot(111)
-    plt.gca().invert_xaxis()
-    plt.plot(NearbySRCposition.ra, NearbySRCposition.dec, marker='.', color='black',linestyle='')    
-    plt.plot(object_data["object_position"].ra, object_data["object_position"].dec, marker='*', color='green',linestyle='')
-    plt.plot(vector_dictionary['SampleRA'][OptimalPointingIdx], vector_dictionary['SampleDEC'][OptimalPointingIdx], marker='+', color='red', linestyle='')
-
-    # label of the nearby sources
-    plt.scatter(vector_dictionary['SampleRA'], vector_dictionary['SampleDEC'], c=vector_dictionary["SNR"], s=10, edgecolor='face')
-    plt.xlabel('RA', fontsize='large')
-    plt.ylabel('DEC', fontsize='large')
-    plt.title("S/N map for " + object_data["object_name"])
-    cbar = plt.colorbar()
-    cbar.set_label('S/N')
+    ra_opti = vector_dictionary['SampleRA'][OptimalPointingIdx]
+    dec_opti = vector_dictionary['SampleDEC'][OptimalPointingIdx]
+    
+    nearby_ra = [NearbySRCposition[item].ra.value for item in range(len(NearbySRCposition))]
+    nearby_dec = [NearbySRCposition[item].dec.value for item in range(len(NearbySRCposition))]
+    
+    figure, axes = plt.subplots(1, 1, figsize=(15, 8))
+    figure.suptitle(f"S/N map for {object_data['object_name']}\nOptimal pointing point : {ra_opti} deg, {dec_opti} deg")
+    
+    axes.invert_xaxis()
+    sc = axes.scatter(vector_dictionary['SampleRA'], vector_dictionary['SampleDEC'], c=vector_dictionary["SNR"], s=10, edgecolor='face')
+    axes.scatter(nearby_ra, nearby_dec, marker='.', color='black', label=f"Nearby sources : {len(nearby_ra)}")
+    axes.scatter(object_data["object_position"].ra, object_data["object_position"].dec, marker='*', color='green', label=f"{object_data['object_name']}")
+    axes.scatter(ra_opti, dec_opti, s=50, marker='+', color='red', label="Optimal Pointing Point")
+    
+    axes.set_xlabel('Right Ascension [deg]', fontsize='large')
+    axes.set_ylabel('Declination [deg]', fontsize='large')
+    axes.legend(loc="upper right", ncol=2)
+    cbar = figure.colorbar(sc, ax=axes)
+    cbar.set_label('S/N')   
+    
+    name = object_data["object_name"]
+    plt.savefig(os.path.join(os_dictionary['img'], f"SNR_{name}.png".replace(" ", "_")))
     plt.show()
 
 
-def count_rates(nearby_src_table, model_dictionary, telescop_data):
+def count_rates(nearby_src_table, model_dictionary, telescop_data) -> Tuple[List[float], Table]:
     """
         Calculate X-ray count rates for nearby sources using PIMMS modeling.
 
@@ -499,7 +510,7 @@ def count_rates(nearby_src_table, model_dictionary, telescop_data):
     return count_rates, nearby_src_table
 
 
-def sources_to_unique_sources(result_table, column_names):
+def sources_to_unique_sources(result_table, column_names) -> Table:
     """
     Given a table of sources (result_table) and a list of column names (column_names), 
     this function generates a new table that contains unique sources based on the 
@@ -552,3 +563,158 @@ def sources_to_unique_sources(result_table, column_names):
                              data=data_list)
     
     return nearby_src_table
+
+
+def vignetting_factor(OptimalPointingIdx, vector_dictionary, simulation_data, data) -> Tuple[List[float], Table]:
+    ra, dec, name = data
+    nearby_sources_table = simulation_data["nearby_sources_table"]
+    
+    object_data = simulation_data["object_data"]
+    EffArea, OffAxisAngle = simulation_data["telescop_data"]["EffArea"], simulation_data["telescop_data"]["OffAxisAngle"]
+    
+    optipoint_ra, optipoint_dec = vector_dictionary['SampleRA'][OptimalPointingIdx], vector_dictionary['SampleDEC'][OptimalPointingIdx]
+    
+    def calculate_vignetting_factor(D, effareaX, effareaY):
+        return np.interp(D,effareaX,effareaY)
+    
+    vignetting_factor, distance = np.array([], dtype=float), np.array([], dtype=float)
+    
+    for index in range(len(nearby_sources_table)):
+        SRCposition  = SkyCoord(ra=nearby_sources_table[ra][index]*u.degree, dec=nearby_sources_table[dec][index]*u.degree)
+        SRCnominalDIST = ang_separation(SRCposition, SkyCoord(ra=optipoint_ra, dec=optipoint_dec, unit=u.deg)).arcmin
+        distance = np.append(distance, SRCnominalDIST)
+        vignetting = calculate_vignetting_factor(SRCnominalDIST, EffArea, OffAxisAngle)
+        vignetting_factor = np.append(vignetting_factor, vignetting)
+    
+    optimal_pointing_point = SkyCoord(ra=optipoint_ra, dec=optipoint_dec, unit=u.deg)
+    psr_position = SkyCoord(ra=object_data['object_position'].ra, dec=object_data['object_position'].dec, unit=u.deg)
+    disatnce_psr_to_optipoint = ang_separation(psr_position, optimal_pointing_point).arcmin
+    vignetting_factor_psr2optipoint = calculate_vignetting_factor(disatnce_psr_to_optipoint, EffArea, OffAxisAngle)
+
+    max_vignet, min_distance  = np.max(vignetting_factor), np.min(distance)
+    max_vignet_index, min_distance_index = np.argmax(vignetting_factor), np.argmin(distance)
+    
+    print(f"Here is the neariest source close to the optimal pointing point : {colored(nearby_sources_table[name][min_distance_index], 'yellow')}.\n"
+            f"The distance between this two points is : {colored(min_distance, 'blue')} arcmin.")
+    print(f"The vignetting factor for this souce is : {colored(max_vignet, 'light_green')}")
+    print(f"The distance between {colored(object_data['object_name'], 'magenta')} and optimal pointing point is {colored(disatnce_psr_to_optipoint, 'blue')} arcmin,\n"
+            f"with a vagnetting factor of : {colored(vignetting_factor_psr2optipoint, 'red')}")
+    
+    nearby_sources_table["vignetting_factor"] = vignetting_factor
+    
+    return vignetting_factor, nearby_sources_table
+
+
+def write_fits_file(nearby_sources_table, simulation_data) -> None:
+    os_dictionary = simulation_data["os_dictionary"]
+    cloesest_dataset_path = os_dictionary["cloesest_dataset_path"]
+    nearby_sources_table_path = os.path.join(cloesest_dataset_path, "nearby_sources_table.fits").replace("\\", "/")
+    nearby_sources_table.write(nearby_sources_table_path, format='fits', overwrite=True)
+    print(f"Nearby sources table was created in : {colored(nearby_sources_table_path, 'magenta')}")
+    
+    
+def modeling(vignetting_factor, simulation_data, column_dictionary) -> None:
+    
+    object_data = simulation_data["object_data"]
+    os_dictionary = simulation_data["os_dictionary"]
+    nearby_sources_table = simulation_data["nearby_sources_table"]
+    number_source = len(nearby_sources_table)
+    
+    flux_name, err_flux_name, energy_band = column_dictionary["flux_obs"], column_dictionary["err_flux_obs"], column_dictionary["energy_band"]
+    photon_index_list, constant_list = np.array([], dtype=float), np.array([], dtype=float)
+    main_flux_obs, main_err_flux_obs = [], []
+    
+    
+    def power_law(vignetting_factor, energy_band, constant, gamma):
+        sigma = column_dictionary["sigma"]
+        return (constant * energy_band ** (-gamma) * np.exp(-sigma * 3e20)) * vignetting_factor
+    
+    
+    def sum_power_law(energy_band, constant, photon_index):
+        summed_power_law = 0.0
+        for cst, pho in zip(constant, photon_index):
+            summed_power_law += (cst * energy_band ** (-pho))
+        return summed_power_law
+
+    
+    for item in range(number_source):
+        flux_obs = [nearby_sources_table[name][item] for name in flux_name]
+        main_flux_obs.append(flux_obs)
+        
+        err_flux_obs = [nearby_sources_table[err_name][item] for err_name in err_flux_name]
+        main_err_flux_obs.append(err_flux_obs)
+        
+        popt, pcov = curve_fit(lambda energy_band, constant, gamma: power_law(vignetting_factor[item], energy_band, constant, gamma), energy_band, flux_obs, sigma=err_flux_obs)
+        constant, photon_index = popt
+        photon_index_list = np.append(photon_index_list, photon_index)
+        constant_list = np.append(constant_list, constant)
+        
+        
+    flux_obs_array = []
+    for index in range(number_source):
+        flux_obs_array.append(power_law(vignetting_factor[index], energy_band, constant_list[index], photon_index_list[index]))
+        
+    percentiles = np.percentile(flux_obs_array, (16, 50, 84), axis=0)
+    
+    nrows, ncols = 1, 3
+    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(15, 6), sharex=True)
+    fig.suptitle(f"Modeling nearby sources with Xmm Data\n{object_data['object_name']}", fontsize=16)
+    fig.text(0.5, 0.04, 'Energy [keV]', ha='center', va='center', fontsize=12)
+    fig.text(0.07, 0.5, 'Flux [erg/cm2/s]', ha='center', va='center', rotation='vertical', fontsize=12)
+
+    ax00, ax01, ax02 = axes[0], axes[1], axes[2]
+    ax00.set_title("All nearby sources power law")
+    ax00.set_xscale("log")
+
+    for index in range(number_source):
+        ax00.plot(energy_band, power_law(vignetting_factor[index], energy_band, constant_list[index], photon_index_list[index]))
+    
+    ax01.plot(energy_band, percentiles[1], color="navy", label="mean value")
+    ax01.plot(energy_band, percentiles[0], color="royalblue", ls="--", linewidth=1.5, label="$16^{th}$ percentile")
+    ax01.plot(energy_band, percentiles[2], color="midnightblue", ls="--", linewidth=1.5, label="$84^{th}$ percentile")
+    ax01.fill_between(energy_band, percentiles[0], percentiles[2], alpha=0.3, color="navy", hatch='\\'*3, label="envelop")
+    ax01.legend(loc="upper right", fontsize=8, ncols=2)
+
+    ax02.plot(energy_band, sum_power_law(energy_band, constant_list, photon_index_list), color="darkmagenta", ls='-.', label="summed power law")
+    ax02.legend(loc="upper right", fontsize=10)
+    
+    name = object_data['object_name']
+    plt.savefig(os.path.join(os_dictionary["img"], f"modeling_{name}.png".replace(" ", "_")))
+    plt.show()
+    
+    
+# None important function
+
+def py_to_xlsx(excel_data_path, count_rates, object_data, args) -> None:
+    
+    if args == "Xmm_DR13":
+        cat = "xmm"
+    elif args == "CSC_2.0":
+        cat = "csc"
+    elif args == "Swift":
+        cat = "swi"
+    elif args == "eRosita":
+        cat = "ero"
+        
+    wb = openpyxl.Workbook()
+    sheet = wb.active
+    
+    for item in range(len(count_rates)):
+        sheet.cell(row=item + 1, column=1).value = count_rates[item]
+    
+    ct_rates_path = os.path.join(excel_data_path, f"{cat}_{object_data['object_name']}.xlsx").replace("\\", "/") 
+    wb.save(ct_rates_path)
+
+
+def xlsx_to_py(excel_data_path, nearby_sources_table, object_data) -> Tuple[List[float], Table]:
+    ct_rates_path = os.path.join(excel_data_path, f"xmm_{object_data['object_name']}.xlsx".replace(" ", "_"))
+    wb = openpyxl.load_workbook(ct_rates_path)
+    sheet = wb.active
+
+    count_rates = []
+    for item in range(len(nearby_sources_table)): 
+        count_rates.append(sheet.cell(row = item + 1, column = 1).value)
+        
+    nearby_sources_table["count_rate"] = count_rates
+    
+    return count_rates, nearby_sources_table

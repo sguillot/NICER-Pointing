@@ -4,6 +4,7 @@ from astropy.table import Table
 from astropy.io import fits
 from astropy.coordinates import SkyCoord, Angle
 from astropy import units as u
+from astropy.units import Quantity
 from scipy.optimize import curve_fit
 from astroquery.esasky import ESASky
 from astropy.visualization import PercentileInterval, ImageNormalize, LinearStretch
@@ -11,6 +12,7 @@ from astropy.wcs import WCS
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from matplotlib.cm import ScalarMappable
 from typing import Dict, Tuple, Union, List
+from termcolor import colored
 
 import function as f
 import sys
@@ -18,6 +20,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pyvo as vo
 import subprocess
+import os
 
 # ---------------------------------------- #
 
@@ -66,7 +69,7 @@ class XmmCatalog:
     """
 
 
-    def __init__(self, catalog_path, radius, dictionary, user_table) -> None:
+    def __init__(self, catalog_path: str, radius: Quantity, dictionary: dict, user_table: Table, os_dictionary: dict) -> None:
         """
         Initializes the XmmCatalog instance.
 
@@ -92,9 +95,10 @@ class XmmCatalog:
         """
         self.xmm_catalog = self.open_catalog(catalog_path=catalog_path)
         self.nearby_sources_table, self.nearby_sources_position = self.find_nearby_sources(radius=radius, dictionary=dictionary, user_table=user_table)
+        self.os_dictionary = os_dictionary
         
-        test_dr11_path = "data/4XMM_DR11cat_v1.0.fits"
-        test_x2a_path = "data/xmm2athena_D6.1_V3.fits"
+        test_dr11_path = "catalog_data/4XMM_DR11cat_v1.0.fits"
+        test_x2a_path = "catalog_data/xmm2athena_D6.1_V3.fits"
         xmm_dr11_path = f.get_valid_file_path(test_dr11_path)
         x2a_path = f.get_valid_file_path(test_x2a_path)
         
@@ -102,11 +106,11 @@ class XmmCatalog:
         self.x2a_catalog = self.open_catalog(catalog_path=x2a_path)
         self.nearby_sources_table, self.index_table = self.get_phoindex_nh()
         self.variability_table = self.variability_table(dictionary)
-        self.neighbourhood_of_object(radius=radius, dictionary=dictionary)
+        self.neighbourhood_of_object(radius=radius, dictionary=dictionary, os_dictionary=os_dictionary)
         self.model_dictionary = self.dictionary_model()
         
     
-    def open_catalog(self, catalog_path) -> Table:
+    def open_catalog(self, catalog_path: str) -> Table:
         """
         Opens and reads the catalog data from the specified file path.
 
@@ -125,7 +129,7 @@ class XmmCatalog:
             return result_table
         
     
-    def find_nearby_sources(self, radius, dictionary, user_table) -> Tuple[Table, SkyCoord]:
+    def find_nearby_sources(self, radius: Quantity, dictionary: dict, user_table: Table) -> Tuple[Table, SkyCoord]:
         """
         Searches and returns nearby sources from the XMM catalog based on a specified radius and position.
 
@@ -188,7 +192,7 @@ class XmmCatalog:
             print(f"An error occured : {error}")
             
        
-    def optimization_phoindex(self, number) -> Tuple[Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray], Tuple[float, float]]:
+    def optimization_phoindex(self, number: int) -> Tuple[Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray], Tuple[float, float]]:
         """
         Optimizes and returns the parameters of both power-law and absorbed power-law models.
 
@@ -204,26 +208,21 @@ class XmmCatalog:
                                             observed flux errors, and predicted fluxes for both models.
             photon_index (tuple): A tuple containing photon indices for both models.
         """    
-        def power_law(x, constant, gamma):
-            return constant * x ** (-gamma)
         
-        def absorbed_power_law(x, sigma, constant, gamma):
+        def absorbed_power_law(x, constant, gamma):
+            sigma = np.array([1e-20, 5e-21, 1e-22, 1e-23, 1e-24], dtype=float)
             return (constant * x ** (-gamma)) * (np.exp(-sigma * 3e20))
         
         energy_band = np.array([0.35, 0.75, 1.5, 3.25, 8.25], dtype=float)
-        sigma = np.array([1e-20, 5e-21, 1e-22, 1e-23, 1e-24])
         flux_obs = np.array([self.nearby_sources_table[f"SC_EP_{item + 1}_FLUX"][number] for item in range(5)], dtype=float)
         flux_obs_err = np.array([self.nearby_sources_table[f"SC_EP_{item + 1}_FLUX_ERR"][number] for item in range(5)], dtype=float)
         
-        popt_1, pcov_1 = curve_fit(lambda x, constant, gamma: power_law(x, constant, gamma), energy_band, flux_obs, sigma=flux_obs_err)
-        popt_2, pcov_2 = curve_fit(lambda x, constant, gamma: absorbed_power_law(x, sigma, constant, gamma), energy_band, flux_obs, sigma=flux_obs_err)
-        constant_1, pho_index = popt_1
-        constant_2, absorb_pho_index = popt_2
+        popt, pcov = curve_fit(absorbed_power_law, energy_band, flux_obs, sigma=flux_obs_err)
+        constant, absorb_pho_index = popt
+
+        optimization_parameters = (energy_band, flux_obs, flux_obs_err, absorbed_power_law(energy_band, *popt))
         
-        photon_index = (pho_index, absorb_pho_index)
-        optimization_parameters = (energy_band, flux_obs, flux_obs_err, power_law(energy_band, *popt_1), absorbed_power_law(energy_band, sigma, *popt_2))
-        
-        return optimization_parameters, photon_index
+        return optimization_parameters, absorb_pho_index
 
 
     def visualization_interp(self, optimization_parameters, photon_index) -> None:
@@ -264,15 +263,12 @@ class XmmCatalog:
                     energy_band = optimization_parameters[count][0]
                     flux_obs = optimization_parameters[count][1]
                     flux_obs_err = optimization_parameters[count][2]
-                    power_law = optimization_parameters[count][3]
-                    absorbed_power_law = optimization_parameters[count][4]
-                    pho_index = photon_index[count][0]
-                    absorb_pho_index = photon_index[count][1]
+                    absorbed_power_law = optimization_parameters[count][3]
+                    absorb_pho_index = photon_index[count]
                     
                     axes[row][column].errorbar(energy_band, flux_obs, flux_obs_err, fmt='*', color='red', ecolor='black')
-                    axes[row][column].plot(energy_band, power_law, linestyle='dashdot', color="navy", label="Non Absorb")
-                    axes[row][column].plot(energy_band, absorbed_power_law, linestyle='dashdot', color="darkorange", label="Absorb")
-                    axes[row][column].set_title(f"Non absorb $\Gamma$ = {pho_index:.8f}\nAbsorb $\Gamma$ = {absorb_pho_index:.8f}", fontsize=7)
+                    axes[row][column].plot(energy_band, absorbed_power_law, linestyle='dashdot', color="navy", label="Absorb")
+                    axes[row][column].set_title(f"Absorb $\Gamma$ = {absorb_pho_index:.8f}", fontsize=7)
                     axes[row][column].legend(loc="upper left", ncol=2, fontsize=6)
                 count += 1
                 
@@ -328,7 +324,7 @@ class XmmCatalog:
                 parameters, pho_value = self.optimization_phoindex(number)
                 optimization_parameters.append(parameters)
                 photon_index.append(pho_value)
-                column_phoindex = np.append(column_phoindex, pho_value[1])
+                column_phoindex = np.append(column_phoindex, pho_value)
 
         self.visualization_interp(optimization_parameters=optimization_parameters, photon_index=photon_index)
         
@@ -341,7 +337,7 @@ class XmmCatalog:
         return self.nearby_sources_table, index_table
     
     
-    def variability_table(self, dictionary) -> Table:
+    def variability_table(self, dictionary: dict) -> Table:
         """
         Generates a table containing information about the variability of nearby sources.
 
@@ -391,7 +387,7 @@ class XmmCatalog:
         return variability_table
     
     
-    def neighbourhood_of_object(self, radius, dictionary) -> None:
+    def neighbourhood_of_object(self, radius: Quantity, dictionary: dict, os_dictionary: dict) -> None:
         """
         Visualizes the neighborhood of the given object.
 
@@ -445,7 +441,6 @@ class XmmCatalog:
             axes_1.legend(loc="lower right", ncol=2)
             axes_1.set_title(f"Variable and invariable sources close to {name} ")
             
-            plt.show()
         else:
             image = result_fits_images["XMM"][0][0].data[0, :, :]
             wcs = WCS(result_fits_images["XMM"][0][0].header)
@@ -482,7 +477,8 @@ class XmmCatalog:
             axes_1.set_ylabel(" ")
             axes_1.set_title(f"Variable and invariable sources close to {name} ")
             
-            plt.show()
+        plt.savefig(os.path.join(os_dictionary["img"], f"neighbourhood_of_{name}.png".replace(" ", "_")))
+        plt.show()
 
 
     def dictionary_model(self) -> Dict[str, Dict[str, Union[str, float]]]:
@@ -581,7 +577,7 @@ class Chandra:
     """
 
 
-    def __init__(self, catalog_path, radius, dictionary, user_table) -> None:
+    def __init__(self, catalog_path: str, radius: Quantity, dictionary: dict, user_table: Table, os_dictionary: dict) -> None:
         """
         Initialize the Chandra class by loading catalogs, finding nearby sources, 
         and performing various analyses and visualizations.
@@ -623,12 +619,12 @@ class Chandra:
         self.cs_nearby_sources_position = SkyCoord(ra=list(self.cone_search_catalog['ra']), dec=list(self.cone_search_catalog['dec']), unit=u.deg)
         self.cs_nearby_sources_table = self.cone_catalog()
         
-        self.neighbourhood_of_object(radius=radius, dictionary=dictionary)
+        self.neighbourhood_of_object(radius=radius, dictionary=dictionary, os_dictionary=os_dictionary)
         self.photon_index = self.power_law_pho_index()
         self.model_dictionary = self.dictionary_model()
         
 
-    def open_catalog(self, catalog_path) -> Table:
+    def open_catalog(self, catalog_path: str) -> Table:
         """
         Open and read the Chandra catalog file from the given path.
 
@@ -648,7 +644,7 @@ class Chandra:
             return result_table
         
         
-    def load_cs_catalog(self, radius, dictionary) -> Table:
+    def load_cs_catalog(self, radius: Quantity, dictionary: dict) -> Table:
         """
         Load the cone search catalog for a given object and search radius.
 
@@ -670,7 +666,7 @@ class Chandra:
         return cone_search_catalog
 
 
-    def find_nearby_sources(self, radius, dictionary, user_table) -> Tuple[Table, SkyCoord]:
+    def find_nearby_sources(self, radius: Quantity, dictionary: dict, user_table: Table) -> Tuple[Table, SkyCoord]:
         """
         Find and return sources close to a given object from the Chandra catalog.
 
@@ -768,7 +764,7 @@ class Chandra:
         return self.cs_catalog
     
     
-    def neighbourhood_of_object(self, radius, dictionary) -> None:
+    def neighbourhood_of_object(self, radius: Quantity, dictionary: dict, os_dictionary: dict) -> None:
         """
         Plot a visualization of the neighborhood of a given astronomical object based on data from the Chandra and cone search catalogs.
 
@@ -784,6 +780,7 @@ class Chandra:
         None
             This function plots a graph and does not return any value.
         """
+        name = dictionary["object_name"]
         cs_csc_ra = np.array(list(self.cone_search_catalog['ra']), dtype=float)
         cs_csc_dec = np.array(list(self.cone_search_catalog['dec']), dtype=float)
         
@@ -824,10 +821,11 @@ class Chandra:
         ax11.scatter(dictionary['object_position'].ra, dictionary['object_position'].dec, marker='+', s=50, c='red', label=f"{dictionary['object_name']}")
         ax11.legend(loc="upper right", ncol=2)
         
+        plt.savefig(os.path.join(os_dictionary["img"], f"neighbourhood_of_{name}.png".replace(" ", "_")))
         plt.show()
 
 
-    def get_pho_index(self, number) -> Tuple[Tuple[float, float], Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]:
+    def get_pho_index(self, number: int) -> Tuple[Tuple[float, float], Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]:
         """
         Calculate the photon index for an astronomical object using the Harvard catalog data.
 
@@ -851,35 +849,24 @@ class Chandra:
         # with Harvard catalog
         column_name = np.array(["flux_aper_s", "flux_aper_m", "flux_aper_h"], dtype=str)
         energy_band = np.array([0.7, 1.6, 4.5], dtype=float)
-        sigma = np.array([1e-20, 1e-22, 1e-24], dtype=float)
         flux_obs = np.array([self.cone_search_catalog[flux][number] for flux in column_name])
         flux_obs = np.nan_to_num(flux_obs, nan=0.0)
         
-        def power_law(x, constant, gamma):
-            return constant * x **(-gamma)
-        
-        def absorbed_power_law(x, sigma, constant, gamma):
+        def absorbed_power_law(x, constant, gamma):
+            sigma = np.array([1e-20, 1e-22, 1e-24], dtype=float)
             return (constant * x **(-gamma)) * (np.exp(-sigma*3e20))
         
-        try:
-            popt_1, pcov_1 = curve_fit(power_law, energy_band, flux_obs)
-            constant_1, photon_index_non_absorb = popt_1
-            powerlaw_value_non_absorb = power_law(energy_band, *popt_1)
-            
-            popt_2, pcov_2 = curve_fit(lambda x, constant, gamma: absorbed_power_law(x, sigma, constant, gamma), energy_band, flux_obs)
-            constant_2, photon_index_absorb = popt_2
-            powerlaw_value_absorb = absorbed_power_law(energy_band, sigma, *popt_2)
+        try:       
+            popt, pcov = curve_fit(absorbed_power_law, energy_band, flux_obs)
+            constant, absorb_pho_index = popt
+            powerlaw_value_absorb = absorbed_power_law(energy_band, *popt)
             
         except RuntimeError as error:
-            photon_index_non_absorb = 1.7
-            powerlaw_value_non_absorb = [0.0, 0.0, 0.0]
-            
-            photon_index_absorb = 1.7
+            absorb_pho_index = 1.7
             powerlaw_value_absorb = [0.0, 0.0, 0.0]
-            
-        photon_index = (photon_index_non_absorb, photon_index_absorb)
-        optimization_parameters = (energy_band, flux_obs, powerlaw_value_non_absorb, powerlaw_value_absorb)
-        return photon_index, optimization_parameters
+
+        optimization_parameters = (energy_band, flux_obs, powerlaw_value_absorb)
+        return absorb_pho_index, optimization_parameters
 
 
     def visualization_interp(self, optimization_parameters, photon_index) -> None:
@@ -920,16 +907,12 @@ class Chandra:
                 if count < number_interp:
                     energy_band = optimization_parameters[count][0]
                     flux_obs = optimization_parameters[count][1]
-                    power_law = optimization_parameters[count][2]
-                    absorb_power_law = optimization_parameters[count][3]
-                    
-                    pho_index = photon_index[count][0]
-                    absorb_pho_index = photon_index[count][1]
-                    
+                    absorb_power_law = optimization_parameters[count][2]
+                    absorb_pho_index = photon_index[count]
+
                     axes[row][column].errorbar(energy_band, flux_obs, fmt='*', color='red', ecolor='black')
-                    axes[row][column].plot(energy_band, power_law, linestyle='dashdot', color="navy")
                     axes[row][column].plot(energy_band, absorb_power_law, linestyle='dashdot', color="darkorange")
-                    axes[row][column].set_title(f"Non absorb $\Gamma$ = {pho_index:.8f}\nAbsorb $\Gamma$ = {absorb_pho_index:.8f}", fontsize=7)
+                    axes[row][column].set_title(f"Absorb $\Gamma$ = {absorb_pho_index}", fontsize=7)
                 
                 count += 1
                 
@@ -981,7 +964,7 @@ class Chandra:
         
         for item in range(nbr_src):
             if model[item] == 'power':
-                model_value.append(self.photon_index[item][1])
+                model_value.append(self.photon_index[item])
         
         for item in range(nbr_src):
 
@@ -1010,7 +993,7 @@ class Swift:
     """
 
 
-    def __init__(self, catalog_path, radius, dictionary, user_table) -> None:
+    def __init__(self, catalog_path: str, radius: Quantity, dictionary: dict, user_table: Table) -> None:
         """
         Initializes the Swift class with a catalog path, search radius, dictionary of target object information, 
         and a user-defined table.
@@ -1028,7 +1011,7 @@ class Swift:
         self.model_dictionary = self.dictionary_model()
         
     
-    def open_catalog(self, catalog_path)-> Table:
+    def open_catalog(self, catalog_path: str)-> Table:
         """
         Opens and reads a FITS catalog file and returns it as an Astropy Table.
 
@@ -1044,7 +1027,7 @@ class Swift:
             return result_table
         
         
-    def find_nearby_sources(self, radius, dictionary) -> Tuple[Table, SkyCoord]:
+    def find_nearby_sources(self, radius: Quantity, dictionary: dict) -> Tuple[Table, SkyCoord]:
         """
         Finds sources in the Swift catalog that are within a certain radius from the target object.
 
@@ -1094,7 +1077,7 @@ class Swift:
             print(f"An error occured : {error}")
 
 
-    def neighbourhood_of_object(self, radius, dictionary) -> None:
+    def neighbourhood_of_object(self, radius: Quantity, dictionary: dict) -> None:
         """
         Visualizes the neighborhood of the target object and nearby sources.
 
@@ -1140,7 +1123,7 @@ class eRosita:
     """
 
 
-    def __init__(self, catalog_path, radius, dictionary, user_table) -> None:
+    def __init__(self, catalog_path: str, radius: Quantity, dictionary: dict, user_table: Table) -> None:
         """
         Initializes the eRosita class with a catalog path, search radius, dictionary of target object information,
         and a user-defined table.
@@ -1158,7 +1141,7 @@ class eRosita:
         self.model_dictionary = self.dictionary_model()
         
         
-    def open_catalog(self, catalog_path) -> Table:
+    def open_catalog(self, catalog_path: str) -> Table:
         """
         Opens and reads a FITS catalog file and returns it as an Astropy Table.
 
@@ -1174,7 +1157,7 @@ class eRosita:
             return result_table
         
         
-    def find_nearby_sources(self, radius, dictionary) -> Tuple[Table, SkyCoord]:
+    def find_nearby_sources(self, radius: Quantity, dictionary: dict) -> Tuple[Table, SkyCoord]:
         """
         Finds sources in the eRosita catalog that are within a certain radius from the target object.
 
@@ -1221,7 +1204,7 @@ class eRosita:
             print(f"An error occured : {error}")
     
     
-    def neighbourhood_of_object(self, dictionary, radius) -> None:
+    def neighbourhood_of_object(self, dictionary: dict, radius: Quantity) -> None:
         """
         Visualizes the neighborhood of the target object and nearby sources.
 
@@ -1314,7 +1297,7 @@ class CompareCatalog:
     """
 
  
-    def __init__(self, catalog_path, radius, dictionary, user_table) -> None:
+    def __init__(self, catalog_path: str, radius: Quantity, dictionary: dict, user_table: Table) -> None:
         self.catalog_1, self.catalog_2, self.catalog_1_name, self.catalog_2_name = self.open_catalog(catalogs_path=catalog_path, radius=radius, dictionary=dictionary)
         self.nearby_src_table_1, self.nearby_src_table_2, self.nearby_src_position_1, self.nearby_src_position_2 = self.find_nearby_sources(radius=radius, dictionary=dictionary)
         self.neighbourhood_of_object(radius=radius, dictionary=dictionary)
@@ -1323,15 +1306,15 @@ class CompareCatalog:
         self.count_rate_1, self.count_rate_2 = self.count_rate()
 
     
-    def open_catalog(self, catalogs_path, radius, dictionary) -> Tuple[Table, Table, str, str]:
-        if "data/Chandra.fits" not in catalogs_path:
+    def open_catalog(self, catalogs_path: str, radius: Quantity, dictionary: dict) -> Tuple[Table, Table, str, str]:
+        if "catalog_data/Chandra.fits" not in catalogs_path:
             with fits.open(catalogs_path[0]) as data1, fits.open(catalogs_path[1]) as data2:
                 result_1, result_2 = Table(data1[1].data), Table(data2[1].data)
                 data1.close()
                 data2.close()
                 return result_1, result_2, catalogs_path[2], catalogs_path[3]
         else:
-            index = catalogs_path.index("data/Chandra.fits")
+            index = catalogs_path.index("catalog_data/Chandra.fits")
             if index == 0 :
                 with fits.open(catalogs_path[1]) as data:
                     result_2 = Table(data[1].data)
@@ -1351,19 +1334,18 @@ class CompareCatalog:
                 return result_1, self.cone_search_catalog.to_table(), catalogs_path[2], catalogs_path[3]
 
          
-    def optimization(self, number, table) -> Tuple[float, float]:
+    def optimization(self, number: int, table: Table) -> Tuple[float, float]:
         
-        def power_law(x, constant, gamma):
-            return constant * (x ** (-gamma))
+        def absorbed_power_law(x, constant, gamma):
+            sigma = np.array([1e-20, 5e-21, 1e-22, 1e-23, 1e-24], dtype=float)
+            return (constant * x ** (-gamma)) * (np.exp(-sigma * 3e20))
         
         energy_band = np.array([0.35, 0.75, 1.5, 3.25, 8.25], dtype=float)
-        
-        flux = np.array([], dtype=float)
-        for item in range(5):
-            flux = np.append(flux, table[f"SC_EP_{item + 1}_FLUX"][number])
+        flux_obs = np.array([table[f"SC_EP_{item + 1}_FLUX"][number] for item in range(5)], dtype=float)
+        flux_obs_err = np.array([table[f"SC_EP_{item + 1}_FLUX_ERR"][number] for item in range(5)], dtype=float)
             
         try:
-            popt, pcov = curve_fit(power_law, energy_band, flux)
+            popt, pcov = curve_fit(absorbed_power_law, energy_band, flux_obs, sigma=flux_obs_err)
             constant, photon_index = popt
             return constant, photon_index
         except Exception as error:
@@ -1371,7 +1353,7 @@ class CompareCatalog:
             return constant, photon_index
          
          
-    def add_photon_nh_and_gamma_xmm(self, table) -> Tuple[Table, Table]:
+    def add_photon_nh_and_gamma_xmm(self, table: Table) -> Tuple[Table, Table]:
         nbr_src = len(table)
         name_list = table['IAUNAME']
         xmm_dr11_table = Table(names=self.xmm_catalog.colnames,
@@ -1416,7 +1398,7 @@ class CompareCatalog:
         return table, index_table   
          
            
-    def add_pho_csc(self, table) -> Table:
+    def add_pho_csc(self, table: Table) -> Table:
         
         def get_gamma (index, table):
             
@@ -1450,10 +1432,10 @@ class CompareCatalog:
         return table
     
     
-    def var_function(self, dictionary) -> Tuple[Table, Table]:
+    def var_function(self, dictionary: dict) -> Tuple[Table, Table]:
         if self.catalog_1_name == "CSC_2.0" or self.catalog_2_name == "Xmm_DR13" and self.catalog_1_name =="Xmm_DR13" or self.catalog_2_name =="CSC_2.0":
-            x2a_path = "data/xmm2athena_D6.1_V3.fits"
-            xmm_path = "data/4XMM_DR11cat_v1.0.fits"
+            x2a_path = "catalog_data/xmm2athena_D6.1_V3.fits"
+            xmm_path = "catalog_data/4XMM_DR11cat_v1.0.fits"
             with fits.open(x2a_path) as data_x2a, fits.open(xmm_path) as data_xmm:
                 self.x2a_catalog = Table(data_x2a[1].data)
                 self.xmm_catalog = Table(data_xmm[1].data)
@@ -1610,7 +1592,7 @@ class CompareCatalog:
             return self.nearby_src_table_1, self.catalog_2
             
             
-    def find_nearby_sources(self, radius, dictionary) -> Tuple[Table, Table, SkyCoord, SkyCoord]:
+    def find_nearby_sources(self, radius: Quantity, dictionary: dict) -> Tuple[Table, Table, SkyCoord, SkyCoord]:
         
         field_of_view = radius + 5*u.arcmin
         object_position = dictionary['object_position']
@@ -1690,7 +1672,7 @@ class CompareCatalog:
                 print(f"An error occured : {error}")
 
 
-    def neighbourhood_of_object(self, radius, dictionary) -> None:
+    def neighbourhood_of_object(self, radius: Quantity, dictionary: dict) -> None:
         
         name = dictionary["object_name"]
         obj_ra, obj_dec = dictionary["object_position"].ra, dictionary["object_position"].dec
@@ -1935,7 +1917,7 @@ class CompareCatalog:
         return ct_rates_1, ct_rates_2
     
     
-    def opti_point_calcul(self, simulation_data) -> None:
+    def opti_point_calcul(self, simulation_data: dict) -> None:
         object_data = simulation_data["object_data"]
         telescop_data = simulation_data["telescop_data"]
             
