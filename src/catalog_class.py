@@ -13,8 +13,10 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from matplotlib.cm import ScalarMappable
 from typing import Dict, Tuple, Union, List
 from termcolor import colored
+from tqdm import tqdm
 
 import function as f
+import catalog_information as dict_cat
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
@@ -167,7 +169,7 @@ class XmmCatalog:
         src_position = SkyCoord(ra=small_table['SC_RA'], dec=small_table['SC_DEC'], unit=u.deg)
                 
         if len(user_table) == 0:
-            for number in range(len(small_table)):
+            for number in tqdm(range(len(small_table))):
                 if f.ang_separation(object_position, src_position[number]) < radius:
                     nearby_src_table.add_row(small_table[number])
             nearby_src_position = SkyCoord(ra=nearby_src_table['SC_RA'], dec=nearby_src_table['SC_DEC'], unit=u.deg)
@@ -2010,3 +2012,212 @@ class CompareCatalog:
         
         plt.show()
         
+        
+# --------------- Software Class --------------- #
+
+    # --------------- Refactoring --------------- #
+
+class BandFlux:
+    
+    def __init__(self, flux, flux_err) -> None:
+        self.flux = flux
+        self.flux_err = flux_err
+
+
+class SwiftData:
+    
+    def __init__(self, stacked_flux, stacked_flux_err, stacked_times):
+        self.stacked_flux = stacked_flux
+        self.stacked_flux_err = stacked_flux_err
+        self.stacked_times = stacked_times
+        
+    # ------------------------------------------- #
+
+    # --------------- Source Class --------------- #
+
+class Source:
+    
+    def __init__(self, catalog, iau_name, flux, flux_err, time_steps, band_flux_data, **kwargs) -> None:
+        self.catalog = catalog
+        self.iau_name = iau_name
+        self.flux = flux
+        self.flux_err = flux_err
+        self.time_steps = [float(time) for time in time_steps]
+        self.obs_ids = [int(obs_id) for obs_id in kwargs.get('obs_id', [])]
+
+        self.band_flux = band_flux_data.flux
+        self.band_flux_err = band_flux_data.flux_err
+
+        self.swift_data = kwargs.get('swift_data', SwiftData([], [], []))
+        self.xmm_offaxis = kwargs.get('xmm_offaxis', [])
+        self.short_term_var = kwargs.get('short_term_var', [])
+
+        self.hardness_ratio(catalog=catalog)
+        self.swift_modif(flux=flux, flux_err=flux_err)
+
+    def hardness_ratio(self, catalog:str) -> None:
+
+        hr_bandlimit_index = dict_cat.dictionary_catalog[catalog]["hr_bandlimit_index"]
+        band_conv_factor_soft = dict_cat.dictionary_catalog[catalog]["band_conv_factor_soft"]
+        band_conv_factor_hard = dict_cat.dictionary_catalog[catalog]["band_conv_factor_hard"]
+
+        self.soft_dets= [np.sum(det[:hr_bandlimit_index]) * band_conv_factor_soft for det in self.band_flux]
+        self.soft_errors = [[np.sum(err_neg[:hr_bandlimit_index]) * band_conv_factor_soft for err_neg in self.band_flux_err[0]],
+                            [np.sum(err_pos[:hr_bandlimit_index]) * band_conv_factor_soft for err_pos in self.band_flux_err[1]]]
+
+        if catalog != "RASS" and catalog != "WAGAT":
+            self.hard_dets = [np.sum(det[hr_bandlimit_index:]) * band_conv_factor_hard for det in self.band_flux]
+            self.hard_errors = [
+                [np.sum(err_neg[hr_bandlimit_index:]) * band_conv_factor_hard for err_neg in
+                self.band_flux_err[0]],
+                [np.sum(err_pos[hr_bandlimit_index:]) * band_conv_factor_hard for err_pos in
+                self.band_flux_err[1]]]
+        else:
+            self.hard_dets = [np.nan for det in self.flux]
+            self.hard_errors = [[np.nan for det in self.flux], [np.nan for det in self.flux]]
+
+        self.hardness_ratio = [(hard - soft)/(hard + soft) for (soft, hard) in zip(self.soft_dets, self.hard_dets)]
+        low_soft = np.where(np.array(self.soft_dets) - np.array(self.soft_errors[0]) < 0, 0,
+                            np.array(self.soft_dets) - np.array(self.soft_errors[0]))
+        low_hard = np.where(np.array(self.hard_dets) - np.array(self.hard_errors[0]) < 0, 0,
+                            np.array(self.hard_dets) - np.array(self.hard_errors[0]))
+        up_soft = np.where(np.array(self.soft_dets) + np.array(self.soft_errors[1]) < 0, 0,
+                        np.array(self.soft_dets) + np.array(self.soft_errors[1]))
+        up_hard = np.where(np.array(self.hard_dets) + np.array(self.hard_errors[1]) < 0, 0,
+                        np.array(self.hard_dets) + np.array(self.hard_errors[1]))
+        self.hardness_err = [[hr - (hard - soft)/(hard + soft) for (soft, hard, hr) in zip(up_soft, low_hard, self.hardness_ratio)],
+                            [(hard - soft)/(hard + soft) - hr for (soft, hard, hr) in zip(low_soft, up_hard, self.hardness_ratio)]]
+
+
+    def swift_modif(self, flux:list, flux_err:list) -> None:
+
+        self.swift_stacked_flux = self.swift_data.stacked_flux
+        self.swift_stacked_flux_err = self.swift_data.stacked_flux_err
+        self.swift_stacked_times = self.swift_data.stacked_times
+        self.swift_stacked_variable = False
+        
+        self.min_upper, self.max_lower = 1, 0
+        self.var = 1
+        if len(flux) > 0:
+            min_upper = min(np.array(flux) + np.array(flux_err[1]))
+            max_lower = max(np.array(flux) - np.array(flux_err[0]))
+        if self.swift_stacked_flux != []:
+            stacked_min = min(np.array(self.swift_stacked_flux)+np.array(self.swift_stacked_flux_err[1]))
+            if stacked_min<0.5*self.min_upper:
+                self.swift_stacked_variable = True
+            self.min_upper = min(self.min_upper, stacked_min)
+        if len(flux) + len(self.swift_stacked_flux) > 1:
+            self.var = max_lower/min_upper
+
+
+class MasterSource():
+    
+    def __init__(self, src_id, sources_table, ra, dec, poserr) -> None:
+        self.src_id = src_id
+        self.sources, self.sources_flux, self.sources_error_bar = {}, [], [[], []]
+        self.sources_time_steps, self.sources_var = [], []
+        self.tab_hr, self.tab_hr_err = [], [[], []]
+        self.never_on_axis_xmm, self.has_short_term_var = False, False
+        self.min_time, self.max_time = 60000, 0
+        
+        for source in sources_table:
+            if ("XMM" in self.sources.keys()) and (source.catalog == "Stacked"):
+                # We remove the Stacked detection that correspond to a clean XMM detection
+                xmm_obs_id = self.sources["XMM"].obs_ids
+                stacked_obs_id = source.obs_ids
+                new_det_ind = [item for item in range(len(stacked_obs_id)) if stacked_obs_id[item] not in xmm_obs_id]
+                
+                source.flux = source.flux[new_det_ind]
+                source.flux_err[0] = source.flux_err[0][new_det_ind]
+                source.flux_err[1] = source.flux_err[1][new_det_ind]
+                
+                source.time_steps = np.array(source.time_steps)[new_det_ind]
+                source.obs_ids = np.array(source.obs_ids)[new_det_ind]
+                
+                source.hardness_ratio = np.array(source.hardness_ratio)[new_det_ind]
+                source.hardness_err[0] = np.array(source.hardness_err[0])[new_det_ind]
+                source.hardness_err[1] = np.array(source.hardness_err[1])[new_det_ind]
+                
+                source.band_flux = source.band_flux[new_det_ind]
+                source.band_flux_err[0] = source.band_flux_err[0][new_det_ind]
+                source.band_flux_err[1] = source.band_flux_err[1][new_det_ind]
+                
+            source.master_source = self
+            self.sources[source.catalog] = source
+            
+            for (flux, flux_err_neg, flux_err_pos, time_step) in zip(source.flux, source.flux_err[0], source.flux_err[1], source.time_steps):
+                self.sources_flux.append(flux)
+                self.sources_error_bar[0].append(flux_err_neg)
+                self.sources_error_bar[1].append(flux_err_pos)
+                self.sources_var.append(source.var)
+                self.sources_time_steps.append(time_step)
+            self.tab_hr += list(source.hardness_ratio)
+            self.tab_hr_err[0] += list(source.hardness_err[0])
+            self.tab_hr_err[1] += list(source.hardness_err[1])
+            
+            for (flux, flux_err_neg, flux_err_pos, start, stop) in zip(source.swift_stacked_flux, source.swift_stacked_flux_err[0], source.swift_stacked_flux_err[1], source.swift_stacked_times[0], source.swift_stacked_times[1]):
+                self.sources_flux.append(flux)
+                self.sources_error_bar[0].append(flux_err_neg)
+                self.sources_error_bar[1].append(flux_err_pos)
+                self.min_time = min(start, self.min_time)
+                self.max_time = max(stop, self.max_time)
+                self.sources_time_steps.append((start + stop)/2)
+                
+            if source.xmm_offaxis!=[]:
+                if np.nanmin(source.xmm_offaxis)>1:
+                    self.never_on_axis_xmm = True
+            if source.time_steps!=[]:
+                self.min_time = min(min(source.time_steps), self.min_time)
+                self.max_time = max(max(source.time_steps), self.max_time)
+            for var_flag in source.short_term_var:
+                if var_flag>0:
+                    self.has_short_term_var=True
+        self.sources_flux = np.array(self.sources_flux)
+        self.sources_error_bar = np.array(self.sources_error_bar)
+        
+        self.min_upper, self.max_lower, self.var_ratio = 1, 0, 1
+        self.var_amplitude, self.var_significance = 0, 0
+
+        if len(self.sources_flux)>0 and (not np.isnan(self.sources_flux).all()):
+            min_upper_ind = np.argmin(self.sources_flux + self.sources_error_bar[1])
+            self.min_upper = (self.sources_flux + self.sources_error_bar[1])[min_upper_ind]
+            max_lower_tab = np.where(self.sources_flux - self.sources_error_bar[0]>0,
+                                     self.sources_flux - self.sources_error_bar[0],
+                                     self.sources_flux)
+            max_lower_ind = np.argmax(max_lower_tab)
+            self.max_lower = max_lower_tab[max_lower_ind]
+            self.var_ratio = self.max_lower/self.min_upper
+            self.var_amplitude = self.max_lower - self.min_upper
+            self.var_optimistic = self.sources_flux[max_lower_ind]/self.sources_flux[min_upper_ind]
+            self.var_significance = self.var_amplitude/np.sqrt(self.sources_error_bar[1][max_lower_ind]**2 + self.sources_error_bar[0][min_upper_ind]**2)
+            #self.frac_var = np.sqrt((np.var(self.sources_flux, ddof=1)-np.mean(np.array(self.sources_error_bar)**2))/(np.mean(self.sources_flux)**2))
+            
+        self.hr_min, self.hr_max = np.nan, np.nan
+        self.hr_var, self.hr_var_signif = np.nan, np.nan
+        
+        if len(self.tab_hr) > 1 and (not np.isnan(self.tab_hr).all()) and (not np.isnan(self.tab_hr_err).all()):
+            index_hr_min = np.nanargmin(np.array(self.tab_hr) + np.array(self.tab_hr_err[1]))
+            index_hr_max = np.nanargmax(np.array(self.tab_hr) - np.array(self.tab_hr_err[0]))
+            self.hr_min = (np.array(self.tab_hr) + np.array(self.tab_hr_err[1]))[index_hr_min]
+            self.hr_max = (np.array(self.tab_hr) - np.array(self.tab_hr_err[0]))[index_hr_max]
+            self.hr_var = self.hr_max - self.hr_min
+            if self.tab_hr_err[1][index_hr_min]**2 + self.tab_hr_err[0][index_hr_max]**2 > 0:
+                self.hr_var_signif = self.hr_var/np.sqrt(self.tab_hr_err[1][index_hr_min]**2 + self.tab_hr_err[0][index_hr_max]**2)
+            else:
+                self.hr_var_signif = np.nan
+            
+        self.xmm_ul, self.xmm_ul_dates, self.xmm_ul_obsids = [], [], []
+
+        self.slew_ul, self.slew_ul_dates, self.slew_ul_obsids = [], [], []
+
+        self.chandra_ul, self.chandra_ul_dates = [], []
+
+        self.ra, self.dec = float(ra), float(dec)
+        self.pos_err = float(poserr)
+
+        self.glade_distance=[]
+
+        self.simbad_type = ''
+        self.has_sdss_widths = False
+            
+# ---------------------------------------------- #

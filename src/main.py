@@ -12,6 +12,8 @@ import numpy as np
 import os
 import subprocess
 import sys
+import shlex
+import catalog_information as dict_cat
 
 # ---------------------------------------- #
 
@@ -136,6 +138,9 @@ object_data = {"object_name": object_name,
 active_workflow = os.getcwd()
 active_workflow = active_workflow.replace("\\","/")
 
+# catalog_data_path
+catalog_datapath = os.path.join(active_workflow, "catalog_data").replace("\\", "/")
+
 # path of stilts software
 stilts_software_path = os.path.join(active_workflow, 'softwares/stilts.jar').replace("\\", "/")
 
@@ -145,6 +150,10 @@ modeling_file_path = os.path.join(active_workflow, 'modeling_result', name).repl
 
 if not os.path.exists(modeling_file_path):
     os.mkdir(modeling_file_path)
+
+output_name = os.path.join(modeling_file_path, 'Pointings').replace("\\", "/")
+if not os.path.exists(output_name):
+    os.mkdir(output_name)
 
 os_dictionary = {"modeling_file_path": modeling_file_path}
 
@@ -233,9 +242,9 @@ elif args.catalog == "compare_catalog":
 # --------------- count_rates --------------- #
 
 excel_data_path = os.path.join(active_workflow, 'excel_data').replace("\\", "/")
-count_rates, nearby_sources_table = f.count_rates(nearby_sources_table, model_dictionary, telescop_data)
-f.py_to_xlsx(excel_data_path=excel_data_path, count_rates=count_rates, object_data=object_data, args=args.catalog)
-# count_rates, nearby_sources_table = f.xlsx_to_py(excel_data_path=excel_data_path, nearby_sources_table=nearby_sources_table, object_data=object_data)
+# count_rates, nearby_sources_table = f.count_rates(nearby_sources_table, model_dictionary, telescop_data)
+# f.py_to_xlsx(excel_data_path=excel_data_path, count_rates=count_rates, object_data=object_data, args=args.catalog)
+count_rates, nearby_sources_table = f.xlsx_to_py(excel_data_path=excel_data_path, nearby_sources_table=nearby_sources_table, object_data=object_data)
 
 simulation_data['nearby_sources_table'] = nearby_sources_table
 
@@ -279,3 +288,71 @@ f.modeling(vignetting_factor=vignetting_factor, simulation_data=simulation_data,
 f.write_fits_file(nearby_sources_table=nearby_sources_table, simulation_data=simulation_data)
 
 # ----------------------------------------------- #
+
+# --------------- software --------------- # 
+
+master_source_path = os.path.join(catalog_datapath, 'Master_source.fits').replace("\\", "/")
+
+def select_master_sources_around_region(ra, dec, radius, output_name):
+    """Radius is in arcminutes"""
+    print(f"Extracting sources around region: RA {ra} and Dec {dec}")
+    master_cone_path = os.path.join(output_name, 'Master_source_cone.fits').replace("\\", "/")
+    command = (f"java -jar {stilts_software_path} tpipe {master_source_path} cmd='"+
+            f'select skyDistanceDegrees({ra},{dec},MS_RA,MS_DEC)*60<{radius} '+
+            f"' out={master_cone_path}")
+    command = shlex.split(command)
+    subprocess.run(command)
+
+
+catalogs = ["XMM", "Chandra", "Swift", "eRosita", "Slew", "RASS", "WGACAT", "Stacked"]
+
+def select_catalogsources_around_region(output_name):
+    print('Selecting catalog sources')
+    master_cone_path = os.path.join(output_name, 'Master_source_cone.fits').replace("\\", "/")
+    stilts_path = os.path.join('C:/Users/plamb_v00y0i4/Softwares/', 'stilts.jar')
+    for cat in catalogs:
+        path_to_cat_init = os.path.join(catalog_datapath, cat).replace("\\", "/")
+        path_to_cat_final = os.path.join(output_name, cat).replace("\\", "/")
+        command = (f"java -jar {stilts_path} tmatch2 matcher=exact \
+                   in1='{master_cone_path}' in2='{path_to_cat_init}.fits' out='{path_to_cat_final}.fits'\
+                    values1='{cat}' values2='{cat}_IAUNAME' find=all progress=none")
+        command = shlex.split(command)
+        subprocess.run(command)
+
+right_ascension = object_data["object_position"].ra.value
+declination = object_data["object_position"].dec.value
+select_master_sources_around_region(ra=right_ascension, dec=declination, radius=radius.value, output_name=output_name)
+select_catalogsources_around_region(output_name=output_name)
+master_sources = f.load_master_sources(output_name)
+
+number_graph = 1
+for multi_instrument_source in list(master_sources.values())[:number_graph]:
+    #Each multi_instrument_source is an object with the underlying catalog sources associated with it
+
+    #Here we compute the NICER off-axis angle between the source and the pointing
+    source_coords = SkyCoord(multi_instrument_source.ra*u.degree, multi_instrument_source.dec*u.degree, frame="icrs")
+    off_axis = object_data["object_position"].separation(source_coords)
+
+    plt.figure(figsize=(15, 8))
+    for catalog in multi_instrument_source.sources.keys():
+        #If a given catalog is contained in this source, it will be in the "sources" dictionary, catalog as key,
+        #source object as value
+        catalog_source = multi_instrument_source.sources[catalog]
+        tab_width = 2 * np.array(dict_cat.dictionary_catalog[catalog]["energy_band_half_width"])
+        for band_det in range(len(catalog_source.band_flux)):
+            #The band fluxes are stored in catalog_source.band_flux. They're in erg/s/cm2, so divide by tab_width to
+            #be in erg/s/cm2/keV. Here I plot them, but you can do whatever you want with those
+            plt.step(dict_cat.band_edges[catalog], 
+                     [catalog_source.band_flux[band_det][0] / tab_width[0]] 
+                     + list(catalog_source.band_flux[band_det] / tab_width),
+                     c=dict_cat.colors[catalog], where='pre')
+            plt.errorbar(dict_cat.dictionary_catalog[catalog]["energy_band_center"], catalog_source.band_flux[band_det] / tab_width,
+                         yerr=[catalog_source.band_flux_err[0][band_det] / tab_width,
+                               catalog_source.band_flux_err[1][band_det] / tab_width],
+                         fmt="o", markeredgecolor='gray', c=dict_cat.colors[catalog], alpha=0.4)
+        plt.step([], [], c=dict_cat.colors[catalog], label=catalog_source.iau_name)
+    plt.xlabel("Energy [keV]")
+    plt.ylabel(r"$F_{\nu}$ [$\mathrm{erg.s}^{-1}.\mathrm{cm}^{-2}.\mathrm{keV}^{-1}$]")
+    plt.legend()
+    plt.loglog()
+    plt.show()

@@ -1,12 +1,15 @@
 # --------------- Packages --------------- #
 
+from astropy.io import fits
 from astropy.table import Table
+from astropy.time import Time
 from astropy.coordinates import SkyCoord, Angle
 from astropy import units as u
 from termcolor import colored
 from astroquery.simbad import Simbad
 from typing import Dict, Tuple, Union, List
 from scipy.optimize import curve_fit
+from tqdm import tqdm
 
 import sys
 import os
@@ -15,6 +18,8 @@ import numpy as np
 import subprocess
 import matplotlib.pyplot as plt
 import openpyxl
+import catalog_information as dict_cat
+import catalog_class
 
 # ---------------------------------------- #
 
@@ -81,7 +86,7 @@ def choose_catalog(args_catalog) -> Tuple[str, str]:
             if args_catalog == 'Xmm_DR13':
                 print("\n")
                 print(f"{colored(args_catalog, 'yellow')} catalog is loading")
-                catalog_path = "catalog_data/4XMM_slim_DR13cat_v1.0.fits.gz"
+                catalog_path = "catalog_data/4XMM_slim_DR13cat_v1.0.fits"
                 print("-"*50)
                 valid_path = get_valid_file_path(catalog_path)
                 print("-"*50, "\n")
@@ -116,7 +121,7 @@ def choose_catalog(args_catalog) -> Tuple[str, str]:
                 catalog_1 = str(input("First catalog : "))
                 while True:
                     if catalog_1 == "Xmm_DR13":
-                        catalog_1_path = "catalog_data/4XMM_slim_DR13cat_v1.0.fits.gz"
+                        catalog_1_path = "catalog_data/4XMM_slim_DR13cat_v1.0.fits"
                         break
                     elif catalog_1 == "CSC_2.0":
                         catalog_1_path = "catalog_data/Chandra.fits"
@@ -134,7 +139,7 @@ def choose_catalog(args_catalog) -> Tuple[str, str]:
                 catalog_2 = str(input("Second catalog : "))
                 while True:
                     if catalog_2 == "Xmm_DR13":
-                        catalog_2_path = "catalog_data/4XMM_slim_DR13cat_v1.0.fits.gz"
+                        catalog_2_path = "catalog_data/4XMM_slim_DR13cat_v1.0.fits"
                         break
                     elif catalog_2 == "CSC_2.0":
                         catalog_2_path = "catalog_data/Chandra.fits"
@@ -352,7 +357,7 @@ def calculate_opti_point(simulation_data, nearby_src_position) -> Tuple[int, flo
     object_data = simulation_data['object_data']
     telescop_data = simulation_data['telescop_data']
 
-    min_value, max_value, step = -5.0, 5.0, 0.01
+    min_value, max_value, step = -5.0, 5.0, 0.1
     DeltaRA = Angle(np.arange(min_value, max_value, step), unit=u.deg)/60
     DeltaDEC = Angle(np.arange(min_value, max_value, step), unit=u.deg)/60
 
@@ -683,7 +688,7 @@ def modeling(vignetting_factor, simulation_data, column_dictionary) -> None:
     plt.show()
     
     
-# None important function
+# --------------- None important function --------------- #
 
 def py_to_xlsx(excel_data_path, count_rates, object_data, args) -> None:
     
@@ -703,7 +708,7 @@ def py_to_xlsx(excel_data_path, count_rates, object_data, args) -> None:
         sheet.cell(row=item + 1, column=1).value = count_rates[item]
     
     ct_rates_path = os.path.join(excel_data_path, f"{cat}_{object_data['object_name']}.xlsx").replace("\\", "/") 
-    wb.save(ct_rates_path)
+    wb.save(ct_rates_path.replace(" ", "_"))
 
 
 def xlsx_to_py(excel_data_path, nearby_sources_table, object_data) -> Tuple[List[float], Table]:
@@ -718,3 +723,121 @@ def xlsx_to_py(excel_data_path, nearby_sources_table, object_data) -> Tuple[List
     nearby_sources_table["count_rate"] = count_rates
     
     return count_rates, nearby_sources_table
+
+
+# --------------- Software function ---------- # 
+
+
+def load_relevant_sources(cat, file_to_load) -> Dict:
+    print(f"Loading {cat}...")
+    try:
+        with fits.open(file_to_load, memmap=True) as raw_data:
+            sources_raw = Table(raw_data[1].data)
+            sources_raw = sources_raw[np.argsort(sources_raw[dict_cat.src_names[cat]])]
+    except Exception as error:
+        print(f"An error occured : {colored(error, 'magenta')}")
+        
+    indices_for_source = [i for i in range(1, len(sources_raw)) if (sources_raw[dict_cat.src_names[cat]][i] != sources_raw[dict_cat.src_names[cat]][i - 1])]
+
+    if cat == "Swift":
+        time_start_obs = Time(sources_raw["StartTime_UTC"], format="iso").mjd
+        time_end_obs = Time(sources_raw["StopTime_UTC"], format="iso").mjd
+        time_start_obs = np.split(time_start_obs, indices_for_source)
+        time_end_obs = np.split(time_end_obs, indices_for_source)
+        
+    time_steps = np.split(np.array(sources_raw[dict_cat.dictionary_catalog[cat]["time_name"]]), indices_for_source)
+    if cat in ("XMM", "Swift", "Stacked"):
+        obs_ids = np.split(np.array(sources_raw[dict_cat.dictionary_catalog[cat]["obsid_name"]]), indices_for_source)
+    else:
+        obs_ids = [[] for elt in indices_for_source]
+    names = np.split(np.array(sources_raw[dict_cat.src_names[cat]]), indices_for_source)
+
+    band_flux, band_flux_errors_pos, band_flux_errors_neg = [], [], []
+    
+    flux = np.split(dict_cat.dictionary_catalog[cat]["conv_factor"]*np.array(sources_raw[dict_cat.dictionary_catalog[cat]["flux_obs"]]), indices_for_source)
+    flux_errors_neg = np.split(dict_cat.dictionary_catalog[cat]["conv_factor"]*np.array(sources_raw[dict_cat.dictionary_catalog[cat]["flux_obs_err"][0]]), indices_for_source)
+    flux_errors_pos = np.split(dict_cat.dictionary_catalog[cat]["conv_factor"]*np.array(sources_raw[dict_cat.dictionary_catalog[cat]["flux_obs_err"][1]]), indices_for_source)
+    flux_errors = [[flux_neg, flux_pos] for (flux_neg, flux_pos) in zip(flux_errors_neg, flux_errors_pos)]
+    
+    band_flux_obs = dict_cat.dictionary_catalog[cat]["band_flux_obs"] #band_flux_obs_err
+    band_flux_obs_err_neg, band_flux_obs_err_pos = dict_cat.dictionary_catalog[cat]["band_flux_obs_err"][0], dict_cat.dictionary_catalog[cat]["band_flux_obs_err"][1]
+    for band_flux_name, band_flux_err_neg_name, band_flux_err_pos_name in zip(band_flux_obs, band_flux_obs_err_neg, band_flux_obs_err_pos):
+        band_flux.append(np.array(sources_raw[band_flux_name]))
+        band_flux_errors_pos.append(np.array(sources_raw[band_flux_err_pos_name]))
+        band_flux_errors_neg.append(np.array(sources_raw[band_flux_err_neg_name]))
+        
+    band_flux = np.transpose(np.array(band_flux))
+    band_flux_errors_pos = np.transpose(np.array(band_flux_errors_pos))
+    band_flux_errors_neg = np.transpose(np.array(band_flux_errors_neg))
+    band_flux = np.split(band_flux, indices_for_source)
+    band_flux_errors_pos = np.split(band_flux_errors_pos, indices_for_source)
+    band_flux_errors_neg = np.split(band_flux_errors_neg, indices_for_source)
+
+    band_flux_err = [[flux_neg, flux_pos] for (flux_neg, flux_pos) in zip(band_flux_errors_neg, band_flux_errors_pos)]
+    dict_sources = {}
+    
+    #This loops on all sources, to build the Source objects
+    for (index, flux, flux_error, time, name, band_flux, band_flux_err, obsid) in zip(range(len(flux)),flux, flux_errors, time_steps, names, band_flux, band_flux_err, obs_ids):
+            swift_stacked_flux=[]
+            swift_stacked_flux_err=[[],[]]
+            swift_stacked_times=[[],[]]
+            if cat == "Swift":
+                tab_src_timestartobs = time_start_obs[index]
+                tab_src_timeendobs = time_end_obs[index]
+
+                #We select the stacked Swift detections first
+                swift_stacked_flux=flux[obsid>1e10]
+                swift_stacked_flux_err=[flux_error[0][obsid>1e10],flux_error[1][obsid>1e10]]
+                swift_stacked_times=[tab_src_timestartobs[obsid>1e10], tab_src_timeendobs[obsid>1e10]]
+
+                # We then treat the classical, non-stacked Swift detections
+                flux = flux[obsid < 1e10]
+                flux_error = [flux_error[0][obsid < 1e10], flux_error[1][obsid < 1e10]]
+                time = time[np.where(obsid < 1e10)]
+                band_flux = band_flux[obsid < 1e10]
+                band_flux_err = [band_flux_err[0][obsid < 1e10], band_flux_err[1][obsid < 1e10]]
+                obsid = obsid[obsid < 1e10]
+
+            band_data = catalog_class.BandFlux(flux=band_flux, flux_err=band_flux_err)
+            swift_data = catalog_class.SwiftData(stacked_flux=swift_stacked_flux, stacked_flux_err=swift_stacked_flux_err, stacked_times=swift_stacked_times)
+            source = catalog_class.Source(catalog=cat, iau_name=name[0].strip(), flux=flux, flux_err=flux_error, time_steps=time, 
+                            band_flux_data=band_data, obsids=[...], swift_data=swift_data, xmm_offaxis=[], short_term_var=[])
+            # **kwargs : obsids, swift_data, xmm_offaxis, short_term_var
+            
+            dict_sources[name[0].strip()] = source
+            
+    return dict_sources
+
+
+def load_master_sources(file_to_load) -> Dict:
+    """Loads the multi-instruments sources in a dictionary"""
+    print(f"Loading Master Sources...")
+    path_file_to_load = os.path.join(file_to_load, 'Master_source_cone.fits').replace("\\", "/")
+    try:
+        with fits.open(path_file_to_load, memmap=True) as raw_data:
+            sources_raw = Table(raw_data[1].data)
+    except Exception as error:
+        print(f"An error occured : {colored(error, 'magenta')}")
+        
+    tab_catalog_sources = {}
+    for cat in dict_cat.catalogs:
+        catalog_path = os.path.join(file_to_load, cat+'.fits').replace("\\", "/")
+        tab_catalog_sources[cat] = load_relevant_sources(cat, catalog_path)
+        
+    dict_master_sources = {}
+    for line in tqdm(sources_raw):
+        tab_sources_for_this_ms = []
+        for cat in dict_cat.catalogs:
+            if line[cat] != '':
+                name = line[cat].strip()
+                if name in tab_catalog_sources[cat].keys():
+                    tab_sources_for_this_ms.append(tab_catalog_sources[cat][name])
+        ms_id = line["MS_ID"]
+        ms = catalog_class.MasterSource(ms_id, tab_sources_for_this_ms, line["MS_RA"], line["MS_DEC"], line["MS_POSERR"])
+        dict_master_sources[ms_id] = ms
+        
+    print("Master sources loaded!")
+    return dict_master_sources
+
+
+# -------------------------------------------- #
