@@ -5,6 +5,10 @@ from astropy import units as u
 from astropy.table import Table
 from termcolor import colored
 from astroquery.simbad import Simbad
+from jaxspec.model.multiplicative import Tbabs
+from jaxspec.model.additive import Powerlaw
+from jax.config import config
+from jaxspec.data.instrument import Instrument
 
 import argparse
 import function as f
@@ -14,10 +18,13 @@ import subprocess
 import sys
 import shlex
 import catalog_information as dict_cat
+import numpyro
 
 # ---------------------------------------- #
 
 # --------------- Initialization --------------- #
+
+catalogs = ["XMM", "Chandra", "Swift", "eRosita", "Slew", "RASS", "WGACAT", "Stacked"]
 
 parser = argparse.ArgumentParser(description="Code optimal pointing point for NICER",
                                  epilog="Focus an object with his name or his coordinate")
@@ -52,21 +59,21 @@ if args.name:
     while True:
         if '_' in args.name:
             object_name = args.name.replace('_', " ")
-            print(f"Collecting data for {colored(object_name, 'magenta')}")
+            print(f"\nCollecting data for {colored(object_name, 'magenta')}")
         try:
             object_position = f.get_coord_psr(object_name)
-            print(f"{colored(object_name, 'green')} is in Simbad Database, here is his coordinate :\n{object_position}")
+            print(f"\n{colored(object_name, 'green')} is in Simbad Database, here is his coordinate :\n{object_position}")
             break
         except Exception as error:
             print(f"Error : {colored(object_name, 'red')}, isn't in Simbad Database")
             object_name = str(input("Enter another name : \n"))
             args.name = object_name
-            print(f"Collecting data for {colored(object_name, 'magenta')}")
+            print(f"\nCollecting data for {colored(object_name, 'magenta')}")
     catalog_path, catalog_name = f.choose_catalog(args.catalog)
 elif args.coord:
     ra, dec = args.coord
     while True:
-        print(f"Collecting data for coord : {colored([ra, dec], 'magenta')}")
+        print(f"\nCollecting data for coord : {colored([ra, dec], 'magenta')}")
         try:
             object_name = Simbad.query_region(f"{ra}d {dec}d", radius="1s")['MAIN_ID'][0]
             print(f"{colored([ra, dec], 'green')} is in Simbad Database, here is his name :\n{object_name}")
@@ -92,37 +99,6 @@ while True:
             continue
 
 # ------------------------------------------------- #
-
-# --------------- User table --------------- #
-
-user_list = f.define_sources_list() 
-
-if len(user_list) != 0:
-    colnames = ['Name', 'Right Ascension', 'Declination', 'Var Value']
-    user_table = Table(rows=user_list, names=colnames)
-    print("Here is the list given by the User : \n", user_table, "\n")
-else:
-    user_table = Table()
-    print("User don't defined any additionnal sources. \n")
-
-# ------------------------------------------ #
-
-
-# --------------- Load Nicer parameters --------------- #
-
-print('-'*50)
-nicer_parameters_path = f.get_valid_file_path("catalog_data/NICER_PSF.dat")
-EffArea, OffAxisAngle = np.loadtxt(nicer_parameters_path, unpack=True, usecols=(0, 1))
-print('-'*50)
-
-telescop_data = {"telescop_name": "nicer",
-                 "EffArea": EffArea,
-                 "OffAxisAngle": OffAxisAngle,
-                 "min_value": 0.3,
-                 "max_value": 10.0,
-                 "energy_band": "0.2-12.0"}
-
-# ----------------------------------------------------- #
 
 # --------------- object_data --------------- #
 
@@ -159,6 +135,37 @@ os_dictionary = {"modeling_file_path": modeling_file_path}
 
 # --------------------------------------------- #
 
+# --------------- User table --------------- #
+
+add_source_table = f.add_source_list(active_workflow=active_workflow)
+
+if len(add_source_table) != 0:
+    colnames = ['Name', 'Right Ascension', 'Declination', 'Var Value']
+    print("\nHere is the list given by the User : \n", add_source_table, "\n")
+else:
+    print("\nUser don't defined any additionnal sources. \n")
+
+# ------------------------------------------ #
+
+# --------------- Load Nicer parameters --------------- #
+
+print('-'*50)
+print(f"{colored('Load NICER parameters : ', 'magenta')}")
+nicer_parameters_path = f.get_valid_file_path("NICER_data/NICER_PSF.dat")
+nicer_data_arf = f.get_valid_file_path("NICER_data/nixtiaveonaxis20170601v005.arf")
+nicer_data_rmf = f.get_valid_file_path("NICER_data/nixtiref20170601v003.rmf")
+EffArea, OffAxisAngle = np.loadtxt(nicer_parameters_path, unpack=True, usecols=(0, 1))
+print('-'*50)
+
+telescop_data = {"telescop_name": "nicer",
+                 "EffArea": EffArea,
+                 "OffAxisAngle": OffAxisAngle,
+                 "min_value": 0.3,
+                 "max_value": 10.0,
+                 "energy_band": "0.2-12.0"}
+
+# ----------------------------------------------------- #
+
 # --------------- simulation_data --------------- #
 
 simulation_data = {"object_data": object_data,
@@ -184,12 +191,13 @@ if args.catalog == "Xmm_DR13":
         os.mkdir(xmm_closest_catalog)
     
     os_dictionary = {"modeling_file_path": modeling_file_path,
+                     "catalog_directory" : xmm_directory,
                      "cloesest_dataset_path": xmm_closest_catalog,
                      "img": xmm_img}
     
     simulation_data["os_dictionary"] = os_dictionary
     
-    xmm = XmmCatalog(catalog_path=catalog_path, radius=radius, dictionary=object_data, user_table=user_table, os_dictionary=os_dictionary)
+    xmm = XmmCatalog(catalog_path=catalog_path, radius=radius, dictionary=object_data, user_table=add_source_table, os_dictionary=os_dictionary)
     nearby_sources_table, nearby_sources_position = xmm.nearby_sources_table,  xmm.nearby_sources_position
     model_dictionary = xmm.model_dictionary
     
@@ -216,7 +224,7 @@ elif args.catalog == "CSC_2.0":
                      "img": chandra_img}
     
                     # cs = cone search (Harvard features)
-    csc = Chandra(catalog_path=catalog_path, radius=radius, dictionary=object_data, user_table=user_table, os_dictionary=os_dictionary)
+    csc = Chandra(catalog_path=catalog_path, radius=radius, dictionary=object_data, user_table=add_source_table, os_dictionary=os_dictionary)
     # nearby_sources_table, nearby_sources_position = csc.nearby_sources_table, csc.nearby_sources_position
     cs_nearby_soucres_table, cs_nearby_sources_position = csc.cs_nearby_sources_table, csc.cs_nearby_sources_position
     nearby_sources_table, nearby_sources_position = cs_nearby_soucres_table, cs_nearby_sources_position
@@ -225,17 +233,17 @@ elif args.catalog == "CSC_2.0":
     
 elif args.catalog == "Swift":
     # Find the optimal pointing point with the Swift catalog
-    swi = Swift(catalog_path=catalog_path, radius=radius, dictionary=object_data, user_table=user_table)
+    swi = Swift(catalog_path=catalog_path, radius=radius, dictionary=object_data, user_table=add_source_table)
     nearby_sources_table, nearby_sources_position = swi.nearby_sources_table, swi.nearby_sources_position
     model_dictionary = swi.dictionary_model
 elif args.catalog == "eRosita":
     # Find the optimal pointing with the eRosita catalog
-    eRo = eRosita(catalog_path=catalog_path, radius=radius, dictionary=object_data, user_table=user_table)
+    eRo = eRosita(catalog_path=catalog_path, radius=radius, dictionary=object_data, user_table=add_source_table)
     nearby_sources_table, nearby_sources_position = eRo.nearby_sources_table, eRo.nearby_sources_position
     model_dictionary = eRo.dictionary_model
 elif args.catalog == "compare_catalog":
     # Find the optimal pointing point with two catalogs to compare data
-    compare_class = CompareCatalog(catalog_path=catalog_path, radius=radius, dictionary=object_data, user_table=user_table)
+    compare_class = CompareCatalog(catalog_path=catalog_path, radius=radius, dictionary=object_data, user_table=add_source_table)
     compare_class.opti_point_calcul(simulation_data=simulation_data)
     sys.exit()
     
@@ -304,16 +312,13 @@ def select_master_sources_around_region(ra, dec, radius, output_name):
     subprocess.run(command)
 
 
-catalogs = ["XMM", "Chandra", "Swift", "eRosita", "Slew", "RASS", "WGACAT", "Stacked"]
-
 def select_catalogsources_around_region(output_name):
     print('Selecting catalog sources')
     master_cone_path = os.path.join(output_name, 'Master_source_cone.fits').replace("\\", "/")
-    stilts_path = os.path.join('C:/Users/plamb_v00y0i4/Softwares/', 'stilts.jar')
     for cat in catalogs:
         path_to_cat_init = os.path.join(catalog_datapath, cat).replace("\\", "/")
         path_to_cat_final = os.path.join(output_name, cat).replace("\\", "/")
-        command = (f"java -jar {stilts_path} tmatch2 matcher=exact \
+        command = (f"java -jar {stilts_software_path} tmatch2 matcher=exact \
                    in1='{master_cone_path}' in2='{path_to_cat_init}.fits' out='{path_to_cat_final}.fits'\
                     values1='{cat}' values2='{cat}_IAUNAME' find=all progress=none")
         command = shlex.split(command)
@@ -324,35 +329,32 @@ declination = object_data["object_position"].dec.value
 select_master_sources_around_region(ra=right_ascension, dec=declination, radius=radius.value, output_name=output_name)
 select_catalogsources_around_region(output_name=output_name)
 master_sources = f.load_master_sources(output_name)
+f.master_source_plot(master_sources=master_sources, object_data=object_data, number_graph=1)
 
-number_graph = 1
-for multi_instrument_source in list(master_sources.values())[:number_graph]:
-    #Each multi_instrument_source is an object with the underlying catalog sources associated with it
+# ---------------------------------------- #
 
-    #Here we compute the NICER off-axis angle between the source and the pointing
-    source_coords = SkyCoord(multi_instrument_source.ra*u.degree, multi_instrument_source.dec*u.degree, frame="icrs")
-    off_axis = object_data["object_position"].separation(source_coords)
+# --------------- modeling spectra with jaxspec --------------- #
 
-    plt.figure(figsize=(15, 8))
-    for catalog in multi_instrument_source.sources.keys():
-        #If a given catalog is contained in this source, it will be in the "sources" dictionary, catalog as key,
-        #source object as value
-        catalog_source = multi_instrument_source.sources[catalog]
-        tab_width = 2 * np.array(dict_cat.dictionary_catalog[catalog]["energy_band_half_width"])
-        for band_det in range(len(catalog_source.band_flux)):
-            #The band fluxes are stored in catalog_source.band_flux. They're in erg/s/cm2, so divide by tab_width to
-            #be in erg/s/cm2/keV. Here I plot them, but you can do whatever you want with those
-            plt.step(dict_cat.band_edges[catalog], 
-                     [catalog_source.band_flux[band_det][0] / tab_width[0]] 
-                     + list(catalog_source.band_flux[band_det] / tab_width),
-                     c=dict_cat.colors[catalog], where='pre')
-            plt.errorbar(dict_cat.dictionary_catalog[catalog]["energy_band_center"], catalog_source.band_flux[band_det] / tab_width,
-                         yerr=[catalog_source.band_flux_err[0][band_det] / tab_width,
-                               catalog_source.band_flux_err[1][band_det] / tab_width],
-                         fmt="o", markeredgecolor='gray', c=dict_cat.colors[catalog], alpha=0.4)
-        plt.step([], [], c=dict_cat.colors[catalog], label=catalog_source.iau_name)
-    plt.xlabel("Energy [keV]")
-    plt.ylabel(r"$F_{\nu}$ [$\mathrm{erg.s}^{-1}.\mathrm{cm}^{-2}.\mathrm{keV}^{-1}$]")
-    plt.legend()
-    plt.loglog()
-    plt.show()
+# setup jaxspec
+config.update("jax_enable_x64", True)
+numpyro.set_platform("cpu")
+
+# setup spectra directory
+spectra_directory = os.path.join(os_dictionary["catalog_directory"], "spectra_data").replace("\\", "/")
+if not os.path.exists(spectra_directory):
+    os.mkdir(spectra_directory)
+os_dictionary["spectra_directory"] = spectra_directory
+
+# define caracteristic model here --> exp(-nh*$\sigma$) * x ** (-$\Gamma$)
+model = Tbabs() * Powerlaw()
+
+# load instrument parameters
+instrument = Instrument.from_ogip_file(nicer_data_arf, nicer_data_rmf, exposure=50_000)
+
+# load all of the sources spetcra
+total_spectra = f.modeling_source_spectra(nearby_sources_table=nearby_sources_table, instrument=instrument, model=model)
+
+# plot of all spectra data
+f.total_plot_spectra(total_spectra=total_spectra, instrument=instrument)
+
+# ------------------------------------------------------------- # 

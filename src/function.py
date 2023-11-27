@@ -10,6 +10,7 @@ from astroquery.simbad import Simbad
 from typing import Dict, Tuple, Union, List
 from scipy.optimize import curve_fit
 from tqdm import tqdm
+from jaxspec.data.util import fakeit_for_multiple_parameters
 
 import sys
 import os
@@ -238,6 +239,32 @@ def define_sources_list() -> Table:
    
     return UserList
 
+
+def add_source_list(active_workflow) -> Table:
+    print(f"You can add a {colored('.fits', 'blue')} file to your modeling ! ")
+    while True:
+        try:
+            choice = str(input("Add sources to calculation? (yes/y or no/n): ")).lower()
+
+            if choice in ['no', 'n']:
+                add_source_table = Table()
+                return add_source_table
+            elif choice in ['yes', 'y']:
+                break
+            else:
+                raise ValueError("Invalid input. Please enter 'yes' or 'y' for yes, 'no' or 'n' for no.")
+        except ValueError as error:
+            print(f"An error occured {error}")
+        
+    path = str(input("Enter the file path : \n"))
+    path = os.path.join(active_workflow, "catalog_data/add_sources.fits").replace("\\", "/")
+    valid_path = get_valid_file_path(path)
+    
+    with fits.open(valid_path, memmap=True) as data:
+        add_source_table = Table(data[1].data)
+        
+    return add_source_table
+    
 
 def get_coord_psr(name) -> SkyCoord:
     """
@@ -618,7 +645,7 @@ def write_fits_file(nearby_sources_table, simulation_data) -> None:
     print(f"Nearby sources table was created in : {colored(nearby_sources_table_path, 'magenta')}")
     
     
-def modeling(vignetting_factor, simulation_data, column_dictionary) -> None:
+def modeling(vignetting_factor: List, simulation_data: Dict, column_dictionary: Dict) -> None:
     
     object_data = simulation_data["object_data"]
     os_dictionary = simulation_data["os_dictionary"]
@@ -690,7 +717,7 @@ def modeling(vignetting_factor, simulation_data, column_dictionary) -> None:
     
 # --------------- None important function --------------- #
 
-def py_to_xlsx(excel_data_path, count_rates, object_data, args) -> None:
+def py_to_xlsx(excel_data_path: str, count_rates: List, object_data: Dict, args: str) -> None:
     
     if args == "Xmm_DR13":
         cat = "xmm"
@@ -711,7 +738,7 @@ def py_to_xlsx(excel_data_path, count_rates, object_data, args) -> None:
     wb.save(ct_rates_path.replace(" ", "_"))
 
 
-def xlsx_to_py(excel_data_path, nearby_sources_table, object_data) -> Tuple[List[float], Table]:
+def xlsx_to_py(excel_data_path: str, nearby_sources_table: Table, object_data: Dict) -> Tuple[List[float], Table]:
     ct_rates_path = os.path.join(excel_data_path, f"xmm_{object_data['object_name']}.xlsx".replace(" ", "_"))
     wb = openpyxl.load_workbook(ct_rates_path)
     sheet = wb.active
@@ -728,7 +755,7 @@ def xlsx_to_py(excel_data_path, nearby_sources_table, object_data) -> Tuple[List
 # --------------- Software function ---------- # 
 
 
-def load_relevant_sources(cat, file_to_load) -> Dict:
+def load_relevant_sources(cat: str, file_to_load: str) -> Dict:
     print(f"Loading {cat}...")
     try:
         with fits.open(file_to_load, memmap=True) as raw_data:
@@ -758,7 +785,7 @@ def load_relevant_sources(cat, file_to_load) -> Dict:
     flux_errors_neg = np.split(dict_cat.dictionary_catalog[cat]["conv_factor"]*np.array(sources_raw[dict_cat.dictionary_catalog[cat]["flux_obs_err"][0]]), indices_for_source)
     flux_errors_pos = np.split(dict_cat.dictionary_catalog[cat]["conv_factor"]*np.array(sources_raw[dict_cat.dictionary_catalog[cat]["flux_obs_err"][1]]), indices_for_source)
     flux_errors = [[flux_neg, flux_pos] for (flux_neg, flux_pos) in zip(flux_errors_neg, flux_errors_pos)]
-    
+
     band_flux_obs = dict_cat.dictionary_catalog[cat]["band_flux_obs"] #band_flux_obs_err
     band_flux_obs_err_neg, band_flux_obs_err_pos = dict_cat.dictionary_catalog[cat]["band_flux_obs_err"][0], dict_cat.dictionary_catalog[cat]["band_flux_obs_err"][1]
     for band_flux_name, band_flux_err_neg_name, band_flux_err_pos_name in zip(band_flux_obs, band_flux_obs_err_neg, band_flux_obs_err_pos):
@@ -809,7 +836,7 @@ def load_relevant_sources(cat, file_to_load) -> Dict:
     return dict_sources
 
 
-def load_master_sources(file_to_load) -> Dict:
+def load_master_sources(file_to_load: str) -> Dict:
     """Loads the multi-instruments sources in a dictionary"""
     print(f"Loading Master Sources...")
     path_file_to_load = os.path.join(file_to_load, 'Master_source_cone.fits').replace("\\", "/")
@@ -840,4 +867,115 @@ def load_master_sources(file_to_load) -> Dict:
     return dict_master_sources
 
 
+def master_source_plot(master_sources: Dict, object_data: Dict, number_graph: int) -> None:
+    for multi_instrument_source in list(master_sources.values())[:number_graph]:
+        #Each multi_instrument_source is an object with the underlying catalog sources associated with it
+
+        #Here we compute the NICER off-axis angle between the source and the pointing
+        source_coords = SkyCoord(multi_instrument_source.ra*u.degree, multi_instrument_source.dec*u.degree, frame="icrs")
+        off_axis = object_data["object_position"].separation(source_coords)
+
+        plt.figure(figsize=(15, 8))
+        for catalog in multi_instrument_source.sources.keys():
+            #If a given catalog is contained in this source, it will be in the "sources" dictionary, catalog as key,
+            #source object as value
+            catalog_source = multi_instrument_source.sources[catalog]
+            tab_width = 2 * np.array(dict_cat.dictionary_catalog[catalog]["energy_band_half_width"])
+            for band_det in range(len(catalog_source.band_flux)):
+                #The band fluxes are stored in catalog_source.band_flux. They're in erg/s/cm2, so divide by tab_width to
+                #be in erg/s/cm2/keV. Here I plot them, but you can do whatever you want with those
+                plt.step(dict_cat.band_edges[catalog], 
+                        [catalog_source.band_flux[band_det][0] / tab_width[0]] 
+                        + list(catalog_source.band_flux[band_det] / tab_width),
+                        c=dict_cat.colors[catalog], where='pre')
+                plt.errorbar(dict_cat.dictionary_catalog[catalog]["energy_band_center"], catalog_source.band_flux[band_det] / tab_width,
+                            yerr=[catalog_source.band_flux_err[0][band_det] / tab_width,
+                                catalog_source.band_flux_err[1][band_det] / tab_width],
+                            fmt="o", markeredgecolor='gray', c=dict_cat.colors[catalog], alpha=0.4)
+            plt.step([], [], c=dict_cat.colors[catalog], label=f"{catalog_source.iau_name}, {catalog}")
+        plt.xlabel("Energy [keV]")
+        plt.ylabel(r"$F_{\nu}$ [$\mathrm{erg.s}^{-1}.\mathrm{cm}^{-2}.\mathrm{keV}^{-1}$]")
+        plt.legend()
+        plt.loglog()
+        plt.show()
+
 # -------------------------------------------- #
+
+# --------------- modeling spectra with jaxspec --------------- # 
+
+def modeling_source_spectra(nearby_sources_table: Table, instrument, model) -> Dict:
+    print(f"\n{colored('Modeling spectra...', 'yellow', attrs=['underline'])}")
+    total_spectra = []
+    size = 10_000
+    
+    for index, vignet_factor in tqdm(enumerate(nearby_sources_table["vignetting_factor"])):
+        parameters = {}
+        parameters = {
+            "tbabs_1": {"N_H": np.full(size, nearby_sources_table["Nh"][index]/3e22)},
+            "powerlaw_1": {
+                "alpha": np.full(size, nearby_sources_table["Photon Index"][index] if nearby_sources_table["Photon Index"][index] else 1.7),
+                "norm": np.full(size, 1),
+            }
+        }
+        
+        spectra = fakeit_for_multiple_parameters(instrument=instrument, model=model, parameters=parameters) * vignet_factor
+
+        total_spectra.append(spectra)
+        
+    return total_spectra
+    
+
+def plot_spectra(total_spectra: Dict) -> None:
+    pass
+
+
+def total_plot_spectra(total_spectra: List, instrument) -> None:
+    
+    figure, axes = plt.subplots(1, 3, figsize=(17, 8), sharey=True)
+    figure.suptitle("Spectra modeling", fontsize=20)
+    figure.text(0.5, 0.04, 'Energy [keV]', ha='center', va='center', fontsize=16)
+    figure.text(0.085, 0.5, 'Counts', ha='center', va='center', rotation='vertical', fontsize=16)
+
+    ax0 = axes[0]
+    for spectra in tqdm(total_spectra):
+        ax0.step(instrument.out_energies[0],
+                np.median(spectra, axis=0),
+                where="post")
+    ax0.loglog()
+    ax0.set_title("Spectra from Nearby Sources")
+
+    percentile = np.percentile(total_spectra,(10, 50, 90), axis=0)
+
+    ax1 = axes[1]
+    ax1.step(instrument.out_energies[0],
+            np.median(percentile[1], axis=0),
+            where='post', color='black'
+            )
+    ax1.set_title("Median Spectrum")
+    ax1.loglog()
+
+    ax2 = axes[2]
+    ax2.step(instrument.out_energies[0],
+            np.median(percentile[0], axis=0),
+            where='post', color='darkorange', label='$10^{th}$ percentile'
+            )
+    ax2.step(instrument.out_energies[0],
+            np.median(percentile[1], axis=0),
+            where='post', color='black', linewidth=0.5
+            )
+    ax2.step(instrument.out_energies[0],
+            np.median(percentile[2], axis=0),
+            where='post', color='red', label='$90^{th}$ percentile'
+            )
+    ax2.fill_between(instrument.out_energies[0],
+                    np.median(percentile[0], axis=0),
+                    np.median(percentile[2], axis=0),
+                    alpha=0.2, color='red', hatch='\\'*3
+                    )
+    ax2.legend(loc='upper right')
+    ax2.set_title("Spectral Envelope")
+    ax2.loglog()
+    
+    plt.show()
+
+# ------------------------------------------------------------- #

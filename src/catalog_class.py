@@ -125,7 +125,7 @@ class XmmCatalog:
         Returns:
             result_table (astropy.table.Table): The catalog data converted into an Astropy Table.
         """
-        with fits.open(catalog_path) as data:
+        with fits.open(catalog_path, memmap=True) as data:
             result_table = Table(data[1].data)
             data.close()
             return result_table
@@ -166,9 +166,8 @@ class XmmCatalog:
             if min_ra/u.deg < self.xmm_catalog['SC_RA'][number] < max_ra/u.deg and min_dec/u.deg < self.xmm_catalog['SC_DEC'][number] < max_dec/u.deg:
                 small_table.add_row(self.xmm_catalog[number])
                 
-        src_position = SkyCoord(ra=small_table['SC_RA'], dec=small_table['SC_DEC'], unit=u.deg)
-                
         if len(user_table) == 0:
+            src_position = SkyCoord(ra=small_table['SC_RA'], dec=small_table['SC_DEC'], unit=u.deg)
             for number in tqdm(range(len(small_table))):
                 if f.ang_separation(object_position, src_position[number]) < radius:
                     nearby_src_table.add_row(small_table[number])
@@ -178,7 +177,8 @@ class XmmCatalog:
             for number in range(len(user_table)):
                 small_table.add_row(user_table[number])
                 
-            for number in range(len(small_table)):
+            src_position = SkyCoord(ra=small_table['SC_RA'], dec=small_table['SC_DEC'], unit=u.deg)
+            for number in tqdm(range(len(small_table))):
                 if f.ang_separation(object_position, src_position[number]) < radius:
                     nearby_src_table.add_row(small_table[number])
             nearby_src_position = SkyCoord(ra=nearby_src_table['SC_RA'], dec=nearby_src_table['SC_DEC'], unit=u.deg)
@@ -277,6 +277,22 @@ class XmmCatalog:
         plt.show()
 
 
+    def empty_row(self, catalog):
+        new_row = {}
+        for nom, type in catalog.dtype:
+            if 'i' in type or 'u' in type:  # Types entiers
+                new_row[nom] = 0
+            elif 'f' in type:  # Types flottants
+                new_row[nom] = np.nan
+            elif 'U' in type:  # Types chaîne de caractères
+                new_row[nom] = ''
+            elif '?' in type:  # Type booléen
+                new_row[nom] = False
+            else:
+                new_row[nom] = None
+        return new_row
+
+
     def get_phoindex_nh(self) -> Tuple[Table, Table]:
         """
         Computes and visualizes the photon index and hydrogen column density (Nh) for each source.
@@ -300,14 +316,20 @@ class XmmCatalog:
                 index = list(self.xmm_dr11_catalog['IAUNAME']).index(name)
                 index_dr11 = np.append(index_dr11, index)
                 xmm_dr_11_table.add_row(self.xmm_dr11_catalog[index])
+            else:
+                print(f"{colored('Missing data in Xmm_DR11 : ', 'red')} {name}")
+                index_dr11 = np.append(index_dr11, np.nan)
+                xmm_dr_11_table.add_row(self.empty_row([]))
+                
+
         index_x2a = np.array([], dtype=int)
         for det_id in xmm_dr_11_table["DETID"]:
-            if det_id in self.x2a_catalog["DETID"]:
+            if det_id in self.x2a_catalog["DETID"]: 
                 index = list(self.x2a_catalog["DETID"]).index(det_id)
                 index_x2a = np.append(index_x2a, index)
             else:
                 index_x2a = np.append(index_x2a, "No data found")
-                
+
         column_names = ["Index in nearby_sources_table", "Index in xmm_dr11", "Index in x2a"]
         column_data = [[item for item in range(number_source)], index_dr11, index_x2a]
         index_table = Table(names=column_names,
@@ -319,7 +341,7 @@ class XmmCatalog:
         for number in range(number_source):
             if index_table["Index in x2a"][number] != "No data found":
                 nh_value = self.x2a_catalog["logNH_med"][number]
-                column_nh = np.append(column_nh, np.exp(nh_value) * np.log(10))
+                column_nh = np.append(column_nh, np.exp(nh_value * np.log(10)))
                 column_phoindex = np.append(column_phoindex, self.x2a_catalog['PhoIndex_med'][number])
             else:
                 column_nh = np.append(column_nh, 3e20)
@@ -640,7 +662,7 @@ class Chandra:
         result_table : astropy.table.Table
             The table containing data read from the catalog file.
         """
-        with fits.open(catalog_path) as data:
+        with fits.open(catalog_path, memmap=True) as data:
             result_table = Table(data[1].data)
             data.close()
             return result_table
@@ -1023,7 +1045,7 @@ class Swift:
         Returns:
         - Table: The catalog of Swift sources.
         """
-        with fits.open(catalog_path) as data:
+        with fits.open(catalog_path, memmap=True) as data:
             result_table = Table(data[1].data)
             data.close()
             return result_table
@@ -1153,7 +1175,7 @@ class eRosita:
         Returns:
         - Table: The catalog of eRosita sources.
         """
-        with fits.open(catalog_path) as data:
+        with fits.open(catalog_path, memmap=True) as data:
             result_table = Table(data[1].data)
             data.close()
             return result_table
@@ -1310,7 +1332,7 @@ class CompareCatalog:
     
     def open_catalog(self, catalogs_path: str, radius: Quantity, dictionary: dict) -> Tuple[Table, Table, str, str]:
         if "catalog_data/Chandra.fits" not in catalogs_path:
-            with fits.open(catalogs_path[0]) as data1, fits.open(catalogs_path[1]) as data2:
+            with fits.open(catalogs_path[0], memmap=True) as data1, fits.open(catalogs_path[1], memmap=True) as data2:
                 result_1, result_2 = Table(data1[1].data), Table(data2[1].data)
                 data1.close()
                 data2.close()
@@ -1318,7 +1340,7 @@ class CompareCatalog:
         else:
             index = catalogs_path.index("catalog_data/Chandra.fits")
             if index == 0 :
-                with fits.open(catalogs_path[1]) as data:
+                with fits.open(catalogs_path[1], memmap=True) as data:
                     result_2 = Table(data[1].data)
                     data.close()
                 cone = vo.dal.SCSService('http://cda.cfa.harvard.edu/csc2scs/coneSearch') 
@@ -1327,7 +1349,7 @@ class CompareCatalog:
                 return self.cone_search_catalog.to_table(), result_2, catalogs_path[2], catalogs_path[3]
             
             elif index == 1 :
-                with fits.open(catalogs_path[0]) as data:
+                with fits.open(catalogs_path[0], memmap=True) as data:
                     result_1 = Table(data[1].data)
                     data.close()
                 cone = vo.dal.SCSService('http://cda.cfa.harvard.edu/csc2scs/coneSearch') 
@@ -2061,7 +2083,7 @@ class Source:
         band_conv_factor_soft = dict_cat.dictionary_catalog[catalog]["band_conv_factor_soft"]
         band_conv_factor_hard = dict_cat.dictionary_catalog[catalog]["band_conv_factor_hard"]
 
-        self.soft_dets= [np.sum(det[:hr_bandlimit_index]) * band_conv_factor_soft for det in self.band_flux]
+        self.soft_dets = [np.sum(det[:hr_bandlimit_index]) * band_conv_factor_soft for det in self.band_flux]
         self.soft_errors = [[np.sum(err_neg[:hr_bandlimit_index]) * band_conv_factor_soft for err_neg in self.band_flux_err[0]],
                             [np.sum(err_pos[:hr_bandlimit_index]) * band_conv_factor_soft for err_pos in self.band_flux_err[1]]]
 
@@ -2082,7 +2104,7 @@ class Source:
         low_hard = np.where(np.array(self.hard_dets) - np.array(self.hard_errors[0]) < 0, 0,
                             np.array(self.hard_dets) - np.array(self.hard_errors[0]))
         up_soft = np.where(np.array(self.soft_dets) + np.array(self.soft_errors[1]) < 0, 0,
-                        np.array(self.soft_dets) + np.array(self.soft_errors[1]))
+                           np.array(self.soft_dets) + np.array(self.soft_errors[1]))
         up_hard = np.where(np.array(self.hard_dets) + np.array(self.hard_errors[1]) < 0, 0,
                         np.array(self.hard_dets) + np.array(self.hard_errors[1]))
         self.hardness_err = [[hr - (hard - soft)/(hard + soft) for (soft, hard, hr) in zip(up_soft, low_hard, self.hardness_ratio)],
