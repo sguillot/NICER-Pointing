@@ -155,7 +155,7 @@ nicer_parameters_path = f.get_valid_file_path("NICER_data/NICER_PSF.dat")
 nicer_data_arf = f.get_valid_file_path("NICER_data/nixtiaveonaxis20170601v005.arf")
 nicer_data_rmf = f.get_valid_file_path("NICER_data/nixtiref20170601v003.rmf")
 EffArea, OffAxisAngle = np.loadtxt(nicer_parameters_path, unpack=True, usecols=(0, 1))
-print('-'*50)
+print('-'*50, '\n')
 
 telescop_data = {"telescop_name": "nicer",
                  "EffArea": EffArea,
@@ -220,17 +220,25 @@ elif args.catalog == "CSC_2.0":
         os.mkdir(chandra_closest_catalog)
     
     os_dictionary = {"modeling_file_path": modeling_file_path,
+                     "catalog_directory": chandra_directory,
                      "cloesest_dataset_path": chandra_closest_catalog,
                      "img": chandra_img}
+    
+    simulation_data["os_dictionary"] = os_dictionary
     
                     # cs = cone search (Harvard features)
     csc = Chandra(catalog_path=catalog_path, radius=radius, dictionary=object_data, user_table=add_source_table, os_dictionary=os_dictionary)
     # nearby_sources_table, nearby_sources_position = csc.nearby_sources_table, csc.nearby_sources_position
     cs_nearby_soucres_table, cs_nearby_sources_position = csc.cs_nearby_sources_table, csc.cs_nearby_sources_position
     nearby_sources_table, nearby_sources_position = cs_nearby_soucres_table, cs_nearby_sources_position
-    # nearby_soucres_table = csc.cone_search_catalog.to_table()
+    nearby_sources_table = csc.cone_search_catalog.to_table()
     model_dictionary = csc.model_dictionary
-    
+
+    column_dictionary = {"flux_obs" : [f"flux_powlaw_aper_{band}" for band in ["s", 'm', "h"]],
+                         "err_flux_obs": [f"flux_powlaw_aper_{band}_negerr" for band in ["s", "m", "h"]],
+                         "energy_band": [0.85, 1.6, 4.5],
+                         "sigma" : np.array([1e-20, 1e-22, 1e-24], dtype=float),
+                         "data_to_vignetting": ["ra", "dec", "name"]}
 elif args.catalog == "Swift":
     # Find the optimal pointing point with the Swift catalog
     swi = Swift(catalog_path=catalog_path, radius=radius, dictionary=object_data, user_table=add_source_table)
@@ -251,8 +259,8 @@ elif args.catalog == "compare_catalog":
 
 excel_data_path = os.path.join(active_workflow, 'excel_data').replace("\\", "/")
 # count_rates, nearby_sources_table = f.count_rates(nearby_sources_table, model_dictionary, telescop_data)
-# f.py_to_xlsx(excel_data_path=excel_data_path, count_rates=count_rates, object_data=object_data, args=args.catalog)
-count_rates, nearby_sources_table = f.xlsx_to_py(excel_data_path=excel_data_path, nearby_sources_table=nearby_sources_table, object_data=object_data)
+# f.py_to_xlsx(excel_data_path=excel_data_path, count_rates=count_rates, object_data=object_data, args=args.catalog, radius=args.radius)
+count_rates, nearby_sources_table = f.xlsx_to_py(excel_data_path=excel_data_path, nearby_sources_table=nearby_sources_table, object_data=object_data, args=args.catalog, radius=args.radius)
 
 simulation_data['nearby_sources_table'] = nearby_sources_table
 
@@ -326,10 +334,14 @@ def select_catalogsources_around_region(output_name):
 
 right_ascension = object_data["object_position"].ra.value
 declination = object_data["object_position"].dec.value
-select_master_sources_around_region(ra=right_ascension, dec=declination, radius=radius.value, output_name=output_name)
-select_catalogsources_around_region(output_name=output_name)
-master_sources = f.load_master_sources(output_name)
-f.master_source_plot(master_sources=master_sources, object_data=object_data, number_graph=1)
+try:
+    print(f"\n{colored('Load Erwan s code for :', 'yellow')} {object_data['object_name']}")
+    select_master_sources_around_region(ra=right_ascension, dec=declination, radius=radius.value, output_name=output_name)
+    select_catalogsources_around_region(output_name=output_name)
+    master_sources = f.load_master_sources(output_name)
+    f.master_source_plot(master_sources=master_sources, object_data=object_data, number_graph=1)
+except Exception as error :
+    print(f"{colored('An error occured : ', 'red')} {error}")
 
 # ---------------------------------------- #
 
@@ -338,12 +350,6 @@ f.master_source_plot(master_sources=master_sources, object_data=object_data, num
 # setup jaxspec
 config.update("jax_enable_x64", True)
 numpyro.set_platform("cpu")
-
-# setup spectra directory
-spectra_directory = os.path.join(os_dictionary["catalog_directory"], "spectra_data").replace("\\", "/")
-if not os.path.exists(spectra_directory):
-    os.mkdir(spectra_directory)
-os_dictionary["spectra_directory"] = spectra_directory
 
 # define caracteristic model here --> exp(-nh*$\sigma$) * x ** (-$\Gamma$)
 model = Tbabs() * Powerlaw()
@@ -355,6 +361,6 @@ instrument = Instrument.from_ogip_file(nicer_data_arf, nicer_data_rmf, exposure=
 total_spectra = f.modeling_source_spectra(nearby_sources_table=nearby_sources_table, instrument=instrument, model=model)
 
 # plot of all spectra data
-f.total_plot_spectra(total_spectra=total_spectra, instrument=instrument)
+f.total_plot_spectra(total_spectra=total_spectra, instrument=instrument, simulation_data=simulation_data)
 
 # ------------------------------------------------------------- # 

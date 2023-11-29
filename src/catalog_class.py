@@ -185,7 +185,7 @@ class XmmCatalog:
                 
         try:
             if len(nearby_src_table) != 0:
-                print((f"We have detected {len(nearby_src_table)} sources close to {dictionary['object_name']}"))
+                print((f"We have detected {len(nearby_src_table)} sources close to {dictionary['object_name']}.\n"))
                 return nearby_src_table, nearby_src_position
             else:
                 print(f"No sources detected close to {dictionary['object_name']}.")
@@ -428,6 +428,7 @@ class XmmCatalog:
         plots two graphs: one showing all sources close to the object and another differentiating 
         between variable and invariable sources.
         """
+        print("\n")
         name = dictionary['object_name']
         obj_ra, obj_dec = dictionary['object_position'].ra, dictionary['object_position'].dec
         result = ESASky.query_object_catalogs(position=name, catalogs="XMM-EPIC")
@@ -503,6 +504,7 @@ class XmmCatalog:
             
         plt.savefig(os.path.join(os_dictionary["img"], f"neighbourhood_of_{name}.png".replace(" ", "_")))
         plt.show()
+        print("\n")
 
 
     def dictionary_model(self) -> Dict[str, Dict[str, Union[str, float]]]:
@@ -638,7 +640,6 @@ class Chandra:
         """
         self.chandra_catalog = self.open_catalog(catalog_path=catalog_path)
         self.nearby_sources_table, self.nearby_sources_position = self.find_nearby_sources(radius=radius, dictionary=dictionary, user_table=user_table)
-
         self.cone_search_catalog = self.load_cs_catalog(radius=radius, dictionary=dictionary)
         self.cs_nearby_sources_position = SkyCoord(ra=list(self.cone_search_catalog['ra']), dec=list(self.cone_search_catalog['dec']), unit=u.deg)
         self.cs_nearby_sources_table = self.cone_catalog()
@@ -871,10 +872,22 @@ class Chandra:
             Raises a runtime error if curve fitting fails.
         """
         # with Harvard catalog
-        column_name = np.array(["flux_aper_s", "flux_aper_m", "flux_aper_h"], dtype=str)
+        column_name = np.array([f"flux_powlaw_aper_{band}" for band in ["s", 'm', "h"]], dtype=str)
         energy_band = np.array([0.7, 1.6, 4.5], dtype=float)
+        
         flux_obs = np.array([self.cone_search_catalog[flux][number] for flux in column_name])
         flux_obs = np.nan_to_num(flux_obs, nan=0.0)
+        
+        column_name_err = [[f"flux_powlaw_aper_lolim_{band}" for band in ["s", "m", "h"]],
+                           [f"flux_powlaw_aper_hilim_{band}" for band in ["s", "m", "h"]]]
+
+        flux_obs_err_neg = [self.cone_search_catalog[flux_err_lo][number] for flux_err_lo in column_name_err[0]]
+        flux_obs_err_pos = [self.cone_search_catalog[flux_err_hi][number] for flux_err_hi in column_name_err[1]]
+        
+        flux_obs_err_neg = np.nan_to_num(flux_obs_err_neg, nan=0.0)
+        flux_obs_err_pos = np.nan_to_num(flux_obs_err_pos, nan=0.0)
+        
+        mean_flux_obs_err = (flux_obs_err_neg + flux_obs_err_pos) / 2 
         
         def absorbed_power_law(x, constant, gamma):
             sigma = np.array([1e-20, 1e-22, 1e-24], dtype=float)
@@ -884,6 +897,8 @@ class Chandra:
             popt, pcov = curve_fit(absorbed_power_law, energy_band, flux_obs)
             constant, absorb_pho_index = popt
             powerlaw_value_absorb = absorbed_power_law(energy_band, *popt)
+            if isinstance(absorb_pho_index, tuple):
+                absorb_pho_index = absorb_pho_index[0]
             
         except RuntimeError as error:
             absorb_pho_index = 1.7

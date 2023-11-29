@@ -356,72 +356,51 @@ def nominal_pointing_info(simulation_data, NearbySRCposition) -> None:
 
 
 def calculate_opti_point(simulation_data, nearby_src_position) -> Tuple[int, float, float, dict]:
-    """
-    Calculate the optimal pointing for the NICER telescope to maximize the signal-to-noise ratio (S/N).
-
-    This function calculates the optimal pointing of the NICER telescope by adjusting its position
-    to maximize the signal-to-noise ratio (S/N) in the presence of a pulsar source and background sources (SRC).
-    It iterates over a grid of angular displacements around the pulsar position and calculates the S/N for
-    each possible pointing.
-
-    Args:
-        SIM_parameters (dict): A dictionary containing simulation parameters, including the pulsar position,
-            pulsar count rates, SRC count rates, effective area, off-axis angle, instrumental background, and exposure time.
-        NearbySRCposition (SkyCoord): Coordinates of the nearby SRC sources.
-
-    Returns:
-        tuple: A tuple containing the following information:
-            - OptimalPointingIdx (int): The index of the optimal pointing in the resulting arrays.
-            - SRCoptimalSEPAR (float): The angular separation between the optimal pointing and the SRC sources.
-            - SRCoptimalRATES (float): The SRC count rate at the optimal pointing.
-            - Vector_Dictionary (dict): A dictionary containing result vectors, including sampled RA and DEC positions,
-                pulsar count rates, SRC count rates, and the S/N ratio for each pointing.
-
-    Note:
-        This function assumes the existence of auxiliary functions such as Angle(), AngSeparation(),
-        ScaledCtRate(), and SignaltoNoise().
-    """
-    object_data = simulation_data['object_data']
-    telescop_data = simulation_data['telescop_data']
-
-    min_value, max_value, step = -5.0, 5.0, 0.1
+    min_value, max_value, step = -7.0, 7.1, 0.05
     DeltaRA = Angle(np.arange(min_value, max_value, step), unit=u.deg)/60
     DeltaDEC = Angle(np.arange(min_value, max_value, step), unit=u.deg)/60
+    
+    telescop_data = simulation_data["telescop_data"]
+    object_data = simulation_data["object_data"]
+    nearby_sources_table = simulation_data['nearby_sources_table']
+    
+    RA_grid, DEC_grid = np.meshgrid(DeltaRA, DeltaDEC)
 
-    SampleRA, SampleDEC, SNR, PSRrates, SRCrates = np.zeros((5, len(DeltaRA) * len(DeltaDEC)))
-    PSRcountrates = object_data['count_rate']
+    SampleRA = object_data["object_position"].ra.deg + RA_grid.flatten().deg
+    SampleDEC = object_data["object_position"].dec.deg + DEC_grid.flatten().deg
 
-    count = 0
-    for i in DeltaRA:
-        for j in DeltaDEC:
-                NICERpointing = SkyCoord(ra=object_data["object_position"].ra + i, dec=object_data["object_position"].dec + j)
-                PSRseparation = ang_separation(object_data["object_position"], NICERpointing)
-                SRCseparation = ang_separation(nearby_src_position, NICERpointing)
+    NICERpointing = SkyCoord(ra=SampleRA*u.deg, dec=SampleDEC*u.deg)
 
-                PSRcountrateScaled = scaled_ct_rate(PSRseparation.arcmin, PSRcountrates, telescop_data["EffArea"], telescop_data["OffAxisAngle"])
-                SRCcountrateScaled = scaled_ct_rate(SRCseparation.arcmin, simulation_data["nearby_sources_table"]["count_rate"], telescop_data["EffArea"], telescop_data["OffAxisAngle"])
+    PSRseparation = ang_separation(object_data["object_position"], NICERpointing).arcmin
+    nearby_src_position = nearby_src_position.reshape(1, -1)
+    NICERpointing = NICERpointing.reshape(-1, 1)
+    SRCseparation = ang_separation(nearby_src_position, NICERpointing).arcmin
 
-                SampleRA[count] = NICERpointing.ra.deg
-                SampleDEC[count] = NICERpointing.dec.deg
+    PSRcountrateScaled = scaled_ct_rate(PSRseparation, object_data['count_rate'], telescop_data["EffArea"], telescop_data["OffAxisAngle"])
 
-                PSRrates[count] = PSRcountrateScaled
-                SRCrates[count] = np.sum(SRCcountrateScaled)
+    count_rate = nearby_sources_table['count_rate']
+    SRCcountrateScaled = scaled_ct_rate(SRCseparation, count_rate, telescop_data["EffArea"], telescop_data["OffAxisAngle"])
 
-                SNR[count] = signal_to_noise(PSRcountrateScaled, SRCcountrateScaled, simulation_data["INSTbkgd"], simulation_data["EXPtime"])
-                count = count + 1
+    SNR, PSRrates, SRCrates  = np.zeros((3, len(DeltaRA) * len(DeltaDEC)))
+    for item in range(len(PSRcountrateScaled)):
+        PSRrates[item] = PSRcountrateScaled[item]
+        SRCrates[item] = np.sum(SRCcountrateScaled[item])
+        SNR[item] = signal_to_noise(PSRrates[item], SRCrates[item], simulation_data["INSTbkgd"], simulation_data["EXPtime"])
 
     OptimalPointingIdx = np.where(SNR==max(SNR))[0][0]
+
     SRCoptimalSEPAR = ang_separation(nearby_src_position, SkyCoord(ra=SampleRA[OptimalPointingIdx]*u.degree, dec=SampleDEC[OptimalPointingIdx]*u.degree)).arcmin
-    SRCoptimalRATES = scaled_ct_rate(SRCoptimalSEPAR, simulation_data["nearby_sources_table"]["count_rate"], telescop_data["EffArea"], telescop_data["OffAxisAngle"])
+    SRCoptimalRATES = scaled_ct_rate(SRCoptimalSEPAR, nearby_sources_table["count_rate"], telescop_data["EffArea"], telescop_data["OffAxisAngle"])
 
-    Vector_Dictionary = {'SampleRA': SampleRA,
-                         'SampleDEC': SampleDEC,
-                         'PSRrates': PSRrates,
-                         'SRCrates': SRCrates,
-                         'SNR': SNR
-                         }
+    vector_dictionary = {
+        'SampleRA': SampleRA,
+        'SampleDEC': SampleDEC,
+        'PSRrates': PSRrates,
+        'SRCrates': SRCrates,
+        'SNR': SNR
+    }
 
-    return OptimalPointingIdx, SRCoptimalSEPAR, SRCoptimalRATES, Vector_Dictionary
+    return OptimalPointingIdx, SRCoptimalSEPAR, SRCoptimalRATES, vector_dictionary
 
 
 def optimal_point_infos(vector_dictionary, OptimalPointingIdx, SRCoptimalRATES) -> None:
@@ -526,6 +505,9 @@ def count_rates(nearby_src_table, model_dictionary, telescop_data) -> Tuple[List
         model_value = model_dictionary[f"src_{item}"]["model_value"]
         xmm_flux =  model_dictionary[f"src_{item}"]["flux"]
         nh_value = model_dictionary[f"src_{item}"]["column_dentsity"]
+
+        # if isinstance(model_value, tuple):
+        #     model_value = model_value[0]
                 
         pimms_cmds = f"instrument {telescop_name} {min_value}-{max_value}\nfrom flux ERGS {energy_band}\nmodel galactic nh {nh_value}\nmodel {model} {model_value} 0.0\ngo {xmm_flux}\nexit\n"
         
@@ -620,19 +602,30 @@ def vignetting_factor(OptimalPointingIdx, vector_dictionary, simulation_data, da
     
     optimal_pointing_point = SkyCoord(ra=optipoint_ra, dec=optipoint_dec, unit=u.deg)
     psr_position = SkyCoord(ra=object_data['object_position'].ra, dec=object_data['object_position'].dec, unit=u.deg)
-    disatnce_psr_to_optipoint = ang_separation(psr_position, optimal_pointing_point).arcmin
-    vignetting_factor_psr2optipoint = calculate_vignetting_factor(disatnce_psr_to_optipoint, EffArea, OffAxisAngle)
+    distance_psr_to_optipoint = ang_separation(psr_position, optimal_pointing_point).arcmin
+    vignetting_factor_psr2optipoint = calculate_vignetting_factor(distance_psr_to_optipoint, EffArea, OffAxisAngle)
 
     max_vignet, min_distance  = np.max(vignetting_factor), np.min(distance)
     max_vignet_index, min_distance_index = np.argmax(vignetting_factor), np.argmin(distance)
     
-    print(f"Here is the neariest source close to the optimal pointing point : {colored(nearby_sources_table[name][min_distance_index], 'yellow')}.\n"
-            f"The distance between this two points is : {colored(min_distance, 'blue')} arcmin.")
-    print(f"The vignetting factor for this souce is : {colored(max_vignet, 'light_green')}")
-    print(f"The distance between {colored(object_data['object_name'], 'magenta')} and optimal pointing point is {colored(disatnce_psr_to_optipoint, 'blue')} arcmin,\n"
-            f"with a vagnetting factor of : {colored(vignetting_factor_psr2optipoint, 'red')}")
+    print(f"\nThe closest source of the optimal pointing point is : {colored(nearby_sources_table[name][min_distance_index], 'magenta')}.")
+    print(f"The distance between {colored(nearby_sources_table[name][min_distance_index], 'yellow')} and optimal pointing point is {colored(min_distance, 'blue')} arcmin.\n"
+          f"With a vignetting factor of : {colored(max_vignet, 'light_green')} ")
+    print(f"The distance between {colored(object_data['object_name'], 'yellow')} and optimal pointing point is {colored(distance_psr_to_optipoint, 'blue')} arcmin,\n"
+          f"with a vagnetting factor of : {colored(vignetting_factor_psr2optipoint, 'light_green')}")
     
     nearby_sources_table["vignetting_factor"] = vignetting_factor
+    
+    #TODO: Upgrade vignetting curve
+    
+    # vignetting_factor_final = vignetting_factor
+    # vignetting_factor_final = np.append(vignetting_factor_final, vignetting_factor_psr2optipoint)
+    # vignetting_factor_final = np.sort(vignetting_factor_final)[::-1]
+    # figure, axes = plt.subplots(1, 1, figsize=(15, 8))
+    # figure.suptitle("Vignetting Curve", fontsize=16)
+    # x_array = np.linspace(0, 8.1, num=len(vignetting_factor_final))
+    # axes.scatter(x_array, vignetting_factor_final)
+    # plt.plot()
     
     return vignetting_factor, nearby_sources_table
 
@@ -675,9 +668,12 @@ def modeling(vignetting_factor: List, simulation_data: Dict, column_dictionary: 
         
         err_flux_obs = [nearby_sources_table[err_name][item] for err_name in err_flux_name]
         main_err_flux_obs.append(err_flux_obs)
-        
-        popt, pcov = curve_fit(lambda energy_band, constant, gamma: power_law(vignetting_factor[item], energy_band, constant, gamma), energy_band, flux_obs, sigma=err_flux_obs)
-        constant, photon_index = popt
+        try:
+            popt, pcov = curve_fit(lambda energy_band, constant, gamma: power_law(vignetting_factor[item], energy_band, constant, gamma), energy_band, flux_obs, sigma=err_flux_obs)
+            constant, photon_index = popt
+        except Exception as error:
+            constant = 1e-14
+            photon_index = 1.7
         photon_index_list = np.append(photon_index_list, photon_index)
         constant_list = np.append(constant_list, constant)
         
@@ -717,7 +713,8 @@ def modeling(vignetting_factor: List, simulation_data: Dict, column_dictionary: 
     
 # --------------- None important function --------------- #
 
-def py_to_xlsx(excel_data_path: str, count_rates: List, object_data: Dict, args: str) -> None:
+
+def py_to_xlsx(excel_data_path: str, count_rates: List, object_data: Dict, args: str, radius: float) -> None:
     
     if args == "Xmm_DR13":
         cat = "xmm"
@@ -734,12 +731,21 @@ def py_to_xlsx(excel_data_path: str, count_rates: List, object_data: Dict, args:
     for item in range(len(count_rates)):
         sheet.cell(row=item + 1, column=1).value = count_rates[item]
     
-    ct_rates_path = os.path.join(excel_data_path, f"{cat}_{object_data['object_name']}.xlsx").replace("\\", "/") 
+    ct_rates_path = os.path.join(excel_data_path, f"{cat}_{radius}_{object_data['object_name']}.xlsx").replace("\\", "/") 
     wb.save(ct_rates_path.replace(" ", "_"))
 
 
-def xlsx_to_py(excel_data_path: str, nearby_sources_table: Table, object_data: Dict) -> Tuple[List[float], Table]:
-    ct_rates_path = os.path.join(excel_data_path, f"xmm_{object_data['object_name']}.xlsx".replace(" ", "_"))
+def xlsx_to_py(excel_data_path: str, nearby_sources_table: Table, object_data: Dict, args: str, radius: float) -> Tuple[List[float], Table]:
+    
+    if args == "Xmm_DR13":
+        cat = "xmm"
+    elif args == "CSC_2.0":
+        cat = "csc"
+    elif args == "Swift":
+        cat = "swi"
+    elif args == "eRosita":
+        cat = "ero"
+    ct_rates_path = os.path.join(excel_data_path, f"{cat}_{radius}_{object_data['object_name']}.xlsx".replace(" ", "_"))
     wb = openpyxl.load_workbook(ct_rates_path)
     sheet = wb.active
 
@@ -899,9 +905,11 @@ def master_source_plot(master_sources: Dict, object_data: Dict, number_graph: in
         plt.loglog()
         plt.show()
 
+
 # -------------------------------------------- #
 
 # --------------- modeling spectra with jaxspec --------------- # 
+
 
 def modeling_source_spectra(nearby_sources_table: Table, instrument, model) -> Dict:
     print(f"\n{colored('Modeling spectra...', 'yellow', attrs=['underline'])}")
@@ -911,9 +919,9 @@ def modeling_source_spectra(nearby_sources_table: Table, instrument, model) -> D
     for index, vignet_factor in tqdm(enumerate(nearby_sources_table["vignetting_factor"])):
         parameters = {}
         parameters = {
-            "tbabs_1": {"N_H": np.full(size, nearby_sources_table["Nh"][index]/3e22)},
+            "tbabs_1": {"N_H": np.full(size, nearby_sources_table["Nh"][index]/1e22)},
             "powerlaw_1": {
-                "alpha": np.full(size, nearby_sources_table["Photon Index"][index] if nearby_sources_table["Photon Index"][index] else 1.7),
+                "alpha": np.full(size, nearby_sources_table["Photon Index"][index] if nearby_sources_table["Photon Index"][index] > 0.0 else 1.7),
                 "norm": np.full(size, 1),
             }
         }
@@ -923,49 +931,59 @@ def modeling_source_spectra(nearby_sources_table: Table, instrument, model) -> D
         total_spectra.append(spectra)
         
     return total_spectra
-    
-
-def plot_spectra(total_spectra: Dict) -> None:
-    pass
 
 
-def total_plot_spectra(total_spectra: List, instrument) -> None:
-    
+def total_plot_spectra(total_spectra: List, instrument, simulation_data: Dict) -> None:
+    object_data = simulation_data["object_data"]
+    os_dictionary = simulation_data["os_dictionary"]
+    graph_data = {"min_lim_x": 0.2,
+                "max_lim_x": 10.0,
+                "percentile_0": 10,
+                "percentile_2": 90}
+
     figure, axes = plt.subplots(1, 3, figsize=(17, 8), sharey=True)
-    figure.suptitle("Spectra modeling", fontsize=20)
+    figure.suptitle(f"Spectral modeling close to {object_data['object_name']}", fontsize=20)
     figure.text(0.5, 0.04, 'Energy [keV]', ha='center', va='center', fontsize=16)
     figure.text(0.085, 0.5, 'Counts', ha='center', va='center', rotation='vertical', fontsize=16)
 
+    for ax in axes:
+        ax.set_xlim([graph_data["min_lim_x"], graph_data["max_lim_x"]])
+        ax.loglog()
+
     ax0 = axes[0]
-    for spectra in tqdm(total_spectra):
+    for spectra in total_spectra:
         ax0.step(instrument.out_energies[0],
                 np.median(spectra, axis=0),
                 where="post")
-    ax0.loglog()
     ax0.set_title("Spectra from Nearby Sources")
 
-    percentile = np.percentile(total_spectra,(10, 50, 90), axis=0)
+    percentile = np.percentile(total_spectra,(graph_data["percentile_0"], 50, graph_data["percentile_2"]), axis=0)
+
+    spectrum_summed = 0.0
+    for item in range(len(total_spectra)):
+        spectrum_summed += total_spectra[item]
 
     ax1 = axes[1]
     ax1.step(instrument.out_energies[0],
-            np.median(percentile[1], axis=0),
+            np.median(spectrum_summed, axis=0),
             where='post', color='black'
             )
-    ax1.set_title("Median Spectrum")
-    ax1.loglog()
+
+    ax1.set_title("Sum of spectra")
 
     ax2 = axes[2]
     ax2.step(instrument.out_energies[0],
             np.median(percentile[0], axis=0),
-            where='post', color='darkorange', label='$10^{th}$ percentile'
+            where='post', color='darkorange', label=f"{graph_data['percentile_0']}"+"$^{th}$ percentile"
             )
     ax2.step(instrument.out_energies[0],
             np.median(percentile[1], axis=0),
-            where='post', color='black', linewidth=0.5
+            where='post', color='black', linewidth=0.5,
+            label="$50^{th} percentile$"
             )
     ax2.step(instrument.out_energies[0],
             np.median(percentile[2], axis=0),
-            where='post', color='red', label='$90^{th}$ percentile'
+            where='post', color='red', label=f"{graph_data['percentile_2']}"+"$^{th}$ percentile"
             )
     ax2.fill_between(instrument.out_energies[0],
                     np.median(percentile[0], axis=0),
@@ -974,8 +992,10 @@ def total_plot_spectra(total_spectra: List, instrument) -> None:
                     )
     ax2.legend(loc='upper right')
     ax2.set_title("Spectral Envelope")
-    ax2.loglog()
     
+    img_path = os.path.join(os_dictionary['img'], f"spectral_modeling_close_to_{object_data['object_name']}.png".replace(" ", "_")).replace("\\", "/")
+    plt.savefig(img_path)
     plt.show()
+
 
 # ------------------------------------------------------------- #
