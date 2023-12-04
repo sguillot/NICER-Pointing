@@ -241,41 +241,59 @@ class XmmCatalog:
             photon_index (list of tuples): A list containing tuples of photon indices for both models
                                         for each source.
         """
-        number_interp = len(optimization_parameters)
-        number_column = 4
-        number_row = number_interp/number_column
-        
-        if number_row < 1:
-            number_row = 1
-        elif number_row %1 == 0:
-            number_row= int(number_interp/4)
-        else:
-            number_row = int(number_interp/4) + 1
-            
-        index_figure, axes = plt.subplots(nrows=number_row, ncols=number_column, figsize=(17, 8), sharex=True)
-        index_figure.subplots_adjust(wspace=0.5, hspace=1.5)
-        index_figure.suptitle("Interpolation Photon Index", fontsize=20)
-        index_figure.text(0.5, 0.04, 'Energy [keV]', ha='center', va='center')
-        index_figure.text(0.04, 0.5, 'Flux [erg/cm^2/s]', ha='center', va='center', rotation='vertical')
+        # number_interp = len(optimization_parameters)
+        # number_column = 4
+        # number_row = number_interp/number_column
+        # if number_row < 1:
+        #     number_row = 1
+        # elif number_row %1 == 0:
+        #     number_row= int(number_interp/4)
+        # else:
+        #     number_row = int(number_interp/4) + 1
+        # index_figure, axes = plt.subplots(nrows=number_row, ncols=number_column, figsize=(17, 8), sharex=True)
+        # index_figure.subplots_adjust(wspace=0.5, hspace=1.5)
+        # index_figure.suptitle("Interpolation Photon Index", fontsize=20)
+        # index_figure.text(0.5, 0.04, 'Energy [keV]', ha='center', va='center')
+        # index_figure.text(0.04, 0.5, 'Flux [erg/cm^2/s]', ha='center', va='center', rotation='vertical')
 
-        count = 0
-        for row in range(number_row):
-            for column in range(number_column):
-                if count < number_interp:
-                    energy_band = optimization_parameters[count][0]
-                    flux_obs = optimization_parameters[count][1]
-                    flux_obs_err = optimization_parameters[count][2]
-                    absorbed_power_law = optimization_parameters[count][3]
-                    absorb_pho_index = photon_index[count]
-                    
-                    axes[row][column].errorbar(energy_band, flux_obs, flux_obs_err, fmt='*', color='red', ecolor='black')
-                    axes[row][column].plot(energy_band, absorbed_power_law, linestyle='dashdot', color="navy", label="Absorb")
-                    axes[row][column].set_title(f"Absorb $\Gamma$ = {absorb_pho_index:.8f}", fontsize=7)
-                    axes[row][column].legend(loc="upper left", ncol=2, fontsize=6)
-                count += 1
+        # count = 0
+        # for row in range(number_row):
+        #     for column in range(number_column):
+        #         if count < number_interp:
+        #             energy_band = optimization_parameters[count][0]
+        #             flux_obs = optimization_parameters[count][1]
+        #             flux_obs_err = optimization_parameters[count][2]
+        #             absorbed_power_law = optimization_parameters[count][3]
+        #             absorb_pho_index = photon_index[count]
+        #             axes[row][column].errorbar(energy_band, flux_obs, flux_obs_err, fmt='*', color='red', ecolor='black')
+        #             axes[row][column].plot(energy_band, absorbed_power_law, linestyle='dashdot', color="navy", label="Absorb")
+        #             axes[row][column].set_title(f"Absorb $\Gamma$ = {absorb_pho_index:.8f}", fontsize=7)
+        #             axes[row][column].legend(loc="upper left", ncol=2, fontsize=6)
+        #         count += 1
                 
+        # plt.show()
+        
+        energy_band = dict_cat.dictionary_catalog["XMM"]["energy_band_center"]
+        
+        fig, axes = plt.subplots(1, 1, figsize=(15, 8))
+        fig.suptitle("Interpolation Photon Index plot", fontsize=20)
+        fig.text(0.5, 0.04, 'Energy [keV]', ha='center', va='center')
+        fig.text(0.04, 0.5, 'Flux [erg/cm^2/s]', ha='center', va='center', rotation='vertical')
+        
+        for item in range(len(optimization_parameters)):
+            flux_obs = optimization_parameters[item][1]
+            flux_obs_err = optimization_parameters[item][2]
+            absorbed_power_law = optimization_parameters[item][3]
+            absorb_pho_index = photon_index[item]
+            
+            axes.errorbar(energy_band, flux_obs, flux_obs_err, fmt='*', color='red', ecolor='black')
+            axes.plot(energy_band, absorbed_power_law, label=f"$\Gamma$ = {absorb_pho_index:.8f}")
+    
+        axes.legend(loc="upper left", ncol=4, fontsize=6)
+        axes.loglog()
+        
         plt.show()
-
+            
 
     def empty_row(self, catalog):
         new_row = {}
@@ -639,14 +657,16 @@ class Chandra:
             Dictionary containing models and parameters for each source.
         """
         self.chandra_catalog = self.open_catalog(catalog_path=catalog_path)
-        self.nearby_sources_table, self.nearby_sources_position = self.find_nearby_sources(radius=radius, dictionary=dictionary, user_table=user_table)
         self.cone_search_catalog = self.load_cs_catalog(radius=radius, dictionary=dictionary)
         self.cs_nearby_sources_position = SkyCoord(ra=list(self.cone_search_catalog['ra']), dec=list(self.cone_search_catalog['dec']), unit=u.deg)
-        self.cs_nearby_sources_table = self.cone_catalog()
+        self.cone_search_catalog = self.variability_column()
+        self.cone_search_catalog = self.threshold(self.cone_search_catalog)
         
+        self.nearby_sources_table, self.nearby_sources_position = self.find_nearby_sources(radius=radius, dictionary=dictionary, user_table=user_table)
+        self.corrected_mean_flux()
         self.neighbourhood_of_object(radius=radius, dictionary=dictionary, os_dictionary=os_dictionary)
-        self.photon_index = self.power_law_pho_index()
-        self.model_dictionary = self.dictionary_model()
+        self.cs_photon_index, self.photon_index = self.get_phoindex_nh()
+        self.cs_model_dictionary, self.model_dictionary = self.dictionary_model()
         
 
     def open_catalog(self, catalog_path: str) -> Table:
@@ -716,6 +736,7 @@ class Chandra:
         Exception
             Raises an exception if an error occurs during the process.
         """
+        radius = 5 * u.arcmin
         field_of_view = radius + 5*u.arcmin
 
         object_position = dictionary['object_position']
@@ -723,39 +744,42 @@ class Chandra:
         min_ra, max_ra = object_position.ra - field_of_view, object_position.ra + field_of_view
         min_dec, max_dec = object_position.dec - field_of_view, object_position.dec + field_of_view
 
-        small_table = Table(names=self.chandra_catalog.colnames,
-                            dtype=self.chandra_catalog.dtype)
+        small_table = Table(names= self.chandra_catalog.colnames,
+                            dtype= self.chandra_catalog.dtype)
 
-        nearby_src_table = Table(names=self.chandra_catalog.colnames,
-                                 dtype=self.chandra_catalog.dtype)
+        nearby_sources_table = Table(names= self.chandra_catalog.colnames,
+                                     dtype= self.chandra_catalog.dtype)
 
         for number in range(len(self.chandra_catalog)):
             if min_ra/u.deg < self.chandra_catalog["RA"][number] < max_ra/u.deg and min_dec/u.deg < self.chandra_catalog["DEC"][number] < max_dec/u.deg:
                 small_table.add_row(self.chandra_catalog[number])
                 
         src_position = SkyCoord(ra=small_table['RA'], dec=small_table['DEC'], unit=u.deg)
-                
+
         for number in range(len(small_table)):
             if f.ang_separation(object_position, src_position[number]) < radius:
-                nearby_src_table.add_row(small_table[number])
-                   
-        column_names = list(self.chandra_catalog.colnames )  
-        nearby_src_table = f.sources_to_unique_sources(result_table=nearby_src_table, column_names=column_names)
+                nearby_sources_table.add_row(small_table[number])
                 
-        nearby_src_position = SkyCoord(ra=nearby_src_table['RA'], dec=nearby_src_table['DEC'], unit=u.deg)
+        column_name = {"source_name": "Chandra_IAUNAME", 
+                       "right_ascension": "RA",
+                       "declination": "DEC",
+                       "catalog_name": "Chandra"}
+
+        unique_table = f.create_unique_sources_catalog(nearby_sources_table=nearby_sources_table, column_name=column_name)
+
+        nearby_src_position = SkyCoord(ra=unique_table['RA'], dec=unique_table['DEC'], unit=u.deg)
                 
         try :
-            if len(nearby_src_table) != 0:
-                print((f"We have detected {len(nearby_src_table)} sources close to {dictionary['object_name']}"))
-                return nearby_src_table, nearby_src_position
+            if len(unique_table) != 0:
+                print((f"We have detected {len(unique_table)} sources close to {dictionary['object_name']}"))
+                return unique_table, nearby_src_position
             else:
                 print(f"No sources detected close to {dictionary['object_name']}.")
-                sys.exit()
         except Exception as error:
             print(f"An error occured : {error}")
             
     
-    def cone_catalog(self) -> Table:
+    def variability_column(self) -> Table:
         """
         Create a catalog table by combining and processing data from a cone search catalog.
 
@@ -781,12 +805,14 @@ class Chandra:
                 mean_value = np.mean([inter_value, intra_value])
                 var_column = np.append(var_column, mean_value)
                 
-        data_list = [cone_catalog['name'], cone_catalog['ra'], cone_catalog['dec'], var_column]
+        cone_catalog["Variability"] = var_column
+                
+        # data_list = [cone_catalog['name'], cone_catalog['ra'], cone_catalog['dec'], var_column]
 
-        self.cs_catalog = Table(names=['IAUNAME', 'RA', 'DEC', 'VAR'],
-                                data=data_list)
+        # self.cs_catalog = Table(names=['IAUNAME', 'RA', 'DEC', 'VAR'],
+        #                         data=data_list)
         
-        return self.cs_catalog
+        return cone_catalog
     
     
     def neighbourhood_of_object(self, radius: Quantity, dictionary: dict, os_dictionary: dict) -> None:
@@ -834,11 +860,11 @@ class Chandra:
         
         ax10 = axes[1][0]
 
-        cs_ra_var = [ra for index, ra in enumerate(list(self.cs_catalog['RA'])) if self.cs_catalog['VAR'][index] != 0.0]
-        cs_ra_invar = [ra for index, ra in enumerate(list(self.cs_catalog['RA'])) if self.cs_catalog['VAR'][index] == 0.0]
+        cs_ra_var = [ra for index, ra in enumerate(list(self.cone_search_catalog['ra'])) if self.cone_search_catalog['Variability'][index] != 0.0]
+        cs_ra_invar = [ra for index, ra in enumerate(list(self.cone_search_catalog['ra'])) if self.cone_search_catalog['Variability'][index] == 0.0]
 
-        cs_dec_var = [dec for index, dec in enumerate(list(self.cs_catalog['DEC'])) if self.cs_catalog['VAR'][index] != 0.0]
-        cs_dec_invar = [dec for index, dec in enumerate(list(self.cs_catalog['DEC'])) if self.cs_catalog['VAR'][index] == 0.0]
+        cs_dec_var = [dec for index, dec in enumerate(list(self.cone_search_catalog['dec'])) if self.cone_search_catalog['Variability'][index] != 0.0]
+        cs_dec_invar = [dec for index, dec in enumerate(list(self.cone_search_catalog['dec'])) if self.cone_search_catalog['Variability'][index] == 0.0]
 
         ax11 = axes[1][1]
         ax11.scatter(cs_ra_var, cs_dec_var, s=10, c='darkorange', marker='*', label=f"Var src : {len(cs_ra_var)} sources")
@@ -850,63 +876,72 @@ class Chandra:
         plt.show()
 
 
-    def get_pho_index(self, number: int) -> Tuple[Tuple[float, float], Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]:
-        """
-        Calculate the photon index for an astronomical object using the Harvard catalog data.
+    def threshold(self, cone_search_catalog):
+        source_number = len(cone_search_catalog)
+        key = "CS_Chandra"
 
-        Parameters
-        ----------
-        number : int
-            The index of the astronomical object in the catalog.
+        # name : flux_powlaw_aper_b
+        # algo to replace -- by the min numerical value of the list
+        flux_obs = dict_cat.dictionary_catalog[key]["flux_obs"]
+        flux_data = []
+        for item in range(source_number):
+            # iterate for each item in the list
+            if not isinstance(self.cone_search_catalog[flux_obs][item], np.ma.core.MaskedConstant):
+                # put in flux_data list each item of type different to np.ma.core.MaskedConstant
+                flux_data.append(cone_search_catalog[flux_obs][item])
+        flux = list(cone_search_catalog[flux_obs])
+        corrected_flux_obs = np.nan_to_num(flux, nan=np.min(flux_data))
+        cone_search_catalog[flux_obs] = corrected_flux_obs
 
-        Returns
-        -------
-        photon_index : Tuple[float, float]
-            A tuple containing the non-absorbed and absorbed photon indices respectively.
-        optimization_parameters : Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
-            A tuple containing arrays of energy bands, observed fluxes, non-absorbed power law values, and absorbed power law values.
-        
-        Raises
-        ------
-        RuntimeError
-            Raises a runtime error if curve fitting fails.
-        """
-        # with Harvard catalog
-        column_name = np.array([f"flux_powlaw_aper_{band}" for band in ["s", 'm', "h"]], dtype=str)
-        energy_band = np.array([0.7, 1.6, 4.5], dtype=float)
-        
-        flux_obs = np.array([self.cone_search_catalog[flux][number] for flux in column_name])
-        flux_obs = np.nan_to_num(flux_obs, nan=0.0)
-        
-        column_name_err = [[f"flux_powlaw_aper_lolim_{band}" for band in ["s", "m", "h"]],
-                           [f"flux_powlaw_aper_hilim_{band}" for band in ["s", "m", "h"]]]
+        for name in dict_cat.dictionary_catalog[key]["flux_obs_err"]:
+            flux_err = []
+            for item in range(source_number):
+                # iterate for each item in the list
+                if not isinstance(cone_search_catalog[name][item], np.ma.core.MaskedConstant):
+                    # put in flux_err list each item of type different to np.ma.core.MaskedConstant
+                    flux_err.append(cone_search_catalog[name][item])
+            flux_err_obs = list(cone_search_catalog[name])
+            corrected_flux_err_obs = np.nan_to_num(flux_err_obs, nan=np.min(flux_err))
+            cone_search_catalog[name] = corrected_flux_err_obs
 
-        flux_obs_err_neg = [self.cone_search_catalog[flux_err_lo][number] for flux_err_lo in column_name_err[0]]
-        flux_obs_err_pos = [self.cone_search_catalog[flux_err_hi][number] for flux_err_hi in column_name_err[1]]
-        
-        flux_obs_err_neg = np.nan_to_num(flux_obs_err_neg, nan=0.0)
-        flux_obs_err_pos = np.nan_to_num(flux_obs_err_pos, nan=0.0)
-        
-        mean_flux_obs_err = (flux_obs_err_neg + flux_obs_err_pos) / 2 
-        
-        def absorbed_power_law(x, constant, gamma):
-            sigma = np.array([1e-20, 1e-22, 1e-24], dtype=float)
-            return (constant * x **(-gamma)) * (np.exp(-sigma*3e20))
-        
-        try:       
-            popt, pcov = curve_fit(absorbed_power_law, energy_band, flux_obs)
-            constant, absorb_pho_index = popt
-            powerlaw_value_absorb = absorbed_power_law(energy_band, *popt)
-            if isinstance(absorb_pho_index, tuple):
-                absorb_pho_index = absorb_pho_index[0]
+        # name : flux_powlaw_aper__s/m/h
+        # algo to replace -- by the min numerical value of the list
+        for name in dict_cat.dictionary_catalog[key]["band_flux_obs"]:
+            # itera name in band_flux_obs 
+            data = []
+            for item in range(source_number):
+                # iterate for each item in the list
+                if not isinstance(cone_search_catalog[name][item], np.ma.core.MaskedConstant):
+                    # put in data list each item of type different to np.ma.core.MaskedConstant
+                    data.append(cone_search_catalog[name][item])
+            flux = list(cone_search_catalog[name])
+            corrected_flux = np.nan_to_num(flux, nan=np.min(data))
+            cone_search_catalog[name] = corrected_flux
+
+
+        # name : flux_powlaw_aper_lo/hi_lim_s/m/h
+        err_flux_neg, err_flux_pos = dict_cat.dictionary_catalog[key]["band_flux_obs_err"][0], dict_cat.dictionary_catalog[key]["band_flux_obs_err"][1]
+        # algo to replace -- by the min numerical value of the list
+        for err_name_0, err_name_1 in zip(err_flux_neg, err_flux_pos):
+            neg_data, pos_data = [], []
+            for item in range(source_number):
+                # iterate for each item in the list
+                if not isinstance(cone_search_catalog[err_name_0][item], np.ma.core.MaskedConstant):
+                    # put in neg_data list each item of type different to np.ma.core.MaskedConstant
+                    neg_data.append(cone_search_catalog[err_name_0][item])
+                if not isinstance(cone_search_catalog[err_name_1][item], np.ma.core.MaskedConstant):
+                    # put in pos_data list each item of type different to np.ma.core.MaskedConstant
+                    pos_data.append(cone_search_catalog[err_name_1][item])
+                    
+            neg_flux, pos_flux = list(cone_search_catalog[err_name_0]), list(cone_search_catalog[err_name_1])
+            corrected_neg_flux = np.nan_to_num(neg_flux, nan=np.min(neg_data))
+            corrected_pos_flux = np.nan_to_num(pos_flux, nan=np.min(pos_data))
             
-        except RuntimeError as error:
-            absorb_pho_index = 1.7
-            powerlaw_value_absorb = [0.0, 0.0, 0.0]
-
-        optimization_parameters = (energy_band, flux_obs, powerlaw_value_absorb)
-        return absorb_pho_index, optimization_parameters
-
+            cone_search_catalog[err_name_0] = corrected_neg_flux
+            cone_search_catalog[err_name_1] = corrected_pos_flux
+            
+        return cone_search_catalog
+            
 
     def visualization_interp(self, optimization_parameters, photon_index) -> None:
         """
@@ -958,31 +993,89 @@ class Chandra:
         plt.show()
 
 
-    def power_law_pho_index(self) -> List[tuple[float, float]]:
-        """
-        Calculate and visualize the power law photon indices for all sources in the cone search catalog.
+    def get_photon_index(self, key, table, index):
+        
+        if key == "Chandra":
+            interp_data = {"band_flux_obs": dict_cat.dictionary_catalog[key]["band_flux_obs"],
+                           "band_flux_obs_err": dict_cat.dictionary_catalog[key]["band_flux_obs_err"],
+                           "energy_band_center": dict_cat.dictionary_catalog[key]["energy_band_center"]}
+        
+        if key == "CS_Chandra":
+            interp_data = {"band_flux_obs": dict_cat.dictionary_catalog[key]["band_flux_obs"],
+                           "band_flux_obs_err": dict_cat.dictionary_catalog[key]["band_flux_obs_err"],
+                           "energy_band_center": dict_cat.dictionary_catalog[key]["energy_band_center"]}
+            
+        def model(energy_band, constant, gamma):
+            sigma = np.array([1e-20, 1e-22, 1e-24], dtype=float)
+            return (constant * energy_band **(-gamma)) * (np.exp(-sigma*3e20))
+        
+        flux_obs = [table[band_flux][index] for band_flux in interp_data["band_flux_obs"]]
+        
+        flux_err_obs = [[table[err_0][index] for err_0 in interp_data["band_flux_obs_err"][0]],
+                        [table[err_1][index] for err_1 in interp_data["band_flux_obs_err"][1]]]
+        err_neg = flux_err_obs[0]
+        err_pos = flux_err_obs[1]
+        
+        mean_error = [np.mean([err_0, err_1]) for (err_0, err_1) in zip(err_neg, err_pos)]
+        
+        try:
+            popt, pcov = curve_fit(model, interp_data["energy_band_center"], flux_obs, sigma=mean_error)
+            constant, photon_index = popt
+        except Exception as error:
+            photon_index = 1.7
+            
+        params = (flux_obs, flux_err_obs, interp_data["energy_band_center"])
+            
+        return photon_index, params 
+        
 
-        Returns
-        -------
-        photon_index : List[Tuple[float, float]]
-            List of tuples containing the non-absorbed and absorbed photon indices respectively for each source.
-        """
-        photon_index = []
-        optimization_parameters = []
+    def get_phoindex_nh(self):
+        key = "Chandra"
+        cs_key = "CS_Chandra"
         
-        for index, item in enumerate(self.cone_search_catalog["powlaw_gamma"]):
+        cs_photon_index_list, photon_index_list = [], []
+        cs_parameters_list, parameters_list = [], []
+        self.cs_nh_list, self.nh_list = [], []
+        
+        for (index, item), nh_value in zip(enumerate(self.cone_search_catalog["powlaw_gamma"]), self.cone_search_catalog["nh_gal"]):
+            # Photon Index 
             if item != 0:
-                photon_index.append((item, item))
+                cs_photon_index_list.append(item)
             else:
-                pho_value, params_value = self.get_pho_index(index)
-                photon_index.append(pho_value)
-                optimization_parameters.append(params_value)
-                
-        self.visualization_interp(optimization_parameters=optimization_parameters, photon_index=photon_index)
+                photon, params = self.get_photon_index(key=cs_key, table=self.cone_search_catalog, index=index)
+                photon = photon if photon > 0.0 else 1.7
+                cs_parameters_list.append(params)
+                cs_photon_index_list.append(photon)
+            if nh_value != 0:
+                self.cs_nh_list.append(nh_value*1e20)
+            else:
+                self.cs_nh_list.append(3e20)
+
+        for index, name in enumerate(list(self.cone_search_catalog['name'])): 
+            if name in self.nearby_sources_table["Chandra_IAUNAME"]:
+                nearby_index = list(self.nearby_sources_table["Chandra_IAUNAME"]).index(name)
+                if self.cone_search_catalog["powlaw_gamma"][index] != 0.0:
+                    photon_index_list.append(self.cone_search_catalog["powlaw_gamma"][index])
+                else:
+                    photon , params = self.get_photon_index(key=key, table=self.nearby_sources_table, index=nearby_index) #TODO modifier index ici pour avoir celui de nearby sources table
+                    photon = photon if photon > 0.0 else 1.7
+                    parameters_list.append(params)
+                    photon_index_list.append(photon)
+                    
+                if self.cone_search_catalog["nh_gal"][index] != 0.0:
+                    self.nh_list.append(self.cone_search_catalog["nh_gal"][index]*1e20)
+                else:
+                    self.nh_list.append(3e20)
+                    
+        self.nearby_sources_table["Photon Index"] = photon_index_list
+        self.nearby_sources_table["Nh"] = self.nh_list
         
-        return photon_index
-    
-    
+        self.cone_search_catalog["Photon Index"] = cs_photon_index_list
+        self.cone_search_catalog['Nh'] = self.cs_nh_list
+            
+        return cs_photon_index_list, photon_index_list
+                
+  
     def dictionary_model(self) -> Dict[str, Dict[str, Union[str, float]]]:
         """
         Create a dictionary of models and their parameters for each source in the cone search catalog.
@@ -992,31 +1085,72 @@ class Chandra:
         model_dictionary : Dict[str, Dict[str, Union[str, float]]]
             Dictionary where each key is a source identifier and the corresponding value is another dictionary containing model details.
         """
-        model_dictionary = {}
-        nbr_src = len(self.cone_search_catalog)
-        
-        model = np.array(['power' for item in range(nbr_src)], dtype=str)
-        model_value = []
-        csc_flux = np.array(list(self.cone_search_catalog['flux_aper_b']))
-        csc_flux = np.nan_to_num(csc_flux, nan=0.0)
-        nh_value = np.array(list(self.cone_search_catalog['nh_gal']*1e20))
-        
-        for item in range(nbr_src):
-            if model[item] == 'power':
-                model_value.append(self.photon_index[item])
-        
-        for item in range(nbr_src):
+        model_dictionary, cs_model_dictionary = {}, {}
+        cs_number_source, number_source = len(self.cone_search_catalog), len(self.nearby_sources_table)
 
+        cs_model = np.array([], dtype=str)
+        cs_model_value = []
+        for item in range(cs_number_source):
+            cs_model = np.append(cs_model, 'power')
+
+        for item in range(cs_number_source):
+            if cs_model[item] == 'power':
+                cs_model_value = np.append(cs_model_value, self.cone_search_catalog["Photon Index"][item])
+            elif cs_model[item] == 'black_body':
+                pass # Pas de valeur pour le moment...
+            elif cs_model[item] == 'temp':
+                pass # Pas de valeur pour le moment... (dernier model pimms)
+                
+        model = np.array([], dtype=str)
+        model_value = []
+        for item in range(number_source):
+            model = np.append(model, 'power')
+
+        for item in range(number_source):
+            if model[item] == 'power':
+                model_value = np.append(model_value, self.nearby_sources_table["Photon Index"][item])
+            elif model[item] == 'black_body':
+                pass # Pas de valeur pour le moment...
+            elif model[item] == 'temp':
+                pass # Pas de valeur pour le moment... (dernier model pimms)
+
+        cs_flux = list(self.cone_search_catalog[dict_cat.dictionary_catalog["CS_Chandra"]["flux_obs"]])
+        flux = list(self.nearby_sources_table[dict_cat.dictionary_catalog["Chandra"]["flux_obs"]])
+
+        for item in range(cs_number_source):
+            cs_dictionary = {
+                "model": cs_model[item],
+                "model_value": cs_model_value[item],
+                "flux": cs_flux[item],
+                "column_dentsity": self.cs_nh_list[item],
+            }
+            cs_model_dictionary[f"src_{item}"] = cs_dictionary
+        
+        for item in range(number_source):
             dictionary = {
                 "model": model[item],
                 "model_value": model_value[item],
-                "flux": csc_flux[item],
-                "column_dentsity": nh_value[item]
+                "flux": flux[item],
+                "column_dentsity": self.nh_list[item]
             }
-
             model_dictionary[f"src_{item}"] = dictionary
 
-        return model_dictionary
+        return cs_model_dictionary, model_dictionary
+    
+
+    def corrected_mean_flux(self):
+        key = "Chandra"
+        flux_obs = dict_cat.dictionary_catalog[key]["flux_obs"]
+
+        data = []
+        for item in range(len(self.nearby_sources_table)):
+            if not isinstance(self.nearby_sources_table[flux_obs][item], np.nan):
+                data.append(self.nearby_sources_table[flux_obs][item])
+        min_value = np.min(data)
+        flux = list(self.nearby_sources_table[flux])
+        corrected_flux = np.nan_to_num(flux, nan=min_value)
+
+        self.nearby_sources_table[flux_obs] = corrected_flux
 
 
 class Swift:

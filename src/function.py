@@ -96,7 +96,7 @@ def choose_catalog(args_catalog) -> Tuple[str, str]:
                 print("\n")
                 print(f"{colored(args_catalog, 'yellow')} catalog is loading")
                 print("-"*50)
-                valid_path = get_valid_file_path("catalog_data\Chandra.fits")
+                valid_path = get_valid_file_path("catalog_data/Chandra.fits")
                 print((f"The file at {colored(valid_path, 'yellow')} is {colored('valid', 'green')}."))
                 print("-"*50, "\n")
                 return valid_path, args_catalog
@@ -411,7 +411,9 @@ def optimal_point_infos(vector_dictionary, OptimalPointingIdx, SRCoptimalRATES) 
     individual background source rates, and the optimal pointing coordinates for the NICER telescope.
 
     Args:
-        vector_dictionary (dict): A dictionary containing result vectors, including sampled RA and DEC positions,
+        vector_dictionary (dict): A dictionary contai
+        # if isinstance(model_value, tuple):
+        #     model_value = model_value[0]ning result vectors, including sampled RA and DEC positions,
                                   pulsar count rates, SRC count rates, and the S/N ratio for each pointing.
         OptimalPointingIdx (int): The index of the optimal pointing in the result vectors.
         SRCoptimalRATES (float): The SRC count rate at the optimal pointing.
@@ -505,9 +507,6 @@ def count_rates(nearby_src_table, model_dictionary, telescop_data) -> Tuple[List
         model_value = model_dictionary[f"src_{item}"]["model_value"]
         xmm_flux =  model_dictionary[f"src_{item}"]["flux"]
         nh_value = model_dictionary[f"src_{item}"]["column_dentsity"]
-
-        # if isinstance(model_value, tuple):
-        #     model_value = model_value[0]
                 
         pimms_cmds = f"instrument {telescop_name} {min_value}-{max_value}\nfrom flux ERGS {energy_band}\nmodel galactic nh {nh_value}\nmodel {model} {model_value} 0.0\ngo {xmm_flux}\nexit\n"
         
@@ -523,60 +522,95 @@ def count_rates(nearby_src_table, model_dictionary, telescop_data) -> Tuple[List
         
     return count_rates, nearby_src_table
 
+# --------------- multiple sources catalog to unique sources catalog --------------- #
 
-def sources_to_unique_sources(result_table, column_names) -> Table:
-    """
-    Given a table of sources (result_table) and a list of column names (column_names), 
-    this function generates a new table that contains unique sources based on the 
-    specified column(s). If there are multiple rows with the same value in the 
-    specified column, the function computes the mean of the corresponding data 
-    in other columns.
-
-    Parameters:
-    result_table (Table): A table containing source data.
-    column_names (list): A list of column names, with the first element being 
-                         the column by which uniqueness is determined.
-
-    Returns:
-    Table: A new table with unique sources, where duplicates in the specified 
-           column(s) have been resolved by either taking the single value 
-           or computing the mean of other columns.
-    """
-    name_col = column_names[0]
-    name_list = result_table[name_col]
-    unique_name_list = list(set(result_table[name_col]))
-
-    data_list = []
-    for col in column_names:
-        data = []
-        for name in unique_name_list:
-            number_iter = list(name_list).count(name)
-            if number_iter == 1:
-                index = list(result_table[name_col]).index(name)
-                if 'IAUNAME' in col:
-                    data.append(name)
-                else:
-                    data.append(result_table[col][index])
+def unique_dict(name_list: List) -> Dict:
+    index_dict = {}
+    duplicate_dict = {}
+    
+    for index, item in enumerate(name_list):
+        if item in index_dict:
+            if item in duplicate_dict:
+                duplicate_dict[item].append(index)
             else:
-                index_list = [index for index, unique_name in enumerate(name_list) if unique_name == name]
-                index = index_list[0]
-                
-                if 'IAUNAME' in col:
-                    data.append(name)
-                elif 'RA' or 'DEC' in col:
-                    data.append(result_table[col][index])
+                duplicate_dict[item] = [index_dict[item], index]
+        else:
+            index_dict[item] = index
+    return duplicate_dict
+
+
+def insert_row(unique_sources_dict: Dict, new_row: List[Tuple]) -> Dict:
+    new_row.sort(key=lambda x: x[1])
+    
+    for key, value in new_row:
+        # Convertir le dictionnaire actuel en liste de paires clé-valeur
+        items = list(unique_sources_dict.items())
+        # Trouver l'emplacement approprié pour la nouvelle paire
+        for index, (_, liste_valeurs) in enumerate(items):
+            if liste_valeurs[0] > value:
+                # Insérer la nouvelle paire avant cette position
+                items.insert(index, (key, [value]))
+                break
+        else:
+            # Si aucune valeur plus grande n'a été trouvée, ajouter à la fin
+            items.append((key, [value]))
+        # Recréer le dictionnaire
+        unique_sources_dict = dict(items)
+    return unique_sources_dict  
+
+
+def create_unique_sources_catalog(nearby_sources_table: Table, column_name) -> Table:
+    
+    flux_list = [name for name in nearby_sources_table.colnames if 'flux' in name ]
+    
+    unique_sources_dict = unique_dict(nearby_sources_table[column_name["source_name"]])
+    
+    new_row = []
+    for index, name in enumerate(nearby_sources_table[column_name["source_name"]]):
+        if name not in unique_sources_dict.keys():
+            new_row.append((name, index))
+            
+    sources_dict = insert_row(unique_sources_dict=unique_sources_dict, new_row=new_row)
+    
+    # creation unique table -->
+    unique_table = Table()
+    
+    if column_name["catalog_name"] == "Chandra":
+        iauname_col, ra_col, dec_col = [], [], []
+        for key, value in list(sources_dict.items()):
+            iauname_col.append(key)
+            ra_col.append(np.mean([nearby_sources_table[column_name["right_ascension"]][index] for index in value]))
+            dec_col.append(np.mean([nearby_sources_table[column_name["declination"]][index] for index in value]))
+        
+        ellipse_list = [name for name in nearby_sources_table.colnames if 'ellipse' in name ]
+        for elt in ellipse_list:
+            data = []
+            for value in list(sources_dict.values()):
+                if len(value) != 1:
+                    new_value = np.nanmean([nearby_sources_table[elt][index] for index in value])
                 else:
-                    mean_data = []
-                    for item in index_list:
-                        mean_data.append(result_table[col][item])
-                    data.append(np.mean(mean_data))
+                    new_value = nearby_sources_table[elt][value[0]]
+                data.append(new_value)
+            unique_table[elt] = data
+            
+        unique_table["Chandra_IAUNAME"] = iauname_col
+        unique_table["RA"] = ra_col
+        unique_table["DEC"] = dec_col
     
-        data_list.append(data)
-    
-    nearby_src_table = Table(names=column_names,
-                             data=data_list)
-    
-    return nearby_src_table
+    for flux in flux_list:
+        data = []
+        for value in list(sources_dict.values()):
+            if len(value) != 1:
+                new_value = np.nanmean([nearby_sources_table[flux][index] for index in value])
+            else:
+                new_value = nearby_sources_table[flux][value[0]]
+            data.append(new_value)
+        unique_table[flux] = data
+        
+    return unique_table
+
+
+# ---------------------------------------------------------------------------------- #
 
 
 def vignetting_factor(OptimalPointingIdx, vector_dictionary, simulation_data, data) -> Tuple[List[float], Table]:
@@ -631,25 +665,34 @@ def vignetting_factor(OptimalPointingIdx, vector_dictionary, simulation_data, da
 
 
 def write_fits_file(nearby_sources_table, simulation_data) -> None:
-    os_dictionary = simulation_data["os_dictionary"]
-    cloesest_dataset_path = os_dictionary["cloesest_dataset_path"]
-    nearby_sources_table_path = os.path.join(cloesest_dataset_path, "nearby_sources_table.fits").replace("\\", "/")
-    nearby_sources_table.write(nearby_sources_table_path, format='fits', overwrite=True)
-    print(f"Nearby sources table was created in : {colored(nearby_sources_table_path, 'magenta')}")
+    try:
+        os_dictionary = simulation_data["os_dictionary"]
+        cloesest_dataset_path = os_dictionary["cloesest_dataset_path"]
+        nearby_sources_table_path = os.path.join(cloesest_dataset_path, "nearby_sources_table.fits").replace("\\", "/")
+        nearby_sources_table.write(nearby_sources_table_path, format='fits', overwrite=True)
+        print(f"Nearby sources table was created in : {colored(nearby_sources_table_path, 'magenta')}")
+        
+        topcat_path = os.path.join(os_dictionary["active_workflow"], 'softwares/topcat-extra.jar').replace("\\", "/")
+        command = f"java -jar {topcat_path} {nearby_sources_table_path}"
+        subprocess.run(command)
+        
+    except Exception as error:
+        print(f"{colored('An error occured : ', 'red')} {error}")
     
     
-def modeling(vignetting_factor: List, simulation_data: Dict, column_dictionary: Dict) -> None:
+def modeling(vignetting_factor: List, simulation_data: Dict, column_dictionary: Dict, catalog_name: str) -> None:
     
     object_data = simulation_data["object_data"]
     os_dictionary = simulation_data["os_dictionary"]
     nearby_sources_table = simulation_data["nearby_sources_table"]
     number_source = len(nearby_sources_table)
     
-    flux_name, err_flux_name, energy_band = column_dictionary["flux_obs"], column_dictionary["err_flux_obs"], column_dictionary["energy_band"]
+    flux_name, err_flux_name, energy_band = column_dictionary["band_flux_obs"], column_dictionary["band_flux_obs_err"], column_dictionary["energy_band"]
     photon_index_list, constant_list = np.array([], dtype=float), np.array([], dtype=float)
     main_flux_obs, main_err_flux_obs = [], []
     
     
+
     def power_law(vignetting_factor, energy_band, constant, gamma):
         sigma = column_dictionary["sigma"]
         return (constant * energy_band ** (-gamma) * np.exp(-sigma * 3e20)) * vignetting_factor
@@ -686,7 +729,7 @@ def modeling(vignetting_factor: List, simulation_data: Dict, column_dictionary: 
     
     nrows, ncols = 1, 3
     fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(15, 6), sharex=True)
-    fig.suptitle(f"Modeling nearby sources with Xmm Data\n{object_data['object_name']}", fontsize=16)
+    fig.suptitle(f"Modeling nearby sources with {catalog_name}\n{object_data['object_name']}", fontsize=16)
     fig.text(0.5, 0.04, 'Energy [keV]', ha='center', va='center', fontsize=12)
     fig.text(0.07, 0.5, 'Flux [erg/cm2/s]', ha='center', va='center', rotation='vertical', fontsize=12)
 
@@ -933,16 +976,16 @@ def modeling_source_spectra(nearby_sources_table: Table, instrument, model) -> D
     return total_spectra
 
 
-def total_plot_spectra(total_spectra: List, instrument, simulation_data: Dict) -> None:
+def total_plot_spectra(total_spectra: List, instrument, simulation_data: Dict, catalog_name: str) -> None:
     object_data = simulation_data["object_data"]
     os_dictionary = simulation_data["os_dictionary"]
     graph_data = {"min_lim_x": 0.2,
-                "max_lim_x": 10.0,
-                "percentile_0": 10,
-                "percentile_2": 90}
+                  "max_lim_x": 10.0,
+                  "percentile_0": 10,
+                  "percentile_2": 90}
 
-    figure, axes = plt.subplots(1, 3, figsize=(17, 8), sharey=True)
-    figure.suptitle(f"Spectral modeling close to {object_data['object_name']}", fontsize=20)
+    figure, axes = plt.subplots(1, 3, figsize=(17, 9), sharey=True)
+    figure.suptitle(f"Spectral modeling close to {object_data['object_name']}\ncatalog : {catalog_name}", fontsize=20)
     figure.text(0.5, 0.04, 'Energy [keV]', ha='center', va='center', fontsize=16)
     figure.text(0.085, 0.5, 'Counts', ha='center', va='center', rotation='vertical', fontsize=16)
 
@@ -996,6 +1039,5 @@ def total_plot_spectra(total_spectra: List, instrument, simulation_data: Dict) -
     img_path = os.path.join(os_dictionary['img'], f"spectral_modeling_close_to_{object_data['object_name']}.png".replace(" ", "_")).replace("\\", "/")
     plt.savefig(img_path)
     plt.show()
-
 
 # ------------------------------------------------------------- #

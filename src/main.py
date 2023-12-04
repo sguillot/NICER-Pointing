@@ -190,7 +190,8 @@ if args.catalog == "Xmm_DR13":
         os.mkdir(xmm_img)
         os.mkdir(xmm_closest_catalog)
     
-    os_dictionary = {"modeling_file_path": modeling_file_path,
+    os_dictionary = {"active_workflow": active_workflow,
+                     "modeling_file_path": modeling_file_path,
                      "catalog_directory" : xmm_directory,
                      "cloesest_dataset_path": xmm_closest_catalog,
                      "img": xmm_img}
@@ -201,8 +202,8 @@ if args.catalog == "Xmm_DR13":
     nearby_sources_table, nearby_sources_position = xmm.nearby_sources_table,  xmm.nearby_sources_position
     model_dictionary = xmm.model_dictionary
     
-    column_dictionary = {"flux_obs" : [f"SC_EP_{item+1}_FLUX" for item in range(5)],
-                         "err_flux_obs": [f"SC_EP_{item+1}_FLUX_ERR" for item in range(5)],
+    column_dictionary = {"band_flux_obs" : dict_cat.dictionary_catalog['XMM']["band_flux_obs"],
+                         "band_flux_obs_err": dict_cat.dictionary_catalog["XMM"]["band_flux_obs_err"],
                          "energy_band": [0.35, 0.75, 1.5, 3.25, 8.25],
                          "sigma" : np.array([1e-20, 5e-21, 1e-22, 1e-23, 1e-24], dtype=float),
                          "data_to_vignetting": ["SC_RA", "SC_DEC", "IAUNAME"]}
@@ -219,7 +220,8 @@ elif args.catalog == "CSC_2.0":
         os.mkdir(chandra_img)
         os.mkdir(chandra_closest_catalog)
     
-    os_dictionary = {"modeling_file_path": modeling_file_path,
+    os_dictionary = {"active_workflow": active_workflow,
+                     "modeling_file_path": modeling_file_path,
                      "catalog_directory": chandra_directory,
                      "cloesest_dataset_path": chandra_closest_catalog,
                      "img": chandra_img}
@@ -228,17 +230,36 @@ elif args.catalog == "CSC_2.0":
     
                     # cs = cone search (Harvard features)
     csc = Chandra(catalog_path=catalog_path, radius=radius, dictionary=object_data, user_table=add_source_table, os_dictionary=os_dictionary)
-    # nearby_sources_table, nearby_sources_position = csc.nearby_sources_table, csc.nearby_sources_position
-    cs_nearby_soucres_table, cs_nearby_sources_position = csc.cs_nearby_sources_table, csc.cs_nearby_sources_position
-    nearby_sources_table, nearby_sources_position = cs_nearby_soucres_table, cs_nearby_sources_position
-    nearby_sources_table = csc.cone_search_catalog.to_table()
-    model_dictionary = csc.model_dictionary
-
-    column_dictionary = {"flux_obs" : [f"flux_powlaw_aper_{band}" for band in ["s", 'm', "h"]],
-                         "err_flux_obs": [f"flux_powlaw_aper_{band}_negerr" for band in ["s", "m", "h"]],
-                         "energy_band": [0.85, 1.6, 4.5],
-                         "sigma" : np.array([1e-20, 1e-22, 1e-24], dtype=float),
-                         "data_to_vignetting": ["ra", "dec", "name"]}
+    table_1, sources_1 = csc.nearby_sources_table, csc.nearby_sources_position
+    table_2, sources_2 = csc.cone_search_catalog, csc.cs_nearby_sources_position
+    
+    answer = str(input(f"Which Table do you chose to follow the modeling ? {colored('Chandra / CS_Chandra', 'magenta')}\n"))
+    while True:
+        if answer == "Chandra":
+            key = "Chandra"
+            nearby_sources_table, nearby_sources_position = table_1, sources_1
+            column_dictionary = {"band_flux_obs": dict_cat.dictionary_catalog[key]["band_flux_obs"],
+                                 "band_flux_obs_err": dict_cat.dictionary_catalog[key]["band_flux_obs_err"],
+                                 "energy_band": dict_cat.dictionary_catalog[key]["energy_band_center"],
+                                 "sigma": np.array([1e-20, 1e-22, 1e-24], dtype=float),
+                                 "data_to_vignetting": ["RA", "DEC", "Chandra_IAUNAME"]}
+            model_dictionary = csc.model_dictionary
+            print(model_dictionary)
+            break
+        elif answer == "CS_Chandra":
+            key = "CS_Chandra"
+            nearby_sources_table, nearby_sources_position = table_2, sources_2
+            column_dictionary = {"band_flux_obs": dict_cat.dictionary_catalog[key]["band_flux_obs"],
+                                 "band_flux_obs_err": dict_cat.dictionary_catalog[key]["band_flux_obs_err"],
+                                 "energy_band": dict_cat.dictionary_catalog[key]["energy_band_center"],
+                                 "sigma": np.array([1e-20, 1e-22, 1e-24], dtype=float),
+                                 "data_to_vignetting": ["ra", "dec", "name"]}
+            model_dictionary = csc.cs_model_dictionary
+            break
+        else:
+            print(f"{colored('Key error ! ', 'red')}. Please retry !")
+            answer = str(input(f"Which Table do you chose to follow the modeling ? {colored('Chandra / CS_Chandra', 'magenta')}\n"))
+    
 elif args.catalog == "Swift":
     # Find the optimal pointing point with the Swift catalog
     swi = Swift(catalog_path=catalog_path, radius=radius, dictionary=object_data, user_table=add_source_table)
@@ -295,7 +316,7 @@ vignetting_factor, nearby_sources_table = f.vignetting_factor(OptimalPointingIdx
 
 # --------------- Modeling nearby sources --------------- #
 
-f.modeling(vignetting_factor=vignetting_factor, simulation_data=simulation_data, column_dictionary=column_dictionary)
+f.modeling(vignetting_factor=vignetting_factor, simulation_data=simulation_data, column_dictionary=column_dictionary, catalog_name=args.catalog)
 
 # ------------------------------------------------------- #
 
@@ -339,7 +360,7 @@ try:
     select_master_sources_around_region(ra=right_ascension, dec=declination, radius=radius.value, output_name=output_name)
     select_catalogsources_around_region(output_name=output_name)
     master_sources = f.load_master_sources(output_name)
-    f.master_source_plot(master_sources=master_sources, object_data=object_data, number_graph=1)
+    f.master_source_plot(master_sources=master_sources, object_data=object_data, number_graph=2)
 except Exception as error :
     print(f"{colored('An error occured : ', 'red')} {error}")
 
@@ -361,6 +382,6 @@ instrument = Instrument.from_ogip_file(nicer_data_arf, nicer_data_rmf, exposure=
 total_spectra = f.modeling_source_spectra(nearby_sources_table=nearby_sources_table, instrument=instrument, model=model)
 
 # plot of all spectra data
-f.total_plot_spectra(total_spectra=total_spectra, instrument=instrument, simulation_data=simulation_data)
+f.total_plot_spectra(total_spectra=total_spectra, instrument=instrument, simulation_data=simulation_data, catalog_name=args.catalog)
 
 # ------------------------------------------------------------- # 
