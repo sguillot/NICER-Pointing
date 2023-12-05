@@ -559,6 +559,39 @@ def insert_row(unique_sources_dict: Dict, new_row: List[Tuple]) -> Dict:
     return unique_sources_dict  
 
 
+def replace_nan_value(key: str, unique_table: Table) -> Table:
+    flux_obs = dict_cat.dictionary_catalog[key]["flux_obs"]
+    flux_obs_err = dict_cat.dictionary_catalog[key]["flux_obs_err"]
+    band_flux_obs = dict_cat.dictionary_catalog[key]["band_flux_obs"]
+    band_flux_obs_err = dict_cat.dictionary_catalog[key]["band_flux_obs_err"]
+
+    flux_list = [flux_obs, flux_obs_err, band_flux_obs, band_flux_obs_err[0], band_flux_obs_err[1]]
+
+    flux_name = []
+
+    for flux in flux_list:
+        if isinstance(flux, str):
+            flux_name.append(flux)
+        else:
+            for item in range(len(flux)):
+                flux_name.append(flux[item])
+
+    for name in flux_name:
+        flux_data = []
+        index_data = []
+        for index, flux in enumerate(unique_table[name]):
+            if not np.isnan(flux):
+                flux_data.append(flux)
+            else:
+                index_data.append(index)
+        min_value = np.min(flux_data)
+        
+        for index in index_data:
+            unique_table[name][index] = min_value
+            
+    return unique_table
+
+
 def create_unique_sources_catalog(nearby_sources_table: Table, column_name) -> Table:
     
     flux_list = [name for name in nearby_sources_table.colnames if 'flux' in name ]
@@ -606,6 +639,8 @@ def create_unique_sources_catalog(nearby_sources_table: Table, column_name) -> T
                 new_value = nearby_sources_table[flux][value[0]]
             data.append(new_value)
         unique_table[flux] = data
+        
+    unique_table = replace_nan_value(key=column_name["catalog_name"], unique_table=unique_table)
         
     return unique_table
 
@@ -757,15 +792,15 @@ def modeling(vignetting_factor: List, simulation_data: Dict, column_dictionary: 
 # --------------- None important function --------------- #
 
 
-def py_to_xlsx(excel_data_path: str, count_rates: List, object_data: Dict, args: str, radius: float) -> None:
+def py_to_xlsx(excel_data_path: str, count_rates: List, object_data: Dict, args: Tuple[str, str], radius: float) -> None:
     
-    if args == "Xmm_DR13":
+    if args[0] == "Xmm_DR13":
         cat = "xmm"
-    elif args == "CSC_2.0":
-        cat = "csc"
-    elif args == "Swift":
+    elif args[0] == "CSC_2.0":
+        cat = f"csc_{args[1]}"
+    elif args[0] == "Swift":
         cat = "swi"
-    elif args == "eRosita":
+    elif args[0] == "eRosita":
         cat = "ero"
         
     wb = openpyxl.Workbook()
@@ -778,16 +813,17 @@ def py_to_xlsx(excel_data_path: str, count_rates: List, object_data: Dict, args:
     wb.save(ct_rates_path.replace(" ", "_"))
 
 
-def xlsx_to_py(excel_data_path: str, nearby_sources_table: Table, object_data: Dict, args: str, radius: float) -> Tuple[List[float], Table]:
+def xlsx_to_py(excel_data_path: str, nearby_sources_table: Table, object_data: Dict, args: Tuple[str, str], radius: float) -> Tuple[List[float], Table]:
     
-    if args == "Xmm_DR13":
+    if args[0] == "Xmm_DR13":
         cat = "xmm"
-    elif args == "CSC_2.0":
-        cat = "csc"
-    elif args == "Swift":
+    elif args[0] == "CSC_2.0":
+        cat = f"csc_{args[1]}"
+    elif args[0] == "Swift":
         cat = "swi"
-    elif args == "eRosita":
+    elif args[0] == "eRosita":
         cat = "ero"
+        
     ct_rates_path = os.path.join(excel_data_path, f"{cat}_{radius}_{object_data['object_name']}.xlsx".replace(" ", "_"))
     wb = openpyxl.load_workbook(ct_rates_path)
     sheet = wb.active

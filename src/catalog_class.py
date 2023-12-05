@@ -286,8 +286,9 @@ class XmmCatalog:
             absorbed_power_law = optimization_parameters[item][3]
             absorb_pho_index = photon_index[item]
             
-            axes.errorbar(energy_band, flux_obs, flux_obs_err, fmt='*', color='red', ecolor='black')
-            axes.plot(energy_band, absorbed_power_law, label=f"$\Gamma$ = {absorb_pho_index:.8f}")
+            # axes.errorbar(energy_band, flux_obs, flux_obs_err, fmt='*', color='red', ecolor='black')
+            # axes.plot(energy_band, absorbed_power_law, label=f"$\Gamma$ = {absorb_pho_index:.8f}")
+            axes.step(energy_band, flux_obs, where='pre', label=f"$\Gamma$ = {absorb_pho_index:.8f}")
     
         axes.legend(loc="upper left", ncol=4, fontsize=6)
         axes.loglog()
@@ -663,7 +664,7 @@ class Chandra:
         self.cone_search_catalog = self.threshold(self.cone_search_catalog)
         
         self.nearby_sources_table, self.nearby_sources_position = self.find_nearby_sources(radius=radius, dictionary=dictionary, user_table=user_table)
-        self.corrected_mean_flux()
+        # self.corrected_mean_flux()
         self.neighbourhood_of_object(radius=radius, dictionary=dictionary, os_dictionary=os_dictionary)
         self.cs_photon_index, self.photon_index = self.get_phoindex_nh()
         self.cs_model_dictionary, self.model_dictionary = self.dictionary_model()
@@ -764,7 +765,7 @@ class Chandra:
                        "right_ascension": "RA",
                        "declination": "DEC",
                        "catalog_name": "Chandra"}
-
+            
         unique_table = f.create_unique_sources_catalog(nearby_sources_table=nearby_sources_table, column_name=column_name)
 
         nearby_src_position = SkyCoord(ra=unique_table['RA'], dec=unique_table['DEC'], unit=u.deg)

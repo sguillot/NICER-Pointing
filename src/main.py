@@ -19,6 +19,7 @@ import sys
 import shlex
 import catalog_information as dict_cat
 import numpyro
+import platform
 
 # ---------------------------------------- #
 
@@ -207,6 +208,7 @@ if args.catalog == "Xmm_DR13":
                          "energy_band": [0.35, 0.75, 1.5, 3.25, 8.25],
                          "sigma" : np.array([1e-20, 5e-21, 1e-22, 1e-23, 1e-24], dtype=float),
                          "data_to_vignetting": ["SC_RA", "SC_DEC", "IAUNAME"]}
+    key = "XMM"
     
 elif args.catalog == "CSC_2.0":
     # Find the optimal pointing point with the Chandra catalog
@@ -244,7 +246,6 @@ elif args.catalog == "CSC_2.0":
                                  "sigma": np.array([1e-20, 1e-22, 1e-24], dtype=float),
                                  "data_to_vignetting": ["RA", "DEC", "Chandra_IAUNAME"]}
             model_dictionary = csc.model_dictionary
-            print(model_dictionary)
             break
         elif answer == "CS_Chandra":
             key = "CS_Chandra"
@@ -279,10 +280,15 @@ elif args.catalog == "compare_catalog":
 # --------------- count_rates --------------- #
 
 excel_data_path = os.path.join(active_workflow, 'excel_data').replace("\\", "/")
-# count_rates, nearby_sources_table = f.count_rates(nearby_sources_table, model_dictionary, telescop_data)
-# f.py_to_xlsx(excel_data_path=excel_data_path, count_rates=count_rates, object_data=object_data, args=args.catalog, radius=args.radius)
-count_rates, nearby_sources_table = f.xlsx_to_py(excel_data_path=excel_data_path, nearby_sources_table=nearby_sources_table, object_data=object_data, args=args.catalog, radius=args.radius)
 
+if platform.system() == "Linux":
+    count_rates, nearby_sources_table = f.count_rates(nearby_sources_table, model_dictionary, telescop_data)
+    f.py_to_xlsx(excel_data_path=excel_data_path, count_rates=count_rates, object_data=object_data, args=(args.catalog, key), radius=args.radius)
+elif platform.system() == "Windows":
+    count_rates, nearby_sources_table = f.xlsx_to_py(excel_data_path=excel_data_path, nearby_sources_table=nearby_sources_table, object_data=object_data, args=(args.catalog, key), radius=args.radius)
+else:
+    sys.exit()
+    
 simulation_data['nearby_sources_table'] = nearby_sources_table
 
 # -------------------------------------------------- #
