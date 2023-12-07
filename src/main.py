@@ -114,7 +114,7 @@ object_data = {"object_name": object_name,
 # get the active workflow path
 active_workflow = os.getcwd()
 active_workflow = active_workflow.replace("\\","/")
-print(f"{colored('Active workflow : ', 'yellow')} {active_workflow}")
+
 # catalog_data_path
 catalog_datapath = os.path.join(active_workflow, "catalog_data").replace("\\", "/")
 
@@ -273,7 +273,24 @@ elif args.catalog == "eRosita":
     model_dictionary = eRo.dictionary_model
 elif args.catalog == "compare_catalog":
     # Find the optimal pointing point with two catalogs to compare data
-    compare_class = CompareCatalog(catalog_path=catalog_path, radius=radius, dictionary=object_data, user_table=add_source_table)
+    
+    compare_catalog_directory = os.path.join(modeling_file_path, 'Compare_catalog'.replace("\\", "/"))
+    compare_catalog_img = os.path.join(compare_catalog_directory, 'img'.replace("\\", "/"))
+    compare_catalog_closest_catalog = os.path.join(compare_catalog_directory, "closest_catalog")
+    if not os.path.exists(compare_catalog_directory):
+        os.mkdir(compare_catalog_directory)
+        os.mkdir(compare_catalog_img)
+        os.mkdir(compare_catalog_closest_catalog)
+    
+    os_dictionary = {"active_workflow": active_workflow,
+                     "modeling_file_path": modeling_file_path,
+                     "catalog_directory": compare_catalog_directory,
+                     "cloesest_dataset_path": compare_catalog_closest_catalog,
+                     "img": compare_catalog_img}
+    
+    simulation_data["os_dictionary"] = os_dictionary
+
+    compare_class = CompareCatalog(catalog_path=catalog_path, radius=radius, simulation_data=simulation_data, user_table=add_source_table)
     compare_class.opti_point_calcul(simulation_data=simulation_data)
     sys.exit()
 elif args.catalog == "match":
@@ -316,8 +333,11 @@ elif args.catalog == "match":
     # plot of all spectra data
     f.total_plot_spectra(total_spectra=total_spectra, instrument=instrument, simulation_data=simulation_data, catalog_name="xmmXchandra")
 
-# ------------------------------------------------------------- # 
+    # ------------------------------------------------------------- # 
     
+    sys.exit()
+else:
+    print(f"{colored('Invalid key workd !', 'red')}")
     sys.exit()
     
 # --------------- count_rates --------------- #

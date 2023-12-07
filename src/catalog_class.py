@@ -16,6 +16,7 @@ from termcolor import colored
 from tqdm import tqdm
 
 import function as f
+import openpyxl
 import catalog_information as dict_cat
 import sys
 import numpy as np
@@ -216,14 +217,28 @@ class XmmCatalog:
             sigma = np.array([1e-20, 5e-21, 1e-22, 1e-23, 1e-24], dtype=float)
             return (constant * x ** (-gamma)) * (np.exp(-sigma * 3e20))
         
-        energy_band = np.array([0.35, 0.75, 1.5, 3.25, 8.25], dtype=float)
-        flux_obs = np.array([self.nearby_sources_table[f"SC_EP_{item + 1}_FLUX"][number] for item in range(5)], dtype=float)
-        flux_obs_err = np.array([self.nearby_sources_table[f"SC_EP_{item + 1}_FLUX_ERR"][number] for item in range(5)], dtype=float)
         
-        popt, pcov = curve_fit(absorbed_power_law, energy_band, flux_obs, sigma=flux_obs_err)
+        key = 'XMM'
+        energy_band = dict_cat.dictionary_catalog[key]["energy_band_center"]
+        energy_band_half_width = dict_cat.dictionary_catalog[key]["energy_band_half_width"]
+        tab_width = 2 * energy_band_half_width
+        
+        band_flux_obs_name = dict_cat.dictionary_catalog[key]["band_flux_obs"]
+        band_flux_obs_err_name = dict_cat.dictionary_catalog[key]["band_flux_obs_err"]
+        
+        flux_obs = [self.nearby_sources_table[name][number] for name in band_flux_obs_name]
+        flux_err = [[self.nearby_sources_table[err_0][number] for err_0 in band_flux_obs_err_name[0]],
+                    [self.nearby_sources_table[err_1][number] for err_1 in band_flux_obs_err_name[1]]]
+
+        flux_err_obs = [np.mean([flux_err_0, flux_err_1]) for flux_err_0, flux_err_1 in zip(flux_err[0], flux_err[1])]
+        
+        y_array = [num/det for num, det in zip(flux_obs, tab_width)]
+        yerr_array = [num/det for num, det in zip(flux_err_obs, tab_width)]
+        
+        popt, pcov = curve_fit(absorbed_power_law, energy_band, y_array, sigma=yerr_array)
         constant, absorb_pho_index = popt
 
-        optimization_parameters = (energy_band, flux_obs, flux_obs_err, absorbed_power_law(energy_band, *popt))
+        optimization_parameters = (energy_band, y_array, yerr_array, absorbed_power_law(energy_band, *popt))
         
         return optimization_parameters, absorb_pho_index
 
@@ -968,33 +983,38 @@ class Chandra:
         if key == "Chandra":
             interp_data = {"band_flux_obs": dict_cat.dictionary_catalog[key]["band_flux_obs"],
                            "band_flux_obs_err": dict_cat.dictionary_catalog[key]["band_flux_obs_err"],
-                           "energy_band_center": dict_cat.dictionary_catalog[key]["energy_band_center"]}
+                           "energy_band_center": dict_cat.dictionary_catalog[key]["energy_band_center"],
+                           "energy_band_half_width": dict_cat.dictionary_catalog[key]["energy_band_half_width"]}
         
         if key == "CS_Chandra":
             interp_data = {"band_flux_obs": dict_cat.dictionary_catalog[key]["band_flux_obs"],
                            "band_flux_obs_err": dict_cat.dictionary_catalog[key]["band_flux_obs_err"],
-                           "energy_band_center": dict_cat.dictionary_catalog[key]["energy_band_center"]}
+                           "energy_band_center": dict_cat.dictionary_catalog[key]["energy_band_center"],
+                           "energy_band_half_width": dict_cat.dictionary_catalog[key]["energy_band_half_width"]}
             
         def model(energy_band, constant, gamma):
             sigma = np.array([1e-20, 1e-22, 1e-24], dtype=float)
             return (constant * energy_band **(-gamma)) * (np.exp(-sigma*3e20))
         
+        tab_width = 2 * interp_data["energy_band_half_width"]
+        
         flux_obs = [table[band_flux][index] for band_flux in interp_data["band_flux_obs"]]
         
-        flux_err_obs = [[table[err_0][index] for err_0 in interp_data["band_flux_obs_err"][0]],
-                        [table[err_1][index] for err_1 in interp_data["band_flux_obs_err"][1]]]
-        err_neg = flux_err_obs[0]
-        err_pos = flux_err_obs[1]
+        flux_err = [[table[err_0][index] for err_0 in interp_data["band_flux_obs_err"][0]],
+                    [table[err_1][index] for err_1 in interp_data["band_flux_obs_err"][1]]]
         
-        mean_error = [np.mean([err_0, err_1]) for (err_0, err_1) in zip(err_neg, err_pos)]
+        flux_err_obs = [np.mean([err_0, err_1]) for (err_0, err_1) in zip(flux_err[0], flux_err[1])]
+        
+        y_array = [num/det for num, det in zip(flux_obs, tab_width)]
+        yerr_array = [num/det for num, det in zip(flux_err_obs, tab_width)]
         
         try:
-            popt, pcov = curve_fit(model, interp_data["energy_band_center"], flux_obs, sigma=mean_error)
+            popt, pcov = curve_fit(model, interp_data["energy_band_center"], y_array, sigma=yerr_array)
             constant, photon_index = popt
         except Exception as error:
             photon_index = 1.7
             
-        params = (flux_obs, flux_err_obs, interp_data["energy_band_center"])
+        params = (y_array, yerr_array, interp_data["energy_band_center"])
             
         return photon_index, params 
         
@@ -1440,16 +1460,55 @@ class CompareCatalog:
     """
 
  
-    def __init__(self, catalog_path: str, radius: Quantity, dictionary: dict, user_table: Table) -> None:
-        self.catalog_1, self.catalog_2, self.catalog_1_name, self.catalog_2_name = self.open_catalog(catalogs_path=catalog_path, radius=radius, dictionary=dictionary)
-        self.nearby_src_table_1, self.nearby_src_table_2, self.nearby_src_position_1, self.nearby_src_position_2 = self.find_nearby_sources(radius=radius, dictionary=dictionary)
-        self.neighbourhood_of_object(radius=radius, dictionary=dictionary)
+    def __init__(self, catalog_path: str, radius: Quantity, simulation_data: dict, user_table: Table) -> None:
         
+        self.catalog_1, self.catalog_2, self.catalog_1_name, self.catalog_2_name = self.open_catalog(catalogs_path=catalog_path, radius=radius, object_data=simulation_data["object_data"])
+        self.nearby_sources_table_1, self.nearby_sources_table_2, self.nearby_sources_position_1, self.nearby_sources_position_2 = self.find_nearby_sources(radius=radius, object_data=simulation_data["object_data"])
+        self.neighbourhood_of_object(radius=radius, simulation_data=simulation_data)
         self.model_dictionary_1, self.model_dictionary_2 = self.model_dictionary()
-        self.count_rate_1, self.count_rate_2 = self.count_rate()
+        
+        if platform.system() == "Linux":
+            self.count_rate_1, self.count_rate_2 = self.count_rate()
+        elif platform.system() == "Windows":
+            if catalog_path[2] == "Xmm_DR13" and catalog_path[3] == "CSC_2.0":
+                self.count_rate_1, self.nearby_sources_table_1 = self.xslx_to_py(args=catalog_path[2], table=self.nearby_sources_table_1, simulation_data=simulation_data, radius=radius.value)
+                self.count_rate_2, self.nearby_sources_table_2 = self.xslx_to_py(args=catalog_path[3], table=self.nearby_sources_table_2, simulation_data=simulation_data, radius=radius.value)
+            elif catalog_path[2] == "CSC_2.0" and catalog_path[3] == "Xmm_DR13":
+                self.count_rate_1, self.nearby_sources_table_1 = self.xslx_to_py(args=catalog_path[2], table=self.nearby_sources_table_1, simulation_data=simulation_data, radius=radius.value)
+                self.count_rate_2, self.nearby_sources_table_2 = self.xslx_to_py(args=catalog_path[3], table=self.nearby_sources_table_2, simulation_data=simulation_data, radius=radius.value)
 
     
-    def open_catalog(self, catalogs_path: str, radius: Quantity, dictionary: dict) -> Tuple[Table, Table, str, str]:
+    def xslx_to_py(self, args, table, simulation_data, radius) -> Tuple[List, Table]:
+        
+        active_workflow = simulation_data["os_dictionary"]["active_workflow"]
+        object_data = simulation_data["object_data"]
+        excel_data_path = os.path.join(active_workflow, "excel_data").replace("\\", "/")
+
+        if args == "Xmm_DR13":
+            cat = "xmm"
+        elif args == "CSC_2.0":
+            cat = "csc_CS_Chandra"
+        elif args == "Swift":
+            cat = "swi"
+        elif args == "eRosita":
+            cat = "ero"
+        elif args == "match":
+            cat = "xmmXchandra"
+        
+        ct_rates_path = os.path.join(excel_data_path, f"{cat}_{radius}_{object_data['object_name']}.xlsx".replace(" ", "_"))
+        wb = openpyxl.load_workbook(ct_rates_path)
+        sheet = wb.active
+
+        count_rates = []
+        for item in range(len(table)): 
+            count_rates.append(sheet.cell(row = item + 1, column = 1).value)
+            
+        table["count_rate"] = count_rates
+
+        return count_rates, table
+    
+    
+    def open_catalog(self, catalogs_path: str, radius: Quantity, object_data: dict) -> Tuple[Table, Table, str, str]:
         if "catalog_data/Chandra.fits" not in catalogs_path:
             with fits.open(catalogs_path[0], memmap=True) as data1, fits.open(catalogs_path[1], memmap=True) as data2:
                 result_1, result_2 = Table(data1[1].data), Table(data2[1].data)
@@ -1463,7 +1522,7 @@ class CompareCatalog:
                     result_2 = Table(data[1].data)
                     data.close()
                 cone = vo.dal.SCSService('http://cda.cfa.harvard.edu/csc2scs/coneSearch') 
-                name = SkyCoord.from_name(dictionary['object_name'])
+                name = SkyCoord.from_name(object_data['object_name'])
                 self.cone_search_catalog = cone.search(pos=name, radius=radius, verbosity=3)
                 return self.cone_search_catalog.to_table(), result_2, catalogs_path[2], catalogs_path[3]
             
@@ -1472,7 +1531,7 @@ class CompareCatalog:
                     result_1 = Table(data[1].data)
                     data.close()
                 cone = vo.dal.SCSService('http://cda.cfa.harvard.edu/csc2scs/coneSearch') 
-                name = SkyCoord.from_name(dictionary['object_name'])
+                name = SkyCoord.from_name(object_data['object_name'])
                 self.cone_search_catalog = cone.search(pos=name, radius=radius, verbosity=3)
                 return result_1, self.cone_search_catalog.to_table(), catalogs_path[2], catalogs_path[3]
 
@@ -1735,10 +1794,10 @@ class CompareCatalog:
             return self.nearby_src_table_1, self.catalog_2
             
             
-    def find_nearby_sources(self, radius: Quantity, dictionary: dict) -> Tuple[Table, Table, SkyCoord, SkyCoord]:
+    def find_nearby_sources(self, radius: Quantity, object_data: dict) -> Tuple[Table, Table, SkyCoord, SkyCoord]:
         
         field_of_view = radius + 5*u.arcmin
-        object_position = dictionary['object_position']
+        object_position = object_data['object_position']
         min_ra, max_ra = object_position.ra - field_of_view, object_position.ra + field_of_view
         min_dec, max_dec = object_position.dec - field_of_view, object_position.dec + field_of_view
         
@@ -1766,11 +1825,11 @@ class CompareCatalog:
                     
             self.nearby_src_position_1 = SkyCoord(ra=list(self.nearby_src_table_1[ra_1]), dec=list(self.nearby_src_table_1[dec_1]), unit=u.deg)
             self.nearby_src_position_2 = SkyCoord(ra=list(self.catalog_2[ra_2]), dec=list(self.catalog_2[dec_2]), unit=u.deg)
-            self.nearby_src_table_1, self.catalog_2 = self.var_function(dictionary=dictionary)
+            self.nearby_src_table_1, self.catalog_2 = self.var_function(dictionary=object_data)
             
             try:
                 if len(self.nearby_src_table_1) != 0 or len(self.catalog_2) != 0:
-                    print(f"We have detected {len(self.nearby_src_table_1)} sources in {self.catalog_1_name} and {len(self.catalog_2)} sources in {self.catalog_2_name} close to {dictionary['object_name']}")
+                    print(f"We have detected {len(self.nearby_src_table_1)} sources in {self.catalog_1_name} and {len(self.catalog_2)} sources in {self.catalog_2_name} close to {object_data['object_name']}")
                     return self.nearby_src_table_1, self.catalog_2, self.nearby_src_position_1, self.nearby_src_position_2
                 else:
                     print(f"We can't compare catalogs because no sources was detected in one of the catalog")
@@ -1802,11 +1861,11 @@ class CompareCatalog:
                     
             self.nearby_src_position_1 = SkyCoord(ra=list(self.catalog_1[ra_1]), dec=list(self.catalog_1[dec_1]), unit=u.deg)
             self.nearby_src_position_2 = SkyCoord(ra=list(self.nearby_src_table_2[ra_2]), dec=list(self.nearby_src_table_2[dec_2]), unit=u.deg)
-            self.catalog_1, self.nearby_src_table_2 = self.var_function(dictionary=dictionary)
+            self.catalog_1, self.nearby_src_table_2 = self.var_function(dictionary=object_data)
             
             try:
                 if len(self.catalog_2) != 0 or len(self.nearby_src_table_2) != 0:
-                    print(f"We have detected {len(self.catalog_1)} sources in {self.catalog_1_name} and {len(self.nearby_src_table_2)} sources in {self.catalog_2_name} close to {dictionary['object_name']}")
+                    print(f"We have detected {len(self.catalog_1)} sources in {self.catalog_1_name} and {len(self.nearby_src_table_2)} sources in {self.catalog_2_name} close to {object_data['object_name']}")
                     return self.catalog_1, self.nearby_src_table_2, self.nearby_src_position_1, self.nearby_src_position_2
                 else:
                     print(f"We can't compare catalogs because no sources was detected in one of the catalog")
@@ -1815,10 +1874,13 @@ class CompareCatalog:
                 print(f"An error occured : {error}")
 
 
-    def neighbourhood_of_object(self, radius: Quantity, dictionary: dict) -> None:
+    def neighbourhood_of_object(self, radius: Quantity, simulation_data: dict) -> None:
         
-        name = dictionary["object_name"]
-        obj_ra, obj_dec = dictionary["object_position"].ra, dictionary["object_position"].dec
+        object_data = simulation_data["object_data"]
+        os_dictionary = simulation_data["os_dictionary"]
+        
+        name = object_data["object_name"]
+        obj_ra, obj_dec = object_data["object_position"].ra, object_data["object_position"].dec
         ra_in_x2a = [ra for index, ra in enumerate(self.variability_table['SC_RA']) if self.variability_table['IN_X2A'][index] == True]
         dec_in_x2a = [dec for index, dec in enumerate(self.variability_table['SC_DEC']) if self.variability_table['IN_X2A'][index] == True]
         ra_in_dr11 = [ra for index, ra in enumerate(self.variability_table['SC_RA']) if self.variability_table['IN_X2A'][index] == False]
@@ -1848,14 +1910,14 @@ class CompareCatalog:
                 axes_0.set_title(f"{title_1}")
                 axes_2.set_title(f"{title_2}")
                 
-                xmm_ra = list(self.nearby_src_table_1['SC_RA'])
-                xmm_dec = list(self.nearby_src_table_1['SC_DEC'])
-                csc_ra = list(self.nearby_src_table_2["ra"])
-                csc_dec = list(self.nearby_src_table_2["dec"])
-                cs_ra_var = [ra for index, ra in enumerate(list(self.nearby_src_table_2['ra'])) if self.nearby_src_table_2['Variability'][index] != 0.0]
-                cs_ra_invar = [ra for index, ra in enumerate(list(self.nearby_src_table_2['ra'])) if self.nearby_src_table_2['Variability'][index] == 0.0]
-                cs_dec_var = [dec for index, dec in enumerate(list(self.nearby_src_table_2['dec'])) if self.nearby_src_table_2['Variability'][index] != 0.0]
-                cs_dec_invar = [dec for index, dec in enumerate(list(self.nearby_src_table_2['dec'])) if self.nearby_src_table_2['Variability'][index] == 0.0]
+                xmm_ra = list(self.nearby_sources_table_1['SC_RA'])
+                xmm_dec = list(self.nearby_sources_table_1['SC_DEC'])
+                csc_ra = list(self.nearby_sources_table_2["ra"])
+                csc_dec = list(self.nearby_sources_table_2["dec"])
+                cs_ra_var = [ra for index, ra in enumerate(list(self.nearby_sources_table_2['ra'])) if self.nearby_sources_table_2['Variability'][index] != 0.0]
+                cs_ra_invar = [ra for index, ra in enumerate(list(self.nearby_sources_table_2['ra'])) if self.nearby_sources_table_2['Variability'][index] == 0.0]
+                cs_dec_var = [dec for index, dec in enumerate(list(self.nearby_sources_table_2['dec'])) if self.nearby_sources_table_2['Variability'][index] != 0.0]
+                cs_dec_invar = [dec for index, dec in enumerate(list(self.nearby_sources_table_2['dec'])) if self.nearby_sources_table_2['Variability'][index] == 0.0]
                 
             elif self.catalog_1_name == "CSC_2.0" and self.catalog_2_name == "Xmm_DR13":
                 title_1, title_2 = "CSC_2.0", "Xmm_DR13"
@@ -1867,14 +1929,14 @@ class CompareCatalog:
                 axes_0.set_title(f"{title_2}")
                 axes_2.set_title(f"{title_1}")
 
-                xmm_ra = list(self.nearby_src_table_2['SC_RA'])
-                xmm_dec = list(self.nearby_src_table_2['SC_DEC'])
-                csc_ra = list(self.nearby_src_table_1["ra"])
-                csc_dec = list(self.nearby_src_table_1["dec"])
-                cs_ra_var = [ra for index, ra in enumerate(list(self.nearby_src_table_1['ra'])) if self.nearby_src_table_1['Variability'][index] != 0.0]
-                cs_ra_invar = [ra for index, ra in enumerate(list(self.nearby_src_table_1['ra'])) if self.nearby_src_table_1['Variability'][index] == 0.0]
-                cs_dec_var = [dec for index, dec in enumerate(list(self.nearby_src_table_1['dec'])) if self.nearby_src_table_1['Variability'][index] != 0.0]
-                cs_dec_invar = [dec for index, dec in enumerate(list(self.nearby_src_table_1['dec'])) if self.nearby_src_table_1['Variability'][index] == 0.0]
+                xmm_ra = list(self.nearby_sources_table_2['SC_RA'])
+                xmm_dec = list(self.nearby_sources_table_2['SC_DEC'])
+                csc_ra = list(self.nearby_sources_table_1["ra"])
+                csc_dec = list(self.nearby_sources_table_1["dec"])
+                cs_ra_var = [ra for index, ra in enumerate(list(self.nearby_sources_table_1['ra'])) if self.nearby_sources_table_1['Variability'][index] != 0.0]
+                cs_ra_invar = [ra for index, ra in enumerate(list(self.nearby_sources_table_1['ra'])) if self.nearby_sources_table_1['Variability'][index] == 0.0]
+                cs_dec_var = [dec for index, dec in enumerate(list(self.nearby_sources_table_1['dec'])) if self.nearby_sources_table_1['Variability'][index] != 0.0]
+                cs_dec_invar = [dec for index, dec in enumerate(list(self.nearby_sources_table_1['dec'])) if self.nearby_sources_table_1['Variability'][index] == 0.0]
 
             axes_0.coords[0].set_format_unit(u.hourangle)
             axes_0.coords[1].set_format_unit(u.deg) 
@@ -1912,14 +1974,14 @@ class CompareCatalog:
                 axes_0.set_title(f"{title_1}")
                 axes_2.set_title(f"{title_2}")
                 
-                xmm_ra = list(self.nearby_src_table_1['SC_RA'])
-                xmm_dec = list(self.nearby_src_table_1['SC_DEC'])
-                csc_ra = list(self.nearby_src_table_2["ra"])
-                csc_dec = list(self.nearby_src_table_2["dec"])
-                cs_ra_var = [ra for index, ra in enumerate(list(self.nearby_src_table_2['ra'])) if self.nearby_src_table_2['Variability'][index] != 0.0]
-                cs_ra_invar = [ra for index, ra in enumerate(list(self.nearby_src_table_2['ra'])) if self.nearby_src_table_2['Variability'][index] == 0.0]
-                cs_dec_var = [dec for index, dec in enumerate(list(self.nearby_src_table_2['dec'])) if self.nearby_src_table_2['Variability'][index] != 0.0]
-                cs_dec_invar = [dec for index, dec in enumerate(list(self.nearby_src_table_2['dec'])) if self.nearby_src_table_2['Variability'][index] == 0.0]
+                xmm_ra = list(self.nearby_sources_table_1['SC_RA'])
+                xmm_dec = list(self.nearby_sources_table_1['SC_DEC'])
+                csc_ra = list(self.nearby_sources_table_2["ra"])
+                csc_dec = list(self.nearby_sources_table_2["dec"])
+                cs_ra_var = [ra for index, ra in enumerate(list(self.nearby_sources_table_2['ra'])) if self.nearby_sources_table_2['Variability'][index] != 0.0]
+                cs_ra_invar = [ra for index, ra in enumerate(list(self.nearby_sources_table_2['ra'])) if self.nearby_sources_table_2['Variability'][index] == 0.0]
+                cs_dec_var = [dec for index, dec in enumerate(list(self.nearby_sources_table_2['dec'])) if self.nearby_sources_table_2['Variability'][index] != 0.0]
+                cs_dec_invar = [dec for index, dec in enumerate(list(self.nearby_sources_table_2['dec'])) if self.nearby_sources_table_2['Variability'][index] == 0.0]
                 
             elif self.catalog_1_name == "CSC_2.0" and self.catalog_2_name == "Xmm_DR13":
                 title_1, title_2 = "CSC_2.0", "Xmm_DR13"
@@ -1933,14 +1995,14 @@ class CompareCatalog:
                 axes_0.set_title(f"{title_2}")
                 axes_2.set_title(f"{title_1}")
                 
-                xmm_ra = list(self.nearby_src_table_2['SC_RA'])
-                xmm_dec = list(self.nearby_src_table_2['SC_DEC'])
-                csc_ra = list(self.nearby_src_table_1["ra"])
-                csc_dec = list(self.nearby_src_table_1["dec"])
-                cs_ra_var = [ra for index, ra in enumerate(list(self.nearby_src_table_1['ra'])) if self.nearby_src_table_1['Variability'][index] != 0.0]
-                cs_ra_invar = [ra for index, ra in enumerate(list(self.nearby_src_table_1['ra'])) if self.nearby_src_table_1['Variability'][index] == 0.0]
-                cs_dec_var = [dec for index, dec in enumerate(list(self.nearby_src_table_1['dec'])) if self.nearby_src_table_1['Variability'][index] != 0.0]
-                cs_dec_invar = [dec for index, dec in enumerate(list(self.nearby_src_table_1['dec'])) if self.nearby_src_table_1['Variability'][index] == 0.0]
+                xmm_ra = list(self.nearby_sources_table_2['SC_RA'])
+                xmm_dec = list(self.nearby_sources_table_2['SC_DEC'])
+                csc_ra = list(self.nearby_sources_table_1["ra"])
+                csc_dec = list(self.nearby_sources_table_1["dec"])
+                cs_ra_var = [ra for index, ra in enumerate(list(self.nearby_sources_table_1['ra'])) if self.nearby_sources_table_1['Variability'][index] != 0.0]
+                cs_ra_invar = [ra for index, ra in enumerate(list(self.nearby_sources_table_1['ra'])) if self.nearby_sources_table_1['Variability'][index] == 0.0]
+                cs_dec_var = [dec for index, dec in enumerate(list(self.nearby_sources_table_1['dec'])) if self.nearby_sources_table_1['Variability'][index] != 0.0]
+                cs_dec_invar = [dec for index, dec in enumerate(list(self.nearby_sources_table_1['dec'])) if self.nearby_sources_table_1['Variability'][index] == 0.0]
                 
             axes_0.scatter(xmm_ra, xmm_dec, s=30, facecolors='none', edgecolors='black', label=f"Sources : {len(xmm_ra)}")
             axes_0.scatter(obj_ra, obj_dec, s=100, marker="*", facecolors='none', edgecolors='red', label=f"{name}")
@@ -1955,7 +2017,7 @@ class CompareCatalog:
         axes_1.legend(loc='upper right', ncol=2, fontsize=8)
         
         axes_2.scatter(csc_ra, csc_dec, facecolors='none', edgecolors='black', s=30, label=f"Nearby sources : {len(csc_ra)}")
-        axes_2.scatter(dictionary["object_position"].ra, dictionary["object_position"].dec, s=100, marker="*", facecolors='none', edgecolors='red', label=f"{dictionary['object_name']}")
+        axes_2.scatter(object_data["object_position"].ra, object_data["object_position"].dec, s=100, marker="*", facecolors='none', edgecolors='red', label=f"{object_data['object_name']}")
         axes_2.legend(loc="upper right", fontsize=8)
         
         axes_3.scatter(cs_ra_var, cs_dec_var, s=30, facecolors='none', edgecolors='darkorange', label=f"Var src : {len(cs_ra_var)} sources")
@@ -1963,6 +2025,9 @@ class CompareCatalog:
         axes_3.scatter(obj_ra, obj_dec, marker='*', s=100, facecolors='none', edgecolors='red', label=f"{name}")
         axes_3.legend(loc="upper right", ncol=2, fontsize=8)
 
+        img = os_dictionary["img"]
+        img_path = os.path.join(img, f"neighbourhood_of_{name}.png").replace("\\", "/")
+        plt.savefig(img_path)
         plt.show()
         
         
@@ -1980,19 +2045,19 @@ class CompareCatalog:
             m_1, m_2 = "PhoIndex_csc", "PhoIndex"
             nh_value_1, nh_value_2 = "nh_gal", "Nh"
         
-        nbr_src_1, nbr_src_2 = len(self.nearby_src_table_1), len(self.nearby_src_table_2)
+        nbr_src_1, nbr_src_2 = len(self.nearby_sources_table_1), len(self.nearby_sources_table_2)
         self.model_1, self.model_2 = {}, {}
         
         model_1, model_2 = np.array(['power' for item in range(nbr_src_1)], dtype=str), np.array(['power' for item in range(nbr_src_2)], dtype=str)
         
-        model_value_1 = np.array([self.nearby_src_table_1[m_1][n_1] for n_1 in range(nbr_src_1)], dtype=float)
-        model_value_2 = np.array([self.nearby_src_table_2[m_2][n_2]for n_2 in range(nbr_src_2)], dtype=float)
+        model_value_1 = np.array([self.nearby_sources_table_1[m_1][n_1] for n_1 in range(nbr_src_1)], dtype=float)
+        model_value_2 = np.array([self.nearby_sources_table_2[m_2][n_2]for n_2 in range(nbr_src_2)], dtype=float)
         
-        flux_1 = np.array([self.nearby_src_table_1[flux_value_1][n_1] for n_1 in range(nbr_src_1)], dtype=float)
-        flux_2 = np.array([self.nearby_src_table_2[flux_value_2][n_2] for n_2 in range(nbr_src_2)], dtype=float)
+        flux_1 = np.array([self.nearby_sources_table_1[flux_value_1][n_1] for n_1 in range(nbr_src_1)], dtype=float)
+        flux_2 = np.array([self.nearby_sources_table_2[flux_value_2][n_2] for n_2 in range(nbr_src_2)], dtype=float)
         
-        nh_1 = np.array([self.nearby_src_table_1[nh_value_1][n_1] for n_1 in range(nbr_src_1)], dtype=float)
-        nh_2 = np.array([self.nearby_src_table_2[nh_value_2][n_2] for n_2 in range(nbr_src_2)], dtype=float)
+        nh_1 = np.array([self.nearby_sources_table_1[nh_value_1][n_1] for n_1 in range(nbr_src_1)], dtype=float)
+        nh_2 = np.array([self.nearby_sources_table_2[nh_value_2][n_2] for n_2 in range(nbr_src_2)], dtype=float)
 
         for item in range(nbr_src_1):
 
@@ -2061,54 +2126,55 @@ class CompareCatalog:
     
     
     def opti_point_calcul(self, simulation_data: dict) -> None:
-        object_data = simulation_data["object_data"]
+        min_value, max_value, step = -7.0, 7.1, 0.05
+        DeltaRA = Angle(np.arange(min_value, max_value, step), unit=u.deg)/60
+        DeltaDEC = Angle(np.arange(min_value, max_value, step), unit=u.deg)/60
+        
         telescop_data = simulation_data["telescop_data"]
-            
-        Delta_RA, Delta_DEC = Angle(np.arange(-3.0, 3.1, 0.1), unit=u.deg)/60, Angle(np.arange(-3.0, 3.1, 0.1), unit=u.deg)/60
+        object_data = simulation_data["object_data"]
         
-        Sample_RA, Sample_DEC, PSRrates =  np.zeros((3, len(Delta_RA) * len(Delta_DEC)))
-        
-        SNR_1, SRCrates_1 = np.zeros((2, len(Delta_RA) * len(Delta_DEC)))
-        SNR_2, SRCrates_2 = np.zeros((2, len(Delta_RA) * len(Delta_DEC)))
-        
-        PSRcountrates = object_data['count_rate']
-        
-        count = 0
-        for i in Delta_RA:
-            for j in Delta_DEC:
-                NICERpointing = SkyCoord(ra=object_data["object_position"].ra + i, dec=object_data["object_position"].dec + j)
-                PSRseparation = f.ang_separation(object_data["object_position"], NICERpointing)
-                
-                SRCseparation_1 = f.ang_separation(self.nearby_src_position_1, NICERpointing)
-                SRCseparation_2 = f.ang_separation(self.nearby_src_position_2, NICERpointing)
-                
-                PSRcountrateScaled = f.scaled_ct_rate(PSRseparation.arcmin, PSRcountrates, telescop_data["EffArea"], telescop_data["OffAxisAngle"])
-                
-                SRCcountrateScaled_1 = f.scaled_ct_rate(SRCseparation_1.arcmin, self.count_rate_1, telescop_data["EffArea"], telescop_data["OffAxisAngle"])
-                SRCcountrateScaled_2 = f.scaled_ct_rate(SRCseparation_2.arcmin, self.count_rate_2, telescop_data["EffArea"], telescop_data["OffAxisAngle"])
-                
-                Sample_RA[count] = NICERpointing.ra.deg
-                Sample_DEC[count] = NICERpointing.dec.deg
+        RA_grid, DEC_grid = np.meshgrid(DeltaRA, DeltaDEC)
 
-                PSRrates[count] = PSRcountrateScaled
-                
-                SRCrates_1[count] = np.sum(SRCcountrateScaled_1)
-                SRCrates_2[count] = np.sum(SRCcountrateScaled_2)
-
-                SNR_1[count] = f.signal_to_noise(PSRcountrateScaled, SRCcountrateScaled_1, simulation_data["INSTbkgd"], simulation_data["EXPtime"])
-                SNR_2[count] = f.signal_to_noise(PSRcountrateScaled, SRCcountrateScaled_2, simulation_data["INSTbkgd"], simulation_data["EXPtime"])
-                count +=  1
-                
+        SampleRA = object_data["object_position"].ra.deg + RA_grid.flatten().deg
+        SampleDEC = object_data["object_position"].dec.deg + DEC_grid.flatten().deg
+        
+        NICERpointing = SkyCoord(ra=SampleRA*u.deg, dec=SampleDEC*u.deg)
+        NICERpointing = NICERpointing.reshape(-1, 1)
+        
+        PSRseparation = f.ang_separation(object_data["object_position"], NICERpointing).arcmin
+        PSRcountrateScaled = f.scaled_ct_rate(PSRseparation, object_data['count_rate'], telescop_data["EffArea"], telescop_data["OffAxisAngle"])
+        
+        sources_1 = self.nearby_sources_position_1.reshape(1, -1)
+        SRCseparation_1 = f.ang_separation(sources_1, NICERpointing).arcmin
+        count_rate_1 = self.nearby_sources_table_1['count_rate']
+        SRCcountrateScaled_1 = f.scaled_ct_rate(SRCseparation_1, count_rate_1, telescop_data["EffArea"], telescop_data["OffAxisAngle"])
+        SNR_1, PSRrates, SRCrates_1  = np.zeros((3, len(DeltaRA) * len(DeltaDEC)))
+        for item in range(len(PSRcountrateScaled)):
+            PSRrates[item] = PSRcountrateScaled[item]
+            SRCrates_1[item] = np.sum(SRCcountrateScaled_1[item])
+            SNR_1[item] = f.signal_to_noise(PSRrates[item], SRCrates_1[item], simulation_data["INSTbkgd"], simulation_data["EXPtime"])
+        
+        sources_2 = self.nearby_sources_position_2.reshape(1, -1)
+        SRCseparation_2 = f.ang_separation(sources_2, NICERpointing).arcmin
+        count_rate_2 = self.nearby_sources_table_2['count_rate']
+        SRCcountrateScaled_2 = f.scaled_ct_rate(SRCseparation_2, count_rate_2, telescop_data["EffArea"], telescop_data["OffAxisAngle"])
+        SNR_2, PSRrates, SRCrates_2  = np.zeros((3, len(DeltaRA) * len(DeltaDEC)))
+        for item in range(len(PSRcountrateScaled)):
+            PSRrates[item] = PSRcountrateScaled[item]
+            SRCrates_2[item] = np.sum(SRCcountrateScaled_2[item])
+            SNR_2[item] = f.signal_to_noise(PSRrates[item], SRCrates_2[item], simulation_data["INSTbkgd"], simulation_data["EXPtime"])
+        
+        
         self.OptimalPointingIdx_1 = np.where(SNR_1==max(SNR_1))[0][0]
-        SRCoptimalSEPAR_1 = f.ang_separation(self.nearby_src_position_1, SkyCoord(ra=Sample_RA[self.OptimalPointingIdx_1]*u.degree, dec=Sample_DEC[self.OptimalPointingIdx_1]*u.degree)).arcmin
+        SRCoptimalSEPAR_1 = f.ang_separation(self.nearby_sources_position_1, SkyCoord(ra=SampleRA[self.OptimalPointingIdx_1]*u.degree, dec=SampleDEC[self.OptimalPointingIdx_1]*u.degree)).arcmin
         SRCoptimalRATES_1 = f.scaled_ct_rate(SRCoptimalSEPAR_1, self.count_rate_1, telescop_data["EffArea"], telescop_data["OffAxisAngle"])
         
         self.OptimalPointingIdx_2 = np.where(SNR_2==max(SNR_2))[0][0]
-        SRCoptimalSEPAR_2 = f.ang_separation(self.nearby_src_position_2, SkyCoord(ra=Sample_RA[self.OptimalPointingIdx_1]*u.degree, dec=Sample_DEC[self.OptimalPointingIdx_2]*u.degree)).arcmin
+        SRCoptimalSEPAR_2 = f.ang_separation(self.nearby_sources_position_2, SkyCoord(ra=SampleRA[self.OptimalPointingIdx_1]*u.degree, dec=SampleDEC[self.OptimalPointingIdx_2]*u.degree)).arcmin
         SRCoptimalRATES_2 = f.scaled_ct_rate(SRCoptimalSEPAR_2, self.count_rate_2, telescop_data["EffArea"], telescop_data["OffAxisAngle"])     
 
-        self.vector_dictionary = {'Sample_RA': Sample_RA,
-                                  'Sample_DEC': Sample_DEC,
+        self.vector_dictionary = {'Sample_RA': SampleRA,
+                                  'Sample_DEC': SampleDEC,
                                   'PSRrates': PSRrates,
                                   'vecteur_1':{'SRCrates_1': SRCrates_1,
                                                'SRCoptimalRATES_1':SRCoptimalRATES_1,
@@ -2131,14 +2197,14 @@ class CompareCatalog:
         figure_map.text(0.04, 0.5, 'Declination [deg]', ha='center', va='center', rotation='vertical', fontsize=16)
 
         ax0 = axes[0]
-        ax0.plot(self.nearby_src_position_1.ra, self.nearby_src_position_1.dec, marker='.', color='black', linestyle='')
+        ax0.plot(self.nearby_sources_position_1.ra, self.nearby_sources_position_1.dec, marker='.', color='black', linestyle='')
         ax0.plot(object_data["object_position"].ra, object_data["object_position"].dec, marker='*', color="green", linestyle='')
         ax0.plot(self.vector_dictionary['Sample_RA'][self.OptimalPointingIdx_1], self.vector_dictionary['Sample_DEC'][self.OptimalPointingIdx_1], marker="+", color='red', linestyle='')
         ax0.scatter(self.vector_dictionary['Sample_RA'], self.vector_dictionary['Sample_DEC'], c=self.vector_dictionary["vecteur_1"]["SNR_1"], s=10, edgecolor='face')
         ax0.set_title(title_0)
 
         ax1 = axes[1]
-        ax1.plot(self.nearby_src_position_2.ra, self.nearby_src_position_2.dec, marker='.', color='black', linestyle='')
+        ax1.plot(self.nearby_sources_position_2.ra, self.nearby_sources_position_2.dec, marker='.', color='black', linestyle='')
         ax1.plot(object_data["object_position"].ra, object_data["object_position"].dec, marker='*', color="green", linestyle='')
         ax1.plot(self.vector_dictionary['Sample_RA'][self.OptimalPointingIdx_2], self.vector_dictionary['Sample_DEC'][self.OptimalPointingIdx_2], marker="+", color='red', linestyle='')
         ax1.scatter(self.vector_dictionary['Sample_RA'], self.vector_dictionary['Sample_DEC'], c=self.vector_dictionary["vecteur_2"]["SNR_2"], s=10, edgecolor='face')
@@ -2151,7 +2217,14 @@ class CompareCatalog:
         color_bar = figure_map.colorbar(sm, cax=cax)
         color_bar.set_label("S/N")
         
+        img = simulation_data["os_dictionary"]["img"]
+        img_path = os.path.join(img, f"SNR_{object_data['object_name']}.png")
+        plt.savefig(img_path)
         plt.show()
+        
+        
+    def vignetting_factor(self):
+        pass
         
         
 # --------------- Software Class --------------- #
