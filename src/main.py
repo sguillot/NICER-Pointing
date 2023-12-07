@@ -42,7 +42,7 @@ parser.add_argument('--radius', '-r', type=float,
                     help="Enter the radius of the field of view (unit = arcmin)")
 
 parser.add_argument('--catalog', '-ca', type=str, 
-                    help="Enter catalog keyword : Xmm_DR13/CSC_2.0/Swift/eRosita/compare_catalog")
+                    help="Enter catalog keyword : Xmm_DR13/CSC_2.0/Swift/eRosita/compare_catalog/match")
 
 args = parser.parse_args()
 
@@ -114,7 +114,7 @@ object_data = {"object_name": object_name,
 # get the active workflow path
 active_workflow = os.getcwd()
 active_workflow = active_workflow.replace("\\","/")
-
+print(f"{colored('Active workflow : ', 'yellow')} {active_workflow}")
 # catalog_data_path
 catalog_datapath = os.path.join(active_workflow, "catalog_data").replace("\\", "/")
 
@@ -276,6 +276,49 @@ elif args.catalog == "compare_catalog":
     compare_class = CompareCatalog(catalog_path=catalog_path, radius=radius, dictionary=object_data, user_table=add_source_table)
     compare_class.opti_point_calcul(simulation_data=simulation_data)
     sys.exit()
+elif args.catalog == "match":
+    
+    mixed_directory = os.path.join(modeling_file_path, 'xmmXchandra'.replace("\\", "/"))
+    mixed_img = os.path.join(mixed_directory, 'img'.replace("\\", "/"))
+    mixed_closest_catalog = os.path.join(mixed_directory, "closest_catalog")
+    if not os.path.exists(mixed_directory):
+        os.mkdir(mixed_directory)
+        os.mkdir(mixed_img)
+        os.mkdir(mixed_closest_catalog)
+    
+    os_dictionary = {"active_workflow": active_workflow,
+                     "catalog_datapath": catalog_datapath,
+                     "modeling_file_path": modeling_file_path,
+                     "catalog_directory": mixed_directory,
+                     "cloesest_dataset_path": mixed_closest_catalog,
+                     "img": mixed_img}
+    
+    simulation_data["os_dictionary"] = os_dictionary
+    
+    mixed_catalog = CatalogMatch(catalog_name=("Xmm_DR13", "Chandra"), radius=radius, simulation_data=simulation_data)
+    nearby_sources_table = mixed_catalog.nearby_sources_table
+    
+    # --------------- modeling spectra with jaxspec --------------- #
+
+    # setup jaxspec
+    config.update("jax_enable_x64", True)
+    numpyro.set_platform("cpu")
+
+    # define caracteristic model here --> exp(-nh*$\sigma$) * x ** (-$\Gamma$)
+    model = Tbabs() * Powerlaw()
+
+    # load instrument parameters
+    instrument = Instrument.from_ogip_file(nicer_data_arf, nicer_data_rmf, exposure=50_000)
+
+    # load all of the sources spetcra
+    total_spectra = f.modeling_source_spectra(nearby_sources_table=nearby_sources_table, instrument=instrument, model=model)
+
+    # plot of all spectra data
+    f.total_plot_spectra(total_spectra=total_spectra, instrument=instrument, simulation_data=simulation_data, catalog_name="xmmXchandra")
+
+# ------------------------------------------------------------- # 
+    
+    sys.exit()
     
 # --------------- count_rates --------------- #
 
@@ -283,7 +326,7 @@ excel_data_path = os.path.join(active_workflow, 'excel_data').replace("\\", "/")
 
 if platform.system() == "Linux":
     count_rates, nearby_sources_table = f.count_rates(nearby_sources_table, model_dictionary, telescop_data)
-    f.py_to_xlsx(excel_data_path=excel_data_path, count_rates=count_rates, object_data=object_data, args=(args.catalog, key), radius=args.radius)
+    # f.py_to_xlsx(excel_data_path=excel_data_path, count_rates=count_rates, object_data=object_data, args=(args.catalog, key), radius=args.radius)
 elif platform.system() == "Windows":
     count_rates, nearby_sources_table = f.xlsx_to_py(excel_data_path=excel_data_path, nearby_sources_table=nearby_sources_table, object_data=object_data, args=(args.catalog, key), radius=args.radius)
 else:

@@ -1,6 +1,6 @@
 # --------------- Packages --------------- #
 
-from astropy.table import Table
+from astropy.table import Table, Column
 from astropy.io import fits
 from astropy.coordinates import SkyCoord, Angle
 from astropy import units as u
@@ -23,6 +23,7 @@ import matplotlib.pyplot as plt
 import pyvo as vo
 import subprocess
 import os
+import platform
 
 # ---------------------------------------- #
 
@@ -241,38 +242,6 @@ class XmmCatalog:
             photon_index (list of tuples): A list containing tuples of photon indices for both models
                                         for each source.
         """
-        # number_interp = len(optimization_parameters)
-        # number_column = 4
-        # number_row = number_interp/number_column
-        # if number_row < 1:
-        #     number_row = 1
-        # elif number_row %1 == 0:
-        #     number_row= int(number_interp/4)
-        # else:
-        #     number_row = int(number_interp/4) + 1
-        # index_figure, axes = plt.subplots(nrows=number_row, ncols=number_column, figsize=(17, 8), sharex=True)
-        # index_figure.subplots_adjust(wspace=0.5, hspace=1.5)
-        # index_figure.suptitle("Interpolation Photon Index", fontsize=20)
-        # index_figure.text(0.5, 0.04, 'Energy [keV]', ha='center', va='center')
-        # index_figure.text(0.04, 0.5, 'Flux [erg/cm^2/s]', ha='center', va='center', rotation='vertical')
-
-        # count = 0
-        # for row in range(number_row):
-        #     for column in range(number_column):
-        #         if count < number_interp:
-        #             energy_band = optimization_parameters[count][0]
-        #             flux_obs = optimization_parameters[count][1]
-        #             flux_obs_err = optimization_parameters[count][2]
-        #             absorbed_power_law = optimization_parameters[count][3]
-        #             absorb_pho_index = photon_index[count]
-        #             axes[row][column].errorbar(energy_band, flux_obs, flux_obs_err, fmt='*', color='red', ecolor='black')
-        #             axes[row][column].plot(energy_band, absorbed_power_law, linestyle='dashdot', color="navy", label="Absorb")
-        #             axes[row][column].set_title(f"Absorb $\Gamma$ = {absorb_pho_index:.8f}", fontsize=7)
-        #             axes[row][column].legend(loc="upper left", ncol=2, fontsize=6)
-        #         count += 1
-                
-        # plt.show()
-        
         energy_band = dict_cat.dictionary_catalog["XMM"]["energy_band_center"]
         
         fig, axes = plt.subplots(1, 1, figsize=(15, 8))
@@ -286,9 +255,9 @@ class XmmCatalog:
             absorbed_power_law = optimization_parameters[item][3]
             absorb_pho_index = photon_index[item]
             
-            # axes.errorbar(energy_band, flux_obs, flux_obs_err, fmt='*', color='red', ecolor='black')
-            # axes.plot(energy_band, absorbed_power_law, label=f"$\Gamma$ = {absorb_pho_index:.8f}")
-            axes.step(energy_band, flux_obs, where='pre', label=f"$\Gamma$ = {absorb_pho_index:.8f}")
+            axes.errorbar(energy_band, flux_obs, flux_obs_err, fmt='*', color='red', ecolor='black')
+            axes.plot(energy_band, absorbed_power_law, label=f"$\Gamma$ = {absorb_pho_index:.8f}")
+            # axes.step(energy_band, flux_obs, where='pre', label=f"$\Gamma$ = {absorb_pho_index:.8f}")
     
         axes.legend(loc="upper left", ncol=4, fontsize=6)
         axes.loglog()
@@ -2393,3 +2362,562 @@ class MasterSource():
         self.has_sdss_widths = False
             
 # ---------------------------------------------- #
+
+# --------------- CatalogMatch --------------- #
+
+class CatalogMatch:
+    """
+    A class designed to perform catalog matching for astronomical datasets, 
+    particularly focused on X-ray astronomy sources. The class provides functionalities 
+    to load, analyze, and match data from different astronomical catalogs, such as XMM-Newton 
+    and Chandra. It also calculates various properties of the matched sources, including 
+    photon index, count rates, vignetting factors, and more. 
+
+    Attributes:
+        nearby_sources_table_1 (Table): Table of nearby sources from the first catalog.
+        nearby_sources_table_2 (Table): Table of nearby sources from the second catalog.
+        mixed_index (List): List of indices of mixed sources from both catalogs.
+        coordinates (List): Coordinates of the matched sources.
+        photon_index_list (List[float]): List of photon indices for the sources.
+        flag (List[Tuple]): Flags indicating the catalog(s) of origin for each source.
+        nh_list (List[float]): List of column density values for the sources.
+        model_dictionary (Dict): Dictionary containing model parameters for the sources.
+        nearby_sources_table (Table): Combined table of nearby sources from both catalogs.
+        nearby_sources_position (SkyCoord): Sky coordinates of the nearby sources.
+        count_rate (List[float]): List of count rates for the sources.
+        vignetting_factor (List[float]): List of vignetting factors for the sources.
+        OptimalPointingIdx (int): Index of the optimal pointing for observation.
+        vector_dictionary (Dict): Dictionary containing vector data related to the sources.
+    
+    Methods:
+        load_catalog(catalog_name: Tuple[str, str], os_dictionary: Dict) -> Tuple[Table, Table]:
+            Loads catalogs from specified paths and returns two tables of catalog data.
+
+        load_cs_catalog(radius: float, object_data: Dict) -> Table:
+            Loads a cone search catalog based on given radius and object data.
+
+        find_nearby_sources(os_dictionary: Dict) -> Tuple[Dict, Dict]:
+            Finds and returns nearby sources based on the operational system dictionary.
+
+        get_mixed_coordinate(catalog_key: Tuple[str, str], table: Tuple[Table, Table]) -> Tuple[List, List]:
+            Computes mixed coordinates from two given tables and catalog keys.
+
+        neighbourhood_of_object(simulation_data: Dict, radius: float) -> Tuple[List, List]:
+            Determines the neighborhood of an object based on simulation data and radius.
+
+        get_photon_index(catalog_key: Tuple[str, str], table: Table, index: int, os_dictionary: Dict) -> float:
+            Retrieves the photon index for a specific source in a catalog.
+
+        get_mixed_photon_index(catalog_key: Tuple[str, str], table: Tuple[Table, Table], mixed_index: List[Tuple], row: int, os_dictionary: Dict) -> float:
+            Calculates the photon index for a source present in both catalogs.
+
+        get_total_photon_nh_list(os_dictionary: Dict) -> Tuple[List[float], List[Tuple], List[float]]:
+            Compiles a complete list of photon indices, flags, and column densities for all sources.
+
+        model_dictionary() -> Dict:
+            Creates a dictionary containing the modeling data for each source.
+
+        create_nearby_sources_table() -> Table:
+            Generates a table containing data of all nearby sources.
+
+        get_sources_position() -> SkyCoord:
+            Returns the sky coordinates of all nearby sources.
+
+        count_rate_SNR_map(simulation_data: Dict, radius: float) -> List[float]:
+            Calculates the count rate and signal-to-noise ratio map for the sources.
+
+        vignetting_factor(OptimalPointingIdx: int, vector_dictionary: Dict, simulation_data: Dict) -> List[float]:
+            Computes the vignetting factor for each source based on optimal pointing data.
+
+        write_fits_table(os_dictionary: Dict) -> None:
+            Writes the nearby sources data to a FITS table and opens it using TOPCAT.
+
+    """
+    def __init__(self, catalog_name: Tuple[str, str], radius, simulation_data: Dict) -> None:
+        table_1, table_2 = self.load_catalog(catalog_name=catalog_name, os_dictionary=simulation_data["os_dictionary"])
+        
+        # if "Chandra" in catalog_name:
+        #     self.cone_search_catalog = self.load_cs_catalog(radius=radius, object_data=simulation_data["object_data"])
+
+        self.nearby_sources_table_1, self.nearby_sources_table_2 = self.find_nearby_sources(os_dictionary=simulation_data["os_dictionary"])
+        self.mixed_index, self.coordinates = self.neighbourhood_of_object(simulation_data=simulation_data, radius=radius)
+        self.photon_index_list, self.flag, self.nh_list = self.get_total_photon_nh_list(os_dictionary=simulation_data["os_dictionary"])
+        self.model_dictionary = self.model_dictionary()
+        self.nearby_sources_table = self.create_nearby_sources_table()
+        self.nearby_sources_position = self.get_sources_position()
+        self.count_rate = self.count_rate_SNR_map(simulation_data=simulation_data, radius=radius)
+        self.vignetting_factor = self.vignetting_factor(OptimalPointingIdx=self.OptimalPointingIdx, vector_dictionary=self.vector_dictionary, simulation_data=simulation_data)
+        self.write_fits_table(os_dictionary=simulation_data["os_dictionary"])
+    
+
+    def load_catalog(self, catalog_name: Tuple[str, str], os_dictionary: Dict) -> Tuple[Table, Table]:
+        name_1, name_2 = catalog_name
+        catalog_datapath = os_dictionary["catalog_datapath"]
+        
+        if name_1 == "Xmm_DR13" and name_2 == "Chandra":
+            try:
+                path_1 = os.path.join(catalog_datapath, "4XMM_slim_DR13cat_v1.0.fits").replace("\\", "/")
+                path_2 = os.path.join(catalog_datapath, "Chandra.fits").replace("\\", "/")                    
+                if os.path.exists(path=path_1) and os.path.exists(path=path_2):
+                    self.catalog_key = ["XMM", "Chandra"]
+                    self.data_to_vignetting = ["RA", "DEC", "Xmm_IAUNAME", "Chandra_IAUNAME"]
+                    self.column_name = {"XMM": {"right_ascension": "SC_RA",
+                                           "declination": "SC_DEC"},
+                                        "Chandra": {"right_ascension": "RA",
+                                               "declination": "DEC"}
+                                        }
+                    with fits.open(path_1, memmap=True) as data_1, fits.open(path_2, memmap=True) as data_2:
+                        print(f"{colored('Xmm_DR13 and Chandra catalog are loaded !', 'green')}")
+                        table_1, table_2 = Table(data_1[1].data), Table(data_2[1].data)
+                        return table_1, table_2
+                else:
+                    print(f"{colored('An error occured : ', 'red')} invalid path !")
+                    sys.exit()
+                    
+            except Exception as error:
+                print(f"{colored('An error occured : ', 'red')} {error}")
+                sys.exit()
+                
+                
+    def load_cs_catalog(self, radius: float, object_data: Dict) -> Table:
+        cone = vo.dal.SCSService('http://cda.cfa.harvard.edu/csc2scs/coneSearch') 
+        name = SkyCoord.from_name(object_data['object_name'])
+        cone_search_catalog = cone.search(pos=name, radius=radius, verbosity=3)
+        print(f"{colored('Cone search catalog are loaded !', 'green')}")
+        return cone_search_catalog.to_table()
+
+    
+    def find_nearby_sources(self, os_dictionary: Dict) -> Tuple[Dict, Dict]:
+        # provisoirement : 
+        active_workflow = os_dictionary["active_workflow"]
+        xmm_path = os.path.join(active_workflow, "modeling_result/PSR_J0437-4715/4XMM_DR13/closest_catalog/nearby_sources_table.fits").replace("\\", "/")
+        csc_path = os.path.join(active_workflow, "modeling_result/PSR_J0437-4715/Chandra/closest_catalog/nearby_sources_table.fits").replace("\\", "/")
+        if os.path.exists(xmm_path):
+            with fits.open(xmm_path) as data:
+                xmm_data = Table(data[1].data)
+                print(f"{colored('xmm_path is loaded', 'green')}") 
+        else:
+            print(f"{colored('Invalid xmm_path', 'red')}")
+            
+        if os.path.exists(csc_path):
+            with fits.open(csc_path) as data:
+                csc_data = Table(data[1].data)
+                print(f"{colored('csc_path is loaded', 'green')}") 
+        else:
+            print(f"{colored('Invalid csc_path', 'red')}") 
+            
+        return xmm_data, csc_data   
+    
+    
+    def get_mixed_coordinate(self, catalog_key: Tuple[str, str], table: Tuple[Table, Table]) -> Tuple[List, List]:
+        key_1, key_2 = catalog_key
+        table_1, table_2 = table
+        
+        ra_1_list, dec_1_list = list(table_1[self.column_name[key_1]["right_ascension"]]), list(table_1[self.column_name[key_1]["declination"]])
+        ra_2_list, dec_2_list = list(table_2[self.column_name[key_2]["right_ascension"]]), list(table_2[self.column_name[key_2]["declination"]])
+        sources_1 = SkyCoord(ra=ra_1_list, dec=dec_1_list, unit=u.deg)
+        sources_2 = SkyCoord(ra=ra_2_list, dec=dec_2_list, unit=u.deg)
+
+        mixed_ra, mixed_dec = [], []
+        ra_1, dec_1 = [], []
+        
+        index_2 = []
+        mixed_index = []
+
+        for index_1, src_1 in enumerate(sources_1):
+            distance = []
+            for src_2 in sources_2:
+                distance.append(src_1.separation(src_2).arcmin)
+            min_distance = np.min(distance)
+            
+            if min_distance < 5e-2:
+                min_arg = np.argmin(distance)
+                mixed_ra.append(np.mean([table_1[self.column_name[key_1]["right_ascension"]][index_1], table_2[self.column_name[key_2]["right_ascension"]][min_arg]]))
+                mixed_dec.append(np.mean([table_1[self.column_name[key_1]["declination"]][index_1], table_2[self.column_name[key_2]["declination"]][min_arg]]))
+                index_2.append(min_arg)
+                mixed_index.append((index_1, min_arg))
+            else:
+                ra_1.append(table_1[self.column_name[key_1]["right_ascension"]][index_1])
+                dec_1.append(table_1[self.column_name[key_1]["declination"]][index_1])
+                
+        ra_2, dec_2 = [], []
+        for index, ra in enumerate(ra_2_list):
+            if index not in index_2:
+                ra_2.append(ra)
+        for index, dec in enumerate(dec_2_list):
+            if index not in index_2:
+                dec_2.append(dec)
+
+        coordinates = [(ra_1, dec_1), (ra_2, dec_2), (mixed_ra, mixed_dec)]
+        return coordinates, mixed_index
+    
+    
+    def neighbourhood_of_object(self, simulation_data: Dict, radius: float) -> Tuple[List, List]:
+        object_data = simulation_data["object_data"]
+        os_dictionary = simulation_data["os_dictionary"]
+        table = (self.nearby_sources_table_1, self.nearby_sources_table_2)
+        coordinates, mixed_index = self.get_mixed_coordinate(catalog_key=self.catalog_key, table=table)
+        
+        psr_ra, psr_dec = object_data["object_position"].ra, object_data["object_position"].dec
+        
+        figure, axes = plt.subplots(1, 1, figsize=(15, 8))
+        figure.suptitle(f"Neighbourhood of {object_data['object_name']}, radius = {radius}", fontsize=20)
+        figure.text(0.5, 0.04, 'Right Ascension [deg]', ha='center', va='center', fontsize=16)
+        figure.text(0.04, 0.5, 'Declination [deg]', ha='center', va='center', rotation='vertical', fontsize=16)
+        axes.scatter(coordinates[0][0], coordinates[0][1], edgecolors='black', facecolors='none', label=f'xmm : {len(coordinates[0][0])}')
+        axes.scatter(coordinates[1][0], coordinates[1][1], edgecolors='green', facecolors='none', label=f"csc : {len(coordinates[1][0])}")
+        axes.scatter(coordinates[2][0], coordinates[2][1], edgecolors='magenta', facecolors='none', label=f'xmm and csc : {len(coordinates[2][0])}')
+        axes.scatter(psr_ra, psr_dec, marker="*", s=100, color="red", label=f"{object_data['object_name']}")
+        axes.legend(loc="upper right", ncol=2)
+        
+        img = os_dictionary["img"]
+        figure_path = os.path.join(img, f"neighbourhood_of_{object_data['object_name']}.png").replace("\\", "/")
+        plt.savefig(figure_path)
+        plt.show()
+        
+        return mixed_index, coordinates
+    
+    
+    def get_photon_index(self, catalog_key: Tuple[str, str], table: Table, index: int, os_dictionary: Dict) -> float:
+        band_flux_name = dict_cat.dictionary_catalog[catalog_key]["band_flux_obs"]
+        band_flux = [table[name][index] for name in band_flux_name]
+        
+        band_flux_obs_err_name = dict_cat.dictionary_catalog[catalog_key]["band_flux_obs_err"]
+        band_flux_obs_err = [np.mean([table[err_0][index], table[err_1][index]]) for err_0, err_1 in zip(band_flux_obs_err_name[0], band_flux_obs_err_name[1])]
+        
+        energy_band = dict_cat.dictionary_catalog[catalog_key]["energy_band_center"]
+        energy_band_half_width = dict_cat.dictionary_catalog[catalog_key]["energy_band_half_width"]
+        tab_width = 2 * energy_band_half_width
+        
+        y_array = [num/det for num, det in zip(band_flux, tab_width)]
+        yerr_array = [num/det for num, det in zip(band_flux_obs_err, tab_width)]
+        
+        def model(energy, constant, photon_index):
+            return constant * energy ** (-photon_index)
+        
+        def absorb_model(energy, constant, photon_index):
+            sigma = np.linspace(1e-20, 1e-24, len(energy))
+            return (constant * energy ** (-photon_index))*np.exp(-sigma*3e20)
+        
+        model_popt, model_pcov = curve_fit(model, energy_band, y_array, sigma=yerr_array)
+        m_constant, m_photon_index = model_popt
+        absorb_model_popt, absorb_model_pcov = curve_fit(absorb_model, energy_band, y_array, sigma=yerr_array)
+        am_constant, am_photon_index = absorb_model_popt
+        
+        if index == 0:
+            figure, axes = plt.subplots(1, 1, figsize=(8, 5))
+            figure.suptitle("Interpolation vizualisation")
+            axes.scatter(energy_band, y_array, marker="+")
+            axes.errorbar(energy_band, absorb_model(energy_band, *absorb_model_popt), yerr=yerr_array, fmt='*', color='red', ecolor='black')
+            axes.plot(energy_band, model(energy_band, *model_popt), label=f"Non absorb $\Gamma : {m_photon_index:.4f}$")
+            axes.plot(energy_band, absorb_model(energy_band, *absorb_model_popt), label=f"Absorb $\Gamma : {am_photon_index:.4f}$")
+            axes.loglog()
+            axes.set_xlabel("Energy [$keV$]")
+            axes.set_ylabel("flux $[erg.cm^{-2}.s^{-1}.keV^{-1}]$")
+            axes.legend(loc="upper right")
+            
+            img = os_dictionary["img"]
+            figure_path = os.path.join(img, f"Interpolation_vizualisation_{catalog_key}_.png").replace("\\", "/")
+            plt.savefig(figure_path)
+            plt.show()
+            
+        return am_photon_index
+           
+            
+    def get_mixed_photon_index(self, catalog_key: Tuple[str, str], table: Tuple[Table, Table], mixed_index: List[Tuple], row: int, os_dictionary: Dict) -> float:
+        key_1, key_2 = catalog_key
+        table_1, table_2 = table[0], table[1]
+        
+        energy_band_1 = dict_cat.dictionary_catalog[key_1]["energy_band_center"]
+        energy_band_2 = dict_cat.dictionary_catalog[key_2]["energy_band_center"]
+        energy_band = sorted(energy_band_1 + energy_band_2)
+        
+        energy_band_half_width_1 = dict_cat.dictionary_catalog[key_1]["energy_band_half_width"]
+        energy_band_half_width_2 = dict_cat.dictionary_catalog[key_2]["energy_band_half_width"]
+        energy_band_half_width = sorted(energy_band_half_width_1 + energy_band_half_width_2)
+        tab_width = 2 * energy_band_half_width
+        
+        band_flux_name_1 = dict_cat.dictionary_catalog[key_1]["band_flux_obs"]
+        band_flux_name_2 = dict_cat.dictionary_catalog[key_2]["band_flux_obs"]
+        
+        band_flux_1 = [table_1[name][mixed_index[row][0]] for name in band_flux_name_1]
+        band_flux_2 = [table_2[name][mixed_index[row][1]] for name in band_flux_name_2]
+        
+        value = 0
+        for index, item in enumerate(energy_band):
+            if item in energy_band_2:
+                band_flux_1.insert(index, band_flux_2[value])
+                value += 1
+
+        y_array = [num/det for num, det in zip(band_flux_1, tab_width)]
+        
+        band_flux_obs_err_name_1 = dict_cat.dictionary_catalog[key_1]["band_flux_obs_err"]
+        band_flux_obs_err_name_2 = dict_cat.dictionary_catalog[key_2]["band_flux_obs_err"]
+
+        band_flux_obs_err_1 = [np.mean([table_1[err_0][row], table_1[err_1][row]]) for err_0, err_1 in zip(band_flux_obs_err_name_1[0], band_flux_obs_err_name_1[1])]
+        band_flux_obs_err_2 = [np.mean([table_2[err_0][row], table_2[err_1][row]]) for err_0, err_1 in zip(band_flux_obs_err_name_2[0], band_flux_obs_err_name_2[1])]
+
+        value = 0
+        for index, item in enumerate(energy_band):
+            if item in energy_band_2:
+                band_flux_obs_err_1.insert(index, band_flux_obs_err_2[value])
+                value += 1
+
+        yerr_array = [num/det for num, det in zip(band_flux_obs_err_1, tab_width)]
+
+        def model(energy, constant, photon_index):
+            return constant * energy ** (-photon_index)
+
+        def absorb_model(energy, constant, photon_index):
+            sigma = np.linspace(1e-20, 1e-24, len(energy))
+            return (constant * energy ** (-photon_index))*np.exp(-sigma*3e20)
+
+        model_popt, model_pcov = curve_fit(model, energy_band, y_array, sigma=yerr_array)
+        m_constant, m_photon_index = model_popt
+        absorb_model_popt, absorb_model_pcov = curve_fit(absorb_model, energy_band, y_array, sigma=yerr_array)
+        am_constant, am_photon_index = absorb_model_popt
+
+        if row == 10:
+            figure, axes = plt.subplots(1, 1, figsize=(8, 5))
+            figure.suptitle("Interpolation vizualisation")
+            axes.scatter(energy_band, y_array, marker="+")
+            axes.errorbar(energy_band, absorb_model(energy_band, *absorb_model_popt), yerr=yerr_array, fmt='*', color='red', ecolor='black')
+            axes.plot(energy_band, model(energy_band, *model_popt), label=f"Non absorb $\Gamma : {m_photon_index:.4f}$")
+            axes.plot(energy_band, absorb_model(energy_band, *absorb_model_popt), label=f"Absorb $\Gamma : {am_photon_index:.4f}$")
+            axes.loglog()
+            axes.set_xlabel("Energy [$keV$]")
+            axes.set_ylabel("flux $[erg.cm^{-2}.s^{-1}.keV^{-1}]$")
+            axes.legend(loc="upper right")
+            
+            img = os_dictionary["img"]
+            figure_path = os.path.join(img, f"Interpolation_vizualisation_{key_1}_{key_2}_.png").replace("\\", "/")
+            plt.savefig(figure_path)
+            plt.show()
+            
+        return am_photon_index
+    
+    
+    def get_total_photon_nh_list(self, os_dictionary: Dict) -> Tuple[List[float], List[Tuple], List[float]]:
+        
+        key_1, key_2 = self.catalog_key
+        photon_index_list, nh_list = [], []
+        flag = [] 
+        if key_1 == "XMM" and key_2 == "Chandra":
+            
+            row = 0  
+            index_1 = [self.mixed_index[index][0] for index in range(len(self.mixed_index))]
+            index_2 = [self.mixed_index[index][1] for index in range(len(self.mixed_index))]
+
+            number_source_1 = len(self.nearby_sources_table_1)
+            for index in range(number_source_1):
+                if index not in index_1:
+                    photon_index_list.append(self.get_photon_index(catalog_key=key_1, table=self.nearby_sources_table_1, index=index,os_dictionary=os_dictionary))
+                    flag.append(('xmm', index))
+                    nh_list.append(3e20)
+                else:
+                    keys = (key_1, key_2)
+                    tables = (self.nearby_sources_table_1, self.nearby_sources_table_2)
+                    photon_index_list.append(self.get_mixed_photon_index(catalog_key=keys, table=tables, mixed_index=self.mixed_index, row=row, os_dictionary=os_dictionary))
+                    flag.append(('both', self.mixed_index[row]))
+                    nh_list.append(3e20)
+                    row += 1
+                    
+            number_source_2 = len(self.nearby_sources_table_2)
+            for index in range(number_source_2):
+                if index not in index_2:
+                    photon_index_list.append(self.get_photon_index(catalog_key=key_2, table=self.nearby_sources_table_2, index=index, os_dictionary=os_dictionary))
+                    flag.append(("chandra", index))
+                    nh_list.append(3e20)
+            
+        return photon_index_list, flag, nh_list
+    
+    
+    def model_dictionary(self) -> Dict:
+     
+        model_dictionary = {}
+        
+        for item, flag in enumerate(self.flag):
+                        
+            if flag[0] == "xmm":
+                key = self.catalog_key[0]
+                flux_obs = dict_cat.dictionary_catalog[key]["flux_obs"]
+                flux = self.nearby_sources_table_1[flux_obs][flag[1]]
+            elif flag[0] == "both":
+                key_1, key_2 = self.catalog_key
+                flux_obs_1, flux_obs_2 = dict_cat.dictionary_catalog[key_1]["flux_obs"], dict_cat.dictionary_catalog[key_2]["flux_obs"]
+                flux_1, flux_2 = self.nearby_sources_table_1[flux_obs_1][flag[1][0]], self.nearby_sources_table_2[flux_obs_2][flag[1][1]]
+                flux = np.mean([flux_1, flux_2])
+            else:
+                key = self.catalog_key[1]
+                flux_obs = dict_cat.dictionary_catalog[key]["flux_obs"]
+                flux = self.nearby_sources_table_2[flux_obs][flag[1]]
+            
+            dictionary = {
+                "model": 'power',
+                "model_value": self.photon_index_list[item],
+                "flux": flux,
+                "column_dentsity": 3e20
+            }
+            
+            model_dictionary[f"src_{item}"] = dictionary
+            
+        return model_dictionary
+
+
+    def create_nearby_sources_table(self) -> Table:
+                
+        key_1, key_2 = self.catalog_key
+        row = 0
+        flux_obs_1, flux_obs_2 = dict_cat.dictionary_catalog[key_1]["flux_obs"], dict_cat.dictionary_catalog[key_2]["flux_obs"]
+        column_names = ["Flag","Xmm_IAUNAME", "Chandra_IAUNAME", "RA", "DEC", flux_obs_1, flux_obs_2]
+        dtype = [str, str, str, float, float, float, float]
+        nearby_sources_table = Table(names=column_names, dtype=dtype)
+        
+        for flag in self.flag:
+            
+            if flag[0] == "xmm":
+                flag_value = flag[0]
+                x_name = self.nearby_sources_table_1["IAUNAME"][flag[1]]
+                c_name = ""
+                ra_value = self.nearby_sources_table_1["SC_RA"][flag[1]]
+                dec_value = self.nearby_sources_table_1["SC_DEC"][flag[1]]
+                flux_1 = self.nearby_sources_table_1[flux_obs_1][flag[1]]
+                flux_2 = np.nan
+            elif flag[0] == "both":
+                flag_value = flag[0]
+                x_name = self.nearby_sources_table_1["IAUNAME"][flag[1][0]]
+                c_name = self.nearby_sources_table_2["Chandra_IAUNAME"][flag[1][1]]
+                ra_value = self.coordinates[2][0][row]
+                dec_value = self.coordinates[2][1][row]
+                flux_1 = self.nearby_sources_table_1[flux_obs_1][flag[1][0]]
+                flux_2 = self.nearby_sources_table_2[flux_obs_2][flag[1][1]]
+                row += 1
+            else:
+                flag_value = flag[0]
+                x_name = ""
+                c_name = self.nearby_sources_table_2["Chandra_IAUNAME"][flag[1]]
+                ra_value = self.nearby_sources_table_2["RA"][flag[1]]
+                dec_value = self.nearby_sources_table_2["DEC"][flag[1]]
+                flux_1 = np.nan
+                flux_2 = self.nearby_sources_table_2[flux_obs_2][flag[1]]
+                
+            add_row = [flag_value, x_name, c_name, ra_value, dec_value, flux_1, flux_2]
+            nearby_sources_table.add_row(add_row)
+            
+        photon_index_column = Column(name="Photon Index", data=self.photon_index_list)
+        nearby_sources_table.add_column(photon_index_column)
+        nh_column = Column(name="Nh", data=self.nh_list)
+        nearby_sources_table.add_column(nh_column)
+        
+        return nearby_sources_table
+    
+    
+    def get_sources_position(self) -> SkyCoord:
+        ra_value = list(self.nearby_sources_table["RA"])
+        dec_value = list(self.nearby_sources_table["DEC"])
+        
+        return SkyCoord(ra=ra_value, dec=dec_value, unit=u.deg)
+    
+    
+    def count_rate_SNR_map(self, simulation_data: Dict, radius: float) -> List[float]:
+        telescop_data = simulation_data["telescop_data"]
+        object_data = simulation_data["object_data"]
+        active_workflow = simulation_data["os_dictionary"]["active_workflow"]
+        excel_data_path = os.path.join(active_workflow, 'excel_data').replace("\\", "/")
+        
+        key = "xmmXchandra"
+        catalog ="match"
+
+        if platform.system() == "Linux":
+            count_rates, self.nearby_sources_table = f.count_rates(self.nearby_sources_table, self.model_dictionary, telescop_data)
+            # f.py_to_xlsx(excel_data_path=excel_data_path, count_rates=count_rates, object_data=object_data, args=(catalog, key), radius=radius)
+        elif platform.system() == "Windows":
+            count_rates, self.nearby_sources_table = f.xlsx_to_py(excel_data_path=excel_data_path, nearby_sources_table=self.nearby_sources_table, object_data=object_data, args=(catalog, key), radius=radius.value)
+        else:
+            sys.exit()
+            
+        simulation_data['nearby_sources_table'] = self.nearby_sources_table
+        
+        f.nominal_pointing_info(simulation_data, self.nearby_sources_position)
+        self.OptimalPointingIdx, self.SRCoptimalSEPAR, self.SRCoptimalRATES, self.vector_dictionary = f.calculate_opti_point(simulation_data, self.nearby_sources_position)
+        f.optimal_point_infos(self.vector_dictionary, self.OptimalPointingIdx, self.SRCoptimalRATES)
+        f.data_map(simulation_data, self.vector_dictionary, self.OptimalPointingIdx, self.nearby_sources_position)
+        
+        return count_rates
+
+
+    def vignetting_factor(self, OptimalPointingIdx: int, vector_dictionary: Dict, simulation_data: Dict) -> List[float]:
+        ra, dec, name_1, name_2 = self.data_to_vignetting
+        
+        object_data = simulation_data["object_data"]
+        EffArea, OffAxisAngle = simulation_data["telescop_data"]["EffArea"], simulation_data["telescop_data"]["OffAxisAngle"]
+        
+        optipoint_ra, optipoint_dec = vector_dictionary['SampleRA'][OptimalPointingIdx], vector_dictionary['SampleDEC'][OptimalPointingIdx]
+    
+        def calculate_vignetting_factor(D, effareaX, effareaY):
+            return np.interp(D,effareaX,effareaY)
+        
+        vignetting_factor, distance = np.array([], dtype=float), np.array([], dtype=float)
+    
+        total_source = len(self.nearby_sources_table)
+        for index in range(total_source):
+            SRCposition  = SkyCoord(ra=self.nearby_sources_table[ra][index]*u.degree, dec=self.nearby_sources_table[dec][index]*u.degree)
+            SRCnominalDIST = f.ang_separation(SRCposition, SkyCoord(ra=optipoint_ra, dec=optipoint_dec, unit=u.deg)).arcmin
+            distance = np.append(distance, SRCnominalDIST)
+            vignetting = calculate_vignetting_factor(SRCnominalDIST, EffArea, OffAxisAngle)
+            vignetting_factor = np.append(vignetting_factor, vignetting)
+    
+        optimal_pointing_point = SkyCoord(ra=optipoint_ra, dec=optipoint_dec, unit=u.deg)
+        psr_position = SkyCoord(ra=object_data['object_position'].ra, dec=object_data['object_position'].dec, unit=u.deg)
+        distance_psr_to_optipoint = f.ang_separation(psr_position, optimal_pointing_point).arcmin
+        vignetting_factor_psr2optipoint = calculate_vignetting_factor(distance_psr_to_optipoint, EffArea, OffAxisAngle)
+    
+        max_vignet, min_distance  = np.max(vignetting_factor), np.min(distance)
+        max_vignet_index, min_distance_index = np.argmax(vignetting_factor), np.argmin(distance)
+        
+        
+        print(f"The distance between {colored(object_data['object_name'], 'yellow')} and optimal pointing point is {colored(distance_psr_to_optipoint, 'blue')} arcmin,\n"
+              f"with a vagnetting factor of : {colored(vignetting_factor_psr2optipoint, 'light_green')}")
+        
+        flag = self.nearby_sources_table["Flag"][max_vignet_index]
+        if flag == "both":
+            name_1, name_2 = self.nearby_sources_table[name_1][max_vignet_index], self.nearby_sources_table[name_2][max_vignet_index]
+            key_1, key_2 = self.catalog_key
+            print(f"The closest source of the optimal pointing point is : ")
+            print(f"{colored(name_1, 'yellow')} in {key_1} and {colored(name_2, 'yellow')} in {key_2}.")
+            print(f"The distance between this source and the optimal pointing point is : {colored(min_distance, 'blue')} arcmin for a vignetting factor of {colored(max_vignet, 'light_green')}")
+        elif flag == "xmm":
+            name_1 = self.nearby_sources_table[name_1][max_vignet_index]
+            key_1 = self.catalog_key[0]
+            print(f"The closest source of the optimal pointing point is : ")
+            print(f"{colored(name_1, 'yellow')} in {key_1}.")
+            print(f"The distance between this source and the optimal pointing point is : {colored(min_distance, 'blue')} arcmin for a vignetting factor of {colored(max_vignet, 'light_green')}")
+        else:
+            name_2 = self.nearby_sources_table[name_2][max_vignet_index]
+            key_2 = self.catalog_key[1]
+            print(f"The closest source of the optimal pointing point is : ")
+            print(f"{colored(name_2, 'yellow')} in {key_2}.")
+            print(f"The distance between this source and the optimal pointing point is : {colored(min_distance, 'blue')} arcmin for a vignetting factor of {colored(max_vignet, 'light_green')}")
+
+        self.nearby_sources_table["vignetting_factor"] = vignetting_factor
+        
+        return vignetting_factor
+    
+    
+    def write_fits_table(self, os_dictionary: Dict) -> None:
+        try:
+            cloesest_dataset_path = os_dictionary["cloesest_dataset_path"]
+            nearby_sources_table_path = os.path.join(cloesest_dataset_path, "nearby_sources_table.fits").replace("\\", "/")
+            self.nearby_sources_table.write(nearby_sources_table_path, format='fits', overwrite=True)
+            print(f"Nearby sources table was created in : {colored(nearby_sources_table_path, 'magenta')}")
+            
+            topcat_path = os.path.join(os_dictionary["active_workflow"], 'softwares/topcat-extra.jar').replace("\\", "/")
+            command = f"java -jar {topcat_path} {nearby_sources_table_path}"
+            subprocess.run(command)
+            
+        except Exception as error:
+            print(f"{colored('An error occured : ', 'red')} {error}")
+    
+    
+    
+# -------------------------------------------- #

@@ -157,6 +157,8 @@ def choose_catalog(args_catalog) -> Tuple[str, str]:
                 
                 valid_path = (valid_path_1, valid_path_2, catalog_1, catalog_2)
                 return valid_path, args_catalog
+            elif args_catalog == "match":
+                return 'matched_catalog', 'matched_catalog'
             else:
                 raise argparse.ArgumentError(None, "invalid catalog keyword keyword. retry with Xmm_DR13, CSC_2.0, Swift, eRosita")
         except argparse.ArgumentError as error:
@@ -802,6 +804,8 @@ def py_to_xlsx(excel_data_path: str, count_rates: List, object_data: Dict, args:
         cat = "swi"
     elif args[0] == "eRosita":
         cat = "ero"
+    elif args[0] == "match":
+        cat = "xmmXchandra"
         
     wb = openpyxl.Workbook()
     sheet = wb.active
@@ -823,6 +827,8 @@ def xlsx_to_py(excel_data_path: str, nearby_sources_table: Table, object_data: D
         cat = "swi"
     elif args[0] == "eRosita":
         cat = "ero"
+    elif args[0] == "match":
+        cat = "xmmXchandra"
         
     ct_rates_path = os.path.join(excel_data_path, f"{cat}_{radius}_{object_data['object_name']}.xlsx".replace(" ", "_"))
     wb = openpyxl.load_workbook(ct_rates_path)
