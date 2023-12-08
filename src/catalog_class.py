@@ -25,6 +25,7 @@ import pyvo as vo
 import subprocess
 import os
 import platform
+import shlex
 
 # ---------------------------------------- #
 
@@ -2221,12 +2222,8 @@ class CompareCatalog:
         img_path = os.path.join(img, f"SNR_{object_data['object_name']}.png")
         plt.savefig(img_path)
         plt.show()
-        
-        
-    def vignetting_factor(self):
-        pass
-        
-        
+
+
 # --------------- Software Class --------------- #
 
     # --------------- Refactoring --------------- #
@@ -2248,6 +2245,7 @@ class SwiftData:
     # ------------------------------------------- #
 
     # --------------- Source Class --------------- #
+
 
 class Source:
     
@@ -2433,7 +2431,8 @@ class MasterSource():
 
         self.simbad_type = ''
         self.has_sdss_widths = False
-            
+
+          
 # ---------------------------------------------- #
 
 # --------------- CatalogMatch --------------- #
@@ -2512,7 +2511,7 @@ class CatalogMatch:
         # if "Chandra" in catalog_name:
         #     self.cone_search_catalog = self.load_cs_catalog(radius=radius, object_data=simulation_data["object_data"])
 
-        self.nearby_sources_table_1, self.nearby_sources_table_2 = self.find_nearby_sources(os_dictionary=simulation_data["os_dictionary"])
+        self.nearby_sources_table_1, self.nearby_sources_table_2, self.nearby_sources_position_1, self.nearby_sources_position_2 = self.find_nearby_sources(radius=radius, simulation_data=simulation_data, table=(table_1, table_2))
         self.mixed_index, self.coordinates = self.neighbourhood_of_object(simulation_data=simulation_data, radius=radius)
         self.photon_index_list, self.flag, self.nh_list = self.get_total_photon_nh_list(os_dictionary=simulation_data["os_dictionary"])
         self.model_dictionary = self.model_dictionary()
@@ -2521,6 +2520,8 @@ class CatalogMatch:
         self.count_rate = self.count_rate_SNR_map(simulation_data=simulation_data, radius=radius)
         self.vignetting_factor = self.vignetting_factor(OptimalPointingIdx=self.OptimalPointingIdx, vector_dictionary=self.vector_dictionary, simulation_data=simulation_data)
         self.write_fits_table(os_dictionary=simulation_data["os_dictionary"])
+        
+        self.master_source_cone = self.load_master_source_cone(radius=radius.value, simulation_data=simulation_data)
     
 
     def load_catalog(self, catalog_name: Tuple[str, str], os_dictionary: Dict) -> Tuple[Table, Table]:
@@ -2560,26 +2561,133 @@ class CatalogMatch:
         return cone_search_catalog.to_table()
 
     
-    def find_nearby_sources(self, os_dictionary: Dict) -> Tuple[Dict, Dict]:
-        # provisoirement : 
-        active_workflow = os_dictionary["active_workflow"]
-        xmm_path = os.path.join(active_workflow, "modeling_result/PSR_J0437-4715/4XMM_DR13/closest_catalog/nearby_sources_table.fits").replace("\\", "/")
-        csc_path = os.path.join(active_workflow, "modeling_result/PSR_J0437-4715/Chandra/closest_catalog/nearby_sources_table.fits").replace("\\", "/")
-        if os.path.exists(xmm_path):
-            with fits.open(xmm_path) as data:
-                xmm_data = Table(data[1].data)
-                print(f"{colored('xmm_path is loaded', 'green')}") 
-        else:
-            print(f"{colored('Invalid xmm_path', 'red')}")
+    def unique_sources_table(self, nearby_sources_table, column_name):
+        key = column_name["catalog_name"]
+
+        dict_flux_name = {"flux_obs": dict_cat.dictionary_catalog[key]["flux_obs"],
+                          "flux_obs_err": dict_cat.dictionary_catalog[key]["flux_obs_err"],
+                          "band_flux_obs": dict_cat.dictionary_catalog[key]["band_flux_obs"],
+                          "band_flux_obs_err": dict_cat.dictionary_catalog[key]["band_flux_obs_err"]}
+        
+        list_flux_name = [dict_flux_name["flux_obs"], dict_flux_name["flux_obs_err"], dict_flux_name["band_flux_obs"], dict_flux_name["band_flux_obs_err"][0], dict_flux_name["band_flux_obs_err"][1]]
+        
+        flux_name = []
+        for value in list_flux_name:
+            if isinstance(value, str):
+                flux_name.append(value)
+            else:
+                for item in value:
+                    flux_name.append(item)
+                    
+        for flux in flux_name:
+            min_value = np.nanmean(nearby_sources_table[flux])
+            nan_mask = np.isnan(nearby_sources_table[flux])
+            nearby_sources_table[flux][nan_mask] = min_value
+
+        unique_sources_dict = f.unique_dict(nearby_sources_table[column_name["source_name"]])
+        
+        new_row = []
+        for index, name in enumerate(nearby_sources_table[column_name["source_name"]]):
+            if name not in unique_sources_dict.keys():
+                new_row.append((name, index))
             
-        if os.path.exists(csc_path):
-            with fits.open(csc_path) as data:
-                csc_data = Table(data[1].data)
-                print(f"{colored('csc_path is loaded', 'green')}") 
-        else:
-            print(f"{colored('Invalid csc_path', 'red')}") 
+        sources_dict = f.insert_row(unique_sources_dict=unique_sources_dict, new_row=new_row)
+        
+        
+        if key == "Chandra":
             
-        return xmm_data, csc_data   
+            iauname_col, ra_col, dec_col = [], [], []
+            for key, value in list(sources_dict.items()):
+                iauname_col.append(key)
+                ra_col.append(np.mean([nearby_sources_table[column_name["right_ascension"]][index] for index in value]))
+                dec_col.append(np.mean([nearby_sources_table[column_name["declination"]][index] for index in value]))
+            
+            unique_table = Table()
+            unique_table["Chandra_IAUNAME"] = iauname_col
+            unique_table["RA"] = ra_col
+            unique_table["DEC"] = dec_col
+            
+            for flux in flux_name:
+                data = []
+                for value in list(sources_dict.values()):
+                    if len(value) != 1:
+                        new_value = np.mean([nearby_sources_table[flux][index] for index in value])
+                    else:
+                        new_value = nearby_sources_table[flux][value[0]]
+                    data.append(new_value)
+                unique_table[flux] = data
+                    
+        return unique_table
+    
+    
+    def find_nearby_sources(self, radius: float, simulation_data: Dict, table: Tuple[Table, Table]) -> Tuple[Table, Table]:
+        object_data = simulation_data["object_data"]
+        pointing_area = radius + 5*u.arcmin
+        name = object_data['object_name']
+        object_position = object_data['object_position']
+        min_ra, max_ra = object_position.ra - pointing_area, object_position.ra + pointing_area
+        min_dec, max_dec = object_position.dec - pointing_area, object_position.dec + pointing_area
+        
+        if self.catalog_key == ["XMM", "Chandra"]:
+            table_1, table_2 = table
+            small_table_1 = Table(names=table_1.colnames,
+                                  dtype=table_1.dtype)
+            nearby_sources_table_1 = Table(names=table_1.colnames,
+                                           dtype=table_1.dtype)
+            
+            print(fr"{colored(f'Reducing {self.catalog_key[0]} catalog...', 'yellow')} to fov of {radius.value + 5 } arcmin")
+            for number in tqdm(range(len(table_1))):
+                if min_ra/u.deg < table_1['SC_RA'][number] < max_ra/u.deg and min_dec/u.deg < table_1['SC_DEC'][number] < max_dec/u.deg:
+                    small_table_1.add_row(table_1[number])
+
+            sources_position_1 = SkyCoord(ra=small_table_1["SC_RA"], dec=small_table_1["SC_DEC"], unit=u.deg)
+            sources_number_1 = len(small_table_1)
+            print(f"{colored(f'Find sources close to {name} with {self.catalog_key[0]} catalog', 'blue')}")
+            for number in tqdm(range(sources_number_1)):
+                if f.ang_separation(object_position, sources_position_1[number]) < radius:
+                    nearby_sources_table_1.add_row(small_table_1[number])         
+                    
+            small_table_2 = Table(names=table_2.colnames,
+                                  dtype=table_2.dtype)
+            nearby_sources_table_2 = Table(names=table_2.colnames,
+                                           dtype=table_2.dtype)
+            
+            print(f"\n{colored(f'Reducing {self.catalog_key[1]} catalog...', 'yellow')} to fov of {radius.value + 5 } arcmin")
+            for number in tqdm(range(len(table_2))):
+                if min_ra/u.deg < table_2['RA'][number] < max_ra/u.deg and min_dec/u.deg < table_2['DEC'][number] < max_dec/u.deg:
+                    small_table_2.add_row(table_2[number])
+                
+            sources_position_2 = SkyCoord(ra=small_table_2["RA"], dec=small_table_2["DEC"], unit=u.deg)
+            sources_number_2 = len(small_table_2)
+            print(f"{colored(f'Find sources close to {name} with {self.catalog_key[1]} catalog', 'blue')}")
+            for number in tqdm(range(sources_number_2)):
+                if f.ang_separation(object_position, sources_position_2[number]) < radius:
+                    nearby_sources_table_2.add_row(small_table_2[number])
+                    
+            column_name = {"source_name": "Chandra_IAUNAME",
+                           "right_ascension": "RA",
+                           "declination": "DEC",
+                           "catalog_name": "Chandra"}
+                        
+            unique_table = f.create_unique_sources_catalog(nearby_sources_table=nearby_sources_table_2, column_name=column_name)
+            
+            os_dictionary = simulation_data["os_dictionary"]
+            catalog = os_dictionary["cloesest_dataset_path"]
+            chandra_catalog = os.path.join(catalog, "unique_table.fits").replace("\\", "/")
+            
+            unique_table.write(chandra_catalog, format='fits', overwrite=True)
+            topcat_path = os.path.join(os_dictionary["active_workflow"], 'softwares/topcat-extra.jar').replace("\\", "/")
+            command = f"java -jar {topcat_path} {chandra_catalog}"
+            subprocess.run(command)
+        
+            unique_table = f.create_unique_sources_catalog(nearby_sources_table=nearby_sources_table_2, column_name=column_name)
+            sources_position_2 = SkyCoord(ra=unique_table['RA'], dec=unique_table['DEC'], unit=u.deg)
+            print("\n")
+            print(f"We have detected {colored(str(len(nearby_sources_table_1)) + ' sources', 'yellow')} with {colored(self.catalog_key[0] + ' catalog', 'yellow')} and",
+                f"{colored(str(len(unique_table)) + ' sources', 'magenta')} with {colored(self.catalog_key[1] + ' catalog', 'magenta')} close to {colored(name, 'blue')}.")
+
+            
+            return nearby_sources_table_1, unique_table, sources_position_1, sources_position_2    
     
     
     def get_mixed_coordinate(self, catalog_key: Tuple[str, str], table: Tuple[Table, Table]) -> Tuple[List, List]:
@@ -2990,7 +3098,63 @@ class CatalogMatch:
             
         except Exception as error:
             print(f"{colored('An error occured : ', 'red')} {error}")
-    
+            
+            
+    def load_master_source_cone(self, radius: float, simulation_data: Dict) -> Table:
+        catalogs = dict_cat.catalogs
+        object_data = simulation_data["object_data"]
+        os_dictionary = simulation_data["os_dictionary"]
+        
+        stilts_software_path = os_dictionary["stilts_software_path"]
+        topcat_software_path = os_dictionary["topcat_software_path"]
+        catalog_datapath = os_dictionary["catalog_datapath"]
+        output_name = os_dictionary["output_name"]
+        
+        master_source_path = os.path.join(catalog_datapath, 'Master_source.fits').replace("\\", "/")
+
+        def select_master_sources_around_region(ra, dec, radius, output_name):
+            """Radius is in arcminutes"""
+            print(f"Extracting sources around region: RA {ra} and Dec {dec}")
+            master_cone_path = os.path.join(output_name, 'Master_source_cone.fits').replace("\\", "/")
+            command = (f"java -jar {stilts_software_path} tpipe {master_source_path} cmd='"+
+                    f'select skyDistanceDegrees({ra},{dec},MS_RA,MS_DEC)*60<{radius} '+
+                    f"' out={master_cone_path}")
+            command = shlex.split(command)
+            subprocess.run(command)
+
+
+        def select_catalogsources_around_region(output_name):
+            print('Selecting catalog sources')
+            master_cone_path = os.path.join(output_name, 'Master_source_cone.fits').replace("\\", "/")
+            for cat in catalogs:
+                path_to_cat_init = os.path.join(catalog_datapath, cat).replace("\\", "/")
+                path_to_cat_final = os.path.join(output_name, cat).replace("\\", "/")
+                command = (f"java -jar {stilts_software_path} tmatch2 matcher=exact \
+                        in1='{master_cone_path}' in2='{path_to_cat_init}.fits' out='{path_to_cat_final}.fits'\
+                            values1='{cat}' values2='{cat}_IAUNAME' find=all progress=none")
+                command = shlex.split(command)
+                subprocess.run(command)
+
+        right_ascension = object_data["object_position"].ra.value
+        declination = object_data["object_position"].dec.value
+        try:
+            print(f"\n{colored('Load Erwan s code for :', 'yellow')} {object_data['object_name']}")
+            select_master_sources_around_region(ra=right_ascension, dec=declination, radius=radius, output_name=output_name)
+            select_catalogsources_around_region(output_name=output_name)
+            master_sources = f.load_master_sources(output_name)
+            f.master_source_plot(master_sources=master_sources, object_data=object_data, number_graph=1)
+        except Exception as error :
+            print(f"{colored('An error occured : ', 'red')} {error}")
+            
+        path = os.path.join(output_name, "Master_source_cone.fits").replace("\\", "/")
+        
+        command = f"java -jar {topcat_software_path} {path}"
+        subprocess.run(command)
+        
+        with fits.open(path, memmap=True) as data:
+            master_source_cone = Table(data[1].data)
+            
+        return master_source_cone
     
     
 # -------------------------------------------- #

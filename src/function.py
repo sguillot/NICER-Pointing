@@ -594,55 +594,61 @@ def replace_nan_value(key: str, unique_table: Table) -> Table:
     return unique_table
 
 
-def create_unique_sources_catalog(nearby_sources_table: Table, column_name) -> Table:
+def create_unique_sources_catalog(nearby_sources_table: Table, column_name: List) -> Table:
+    key = column_name["catalog_name"]
+
+    dict_flux_name = {"flux_obs": dict_cat.dictionary_catalog[key]["flux_obs"],
+                        "flux_obs_err": dict_cat.dictionary_catalog[key]["flux_obs_err"],
+                        "band_flux_obs": dict_cat.dictionary_catalog[key]["band_flux_obs"],
+                        "band_flux_obs_err": dict_cat.dictionary_catalog[key]["band_flux_obs_err"]}
     
-    flux_list = [name for name in nearby_sources_table.colnames if 'flux' in name ]
+    list_flux_name = [dict_flux_name["flux_obs"], dict_flux_name["flux_obs_err"], dict_flux_name["band_flux_obs"], dict_flux_name["band_flux_obs_err"][0], dict_flux_name["band_flux_obs_err"][1]]
     
+    flux_name = []
+    for value in list_flux_name:
+        if isinstance(value, str):
+            flux_name.append(value)
+        else:
+            for item in value:
+                flux_name.append(item)
+                
+    for flux in flux_name:
+        min_value = np.nanmean(nearby_sources_table[flux])
+        nan_mask = np.isnan(nearby_sources_table[flux])
+        nearby_sources_table[flux][nan_mask] = min_value
+
     unique_sources_dict = unique_dict(nearby_sources_table[column_name["source_name"]])
     
     new_row = []
     for index, name in enumerate(nearby_sources_table[column_name["source_name"]]):
         if name not in unique_sources_dict.keys():
             new_row.append((name, index))
-            
+        
     sources_dict = insert_row(unique_sources_dict=unique_sources_dict, new_row=new_row)
     
-    # creation unique table -->
-    unique_table = Table()
     
-    if column_name["catalog_name"] == "Chandra":
+    if key == "Chandra":
+        
         iauname_col, ra_col, dec_col = [], [], []
         for key, value in list(sources_dict.items()):
             iauname_col.append(key)
             ra_col.append(np.mean([nearby_sources_table[column_name["right_ascension"]][index] for index in value]))
             dec_col.append(np.mean([nearby_sources_table[column_name["declination"]][index] for index in value]))
         
-        ellipse_list = [name for name in nearby_sources_table.colnames if 'ellipse' in name ]
-        for elt in ellipse_list:
-            data = []
-            for value in list(sources_dict.values()):
-                if len(value) != 1:
-                    new_value = np.nanmean([nearby_sources_table[elt][index] for index in value])
-                else:
-                    new_value = nearby_sources_table[elt][value[0]]
-                data.append(new_value)
-            unique_table[elt] = data
-            
+        unique_table = Table()
         unique_table["Chandra_IAUNAME"] = iauname_col
         unique_table["RA"] = ra_col
         unique_table["DEC"] = dec_col
-    
-    for flux in flux_list:
-        data = []
-        for value in list(sources_dict.values()):
-            if len(value) != 1:
-                new_value = np.nanmean([nearby_sources_table[flux][index] for index in value])
-            else:
-                new_value = nearby_sources_table[flux][value[0]]
-            data.append(new_value)
-        unique_table[flux] = data
         
-    unique_table = replace_nan_value(key=column_name["catalog_name"], unique_table=unique_table)
+        for flux in flux_name:
+            data = []
+            for value in list(sources_dict.values()):
+                if len(value) != 1:
+                    new_value = np.mean([nearby_sources_table[flux][index] for index in value])
+                else:
+                    new_value = nearby_sources_table[flux][value[0]]
+                data.append(new_value)
+            unique_table[flux] = data
         
     return unique_table
 

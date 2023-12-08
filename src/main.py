@@ -118,8 +118,9 @@ active_workflow = active_workflow.replace("\\","/")
 # catalog_data_path
 catalog_datapath = os.path.join(active_workflow, "catalog_data").replace("\\", "/")
 
-# path of stilts software
+# path of stilts and topcat software 
 stilts_software_path = os.path.join(active_workflow, 'softwares/stilts.jar').replace("\\", "/")
+topcat_software_path = os.path.join(active_workflow, 'softwares/topcat-extra.jar').replace("\\", "/")
 
 # creation of modeling file 
 name = object_data['object_name'].replace(" ", "_")
@@ -305,6 +306,9 @@ elif args.catalog == "match":
     
     os_dictionary = {"active_workflow": active_workflow,
                      "catalog_datapath": catalog_datapath,
+                     "stilts_software_path": stilts_software_path,
+                     "topcat_software_path": topcat_software_path,
+                     "output_name": output_name,
                      "modeling_file_path": modeling_file_path,
                      "catalog_directory": mixed_directory,
                      "cloesest_dataset_path": mixed_closest_catalog,
