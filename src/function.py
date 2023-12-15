@@ -469,10 +469,11 @@ def data_map(simulation_data, vector_dictionary, OptimalPointingIdx, NearbySRCpo
     axes.set_ylabel('Declination [deg]', fontsize='large')
     axes.legend(loc="upper right", ncol=2)
     cbar = figure.colorbar(sc, ax=axes)
-    cbar.set_label('S/N')   
+    cbar.set_label('S/N')
     
+    key = simulation_data["os_dictionary"]["catalog_key"]
     name = object_data["object_name"]
-    plt.savefig(os.path.join(os_dictionary['img'], f"SNR_{name}.png".replace(" ", "_")))
+    plt.savefig(os.path.join(os_dictionary['img'], f"{key}_SNR_{name}.png".replace(" ", "_")))
     plt.show()
 
 
@@ -640,15 +641,41 @@ def create_unique_sources_catalog(nearby_sources_table: Table, column_name: List
         unique_table["RA"] = ra_col
         unique_table["DEC"] = dec_col
         
-        for flux in flux_name:
-            data = []
-            for value in list(sources_dict.values()):
-                if len(value) != 1:
-                    new_value = np.mean([nearby_sources_table[flux][index] for index in value])
-                else:
-                    new_value = nearby_sources_table[flux][value[0]]
-                data.append(new_value)
-            unique_table[flux] = data
+    if key == "Swift":
+        
+        iauname_col, ra_col, dec_col = [], [], []
+        for key, value in list(sources_dict.items()):
+            iauname_col.append(key)
+            ra_col.append(np.mean([nearby_sources_table[column_name["right_ascension"]][index] for index in value]))
+            dec_col.append(np.mean([nearby_sources_table[column_name["declination"]][index] for index in value]))
+        
+        unique_table = Table()
+        unique_table["Swift_IAUNAME"] = iauname_col
+        unique_table["RA"] = ra_col
+        unique_table["DEC"] = dec_col
+        
+    if key == "eRosita":
+    
+        iauname_col, ra_col, dec_col = [], [], []
+        for key, value in list(sources_dict.items()):
+            iauname_col.append(key)
+            ra_col.append(np.mean([nearby_sources_table[column_name["right_ascension"]][index] for index in value]))
+            dec_col.append(np.mean([nearby_sources_table[column_name["declination"]][index] for index in value]))
+        
+        unique_table = Table()
+        unique_table["eRosita_IAUNAME"] = iauname_col
+        unique_table["RA"] = ra_col
+        unique_table["DEC"] = dec_col
+        
+    for flux in flux_name:
+        data = []
+        for value in list(sources_dict.values()):
+            if len(value) != 1:
+                new_value = np.mean([nearby_sources_table[flux][index] for index in value])
+            else:
+                new_value = nearby_sources_table[flux][value[0]]
+            data.append(new_value)
+        unique_table[flux] = data
         
     return unique_table
 
@@ -656,9 +683,8 @@ def create_unique_sources_catalog(nearby_sources_table: Table, column_name: List
 # ---------------------------------------------------------------------------------- #
 
 
-def vignetting_factor(OptimalPointingIdx, vector_dictionary, simulation_data, data) -> Tuple[List[float], Table]:
+def vignetting_factor(OptimalPointingIdx, vector_dictionary, simulation_data, data, nearby_sources_table) -> Tuple[List[float], Table]:
     ra, dec, name = data
-    nearby_sources_table = simulation_data["nearby_sources_table"]
     
     object_data = simulation_data["object_data"]
     EffArea, OffAxisAngle = simulation_data["telescop_data"]["EffArea"], simulation_data["telescop_data"]["OffAxisAngle"]
@@ -693,25 +719,15 @@ def vignetting_factor(OptimalPointingIdx, vector_dictionary, simulation_data, da
     
     nearby_sources_table["vignetting_factor"] = vignetting_factor
     
-    #TODO: Upgrade vignetting curve
-    
-    # vignetting_factor_final = vignetting_factor
-    # vignetting_factor_final = np.append(vignetting_factor_final, vignetting_factor_psr2optipoint)
-    # vignetting_factor_final = np.sort(vignetting_factor_final)[::-1]
-    # figure, axes = plt.subplots(1, 1, figsize=(15, 8))
-    # figure.suptitle("Vignetting Curve", fontsize=16)
-    # x_array = np.linspace(0, 8.1, num=len(vignetting_factor_final))
-    # axes.scatter(x_array, vignetting_factor_final)
-    # plt.plot()
-    
     return vignetting_factor, nearby_sources_table
 
 
 def write_fits_file(nearby_sources_table, simulation_data) -> None:
     try:
         os_dictionary = simulation_data["os_dictionary"]
+        key = os_dictionary["catalog_key"]
         cloesest_dataset_path = os_dictionary["cloesest_dataset_path"]
-        nearby_sources_table_path = os.path.join(cloesest_dataset_path, "nearby_sources_table.fits").replace("\\", "/")
+        nearby_sources_table_path = os.path.join(cloesest_dataset_path, f"{key}_nearby_sources_table.fits").replace("\\", "/")
         nearby_sources_table.write(nearby_sources_table_path, format='fits', overwrite=True)
         print(f"Nearby sources table was created in : {colored(nearby_sources_table_path, 'magenta')}")
         
@@ -792,8 +808,9 @@ def modeling(vignetting_factor: List, simulation_data: Dict, column_dictionary: 
     ax02.plot(energy_band, sum_power_law(energy_band, constant_list, photon_index_list), color="darkmagenta", ls='-.', label="summed power law")
     ax02.legend(loc="upper right", fontsize=10)
     
+    key = simulation_data["os_dictionary"]["catalog_key"]
     name = object_data['object_name']
-    plt.savefig(os.path.join(os_dictionary["img"], f"modeling_{name}.png".replace(" ", "_")))
+    plt.savefig(os.path.join(os_dictionary["img"], f"{key}_modeling_{name}.png".replace(" ", "_")))
     plt.show()
     
     
@@ -946,16 +963,22 @@ def load_master_sources(file_to_load: str) -> Dict:
     tab_catalog_sources = {}
     for cat in dict_cat.catalogs:
         catalog_path = os.path.join(file_to_load, cat+'.fits').replace("\\", "/")
-        tab_catalog_sources[cat] = load_relevant_sources(cat, catalog_path)
+        try:
+            tab_catalog_sources[cat] = load_relevant_sources(cat, catalog_path)
+        except Exception as error:
+            print(f"No sources detected in {cat} catalog !")
         
     dict_master_sources = {}
     for line in tqdm(sources_raw):
         tab_sources_for_this_ms = []
         for cat in dict_cat.catalogs:
-            if line[cat] != '':
-                name = line[cat].strip()
-                if name in tab_catalog_sources[cat].keys():
-                    tab_sources_for_this_ms.append(tab_catalog_sources[cat][name])
+            try:
+                if line[cat] != '':
+                    name = line[cat].strip()
+                    if name in tab_catalog_sources[cat].keys():
+                        tab_sources_for_this_ms.append(tab_catalog_sources[cat][name])
+            except Exception as error:
+                pass
         ms_id = line["MS_ID"]
         ms = catalog_class.MasterSource(ms_id, tab_sources_for_this_ms, line["MS_RA"], line["MS_DEC"], line["MS_POSERR"])
         dict_master_sources[ms_id] = ms
@@ -964,7 +987,12 @@ def load_master_sources(file_to_load: str) -> Dict:
     return dict_master_sources
 
 
-def master_source_plot(master_sources: Dict, object_data: Dict, number_graph: int) -> None:
+def master_source_plot(master_sources: Dict, simulation_data: Dict, number_graph: int) -> None:
+    object_data = simulation_data["object_data"]
+    plot_var_sources_path = simulation_data["os_dictionary"]["plot_var_sources_path"]
+    
+    count = 0
+    
     for multi_instrument_source in list(master_sources.values())[:number_graph]:
         #Each multi_instrument_source is an object with the underlying catalog sources associated with it
 
@@ -972,7 +1000,8 @@ def master_source_plot(master_sources: Dict, object_data: Dict, number_graph: in
         source_coords = SkyCoord(multi_instrument_source.ra*u.degree, multi_instrument_source.dec*u.degree, frame="icrs")
         off_axis = object_data["object_position"].separation(source_coords)
 
-        plt.figure(figsize=(15, 8))
+        # plt.figure(figsize=(15, 8))
+        figure, axes = plt.subplots(1, 1, figsize=(15, 8))
         for catalog in multi_instrument_source.sources.keys():
             #If a given catalog is contained in this source, it will be in the "sources" dictionary, catalog as key,
             #source object as value
@@ -981,20 +1010,25 @@ def master_source_plot(master_sources: Dict, object_data: Dict, number_graph: in
             for band_det in range(len(catalog_source.band_flux)):
                 #The band fluxes are stored in catalog_source.band_flux. They're in erg/s/cm2, so divide by tab_width to
                 #be in erg/s/cm2/keV. Here I plot them, but you can do whatever you want with those
-                plt.step(dict_cat.band_edges[catalog], 
+                axes.step(dict_cat.band_edges[catalog], 
                         [catalog_source.band_flux[band_det][0] / tab_width[0]] 
                         + list(catalog_source.band_flux[band_det] / tab_width),
                         c=dict_cat.colors[catalog], where='pre')
-                plt.errorbar(dict_cat.dictionary_catalog[catalog]["energy_band_center"], catalog_source.band_flux[band_det] / tab_width,
-                            yerr=[catalog_source.band_flux_err[0][band_det] / tab_width,
-                                catalog_source.band_flux_err[1][band_det] / tab_width],
-                            fmt="o", markeredgecolor='gray', c=dict_cat.colors[catalog], alpha=0.4)
-            plt.step([], [], c=dict_cat.colors[catalog], label=f"{catalog_source.iau_name}, {catalog}")
-        plt.xlabel("Energy [keV]")
-        plt.ylabel(r"$F_{\nu}$ [$\mathrm{erg.s}^{-1}.\mathrm{cm}^{-2}.\mathrm{keV}^{-1}$]")
-        plt.legend()
-        plt.loglog()
-        plt.show()
+                axes.errorbar(dict_cat.dictionary_catalog[catalog]["energy_band_center"], catalog_source.band_flux[band_det] / tab_width,
+                              yerr=[catalog_source.band_flux_err[0][band_det] / tab_width,
+                                    catalog_source.band_flux_err[1][band_det] / tab_width],
+                              fmt="o", markeredgecolor='gray', c=dict_cat.colors[catalog], alpha=0.4)
+            axes.step([], [], c=dict_cat.colors[catalog], label=f"{catalog_source.iau_name}, {catalog}")
+        axes.set_xlabel("Energy [keV]")
+        axes.set_ylabel(r"$F_{\nu}$ [$\mathrm{erg.s}^{-1}.\mathrm{cm}^{-2}.\mathrm{keV}^{-1}$]")
+        axes.legend()
+        axes.loglog()
+        
+        img_path = os.path.join(plot_var_sources_path, f'sources_plot_{count}.png')
+        plt.savefig(img_path)
+        plt.close()
+        
+        count += 1
 
 
 # -------------------------------------------- #
@@ -1002,9 +1036,28 @@ def master_source_plot(master_sources: Dict, object_data: Dict, number_graph: in
 # --------------- modeling spectra with jaxspec --------------- # 
 
 
-def modeling_source_spectra(nearby_sources_table: Table, instrument, model) -> Dict:
+def cross_catalog_index(output_name :str, key: str, iauname: str, nearby_sources_table: Table) -> List:
+    master_source_cone_path = os.path.join(output_name, "Master_source_cone.fits").replace("\\", "/")
+    with fits.open(master_source_cone_path) as data:
+        master_source_cone = Table(data[1].data)
+    
+    if key == "CS_Chandra":
+        key = "Chandra"
+    
+    msc_name = [name for name in master_source_cone[key] if name != ""]
+    var_index_in_nearby_sources_table = []
+    for name in msc_name:
+        if name in nearby_sources_table[iauname]:
+            index_in_table = list(nearby_sources_table[iauname]).index(name)
+            var_index_in_nearby_sources_table.append(index_in_table)
+            
+    return var_index_in_nearby_sources_table
+
+
+def modeling_source_spectra(nearby_sources_table: Table, instrument, model, var_index) -> List:
     print(f"\n{colored('Modeling spectra...', 'yellow', attrs=['underline'])}")
     total_spectra = []
+    total_var_spectra = []
     size = 10_000
     
     for index, vignet_factor in tqdm(enumerate(nearby_sources_table["vignetting_factor"])):
@@ -1013,18 +1066,21 @@ def modeling_source_spectra(nearby_sources_table: Table, instrument, model) -> D
             "tbabs_1": {"N_H": np.full(size, nearby_sources_table["Nh"][index]/1e22)},
             "powerlaw_1": {
                 "alpha": np.full(size, nearby_sources_table["Photon Index"][index] if nearby_sources_table["Photon Index"][index] > 0.0 else 1.7),
-                "norm": np.full(size, 1),
+                "norm": np.full(size, 1e-5),
             }
         }
         
         spectra = fakeit_for_multiple_parameters(instrument=instrument, model=model, parameters=parameters) * vignet_factor
 
+        if index in var_index:
+            total_var_spectra.append(spectra)
+        
         total_spectra.append(spectra)
         
-    return total_spectra
+    return total_spectra, total_var_spectra
 
 
-def total_plot_spectra(total_spectra: List, instrument, simulation_data: Dict, catalog_name: str) -> None:
+def total_plot_spectra(total_spectra: List, total_var_spectra: List, instrument, simulation_data: Dict, catalog_name: str) -> Dict:
     object_data = simulation_data["object_data"]
     os_dictionary = simulation_data["os_dictionary"]
     graph_data = {"min_lim_x": 0.2,
@@ -1032,10 +1088,10 @@ def total_plot_spectra(total_spectra: List, instrument, simulation_data: Dict, c
                   "percentile_0": 10,
                   "percentile_2": 90}
 
-    figure, axes = plt.subplots(1, 3, figsize=(17, 9), sharey=True)
-    figure.suptitle(f"Spectral modeling close to {object_data['object_name']}\ncatalog : {catalog_name}", fontsize=20)
-    figure.text(0.5, 0.04, 'Energy [keV]', ha='center', va='center', fontsize=16)
-    figure.text(0.085, 0.5, 'Counts', ha='center', va='center', rotation='vertical', fontsize=16)
+    figure_1, axes = plt.subplots(1, 3, figsize=(17, 9), sharey=True)
+    figure_1.suptitle(f"Spectral modeling close to {object_data['object_name']}\ncatalog : {catalog_name}", fontsize=20)
+    figure_1.text(0.5, 0.04, 'Energy [keV]', ha='center', va='center', fontsize=16)
+    figure_1.text(0.085, 0.5, 'Counts', ha='center', va='center', rotation='vertical', fontsize=16)
 
     for ax in axes:
         ax.set_xlim([graph_data["min_lim_x"], graph_data["max_lim_x"]])
@@ -1048,11 +1104,16 @@ def total_plot_spectra(total_spectra: List, instrument, simulation_data: Dict, c
                 where="post")
     ax0.set_title("Spectra from Nearby Sources")
 
-    percentile = np.percentile(total_spectra,(graph_data["percentile_0"], 50, graph_data["percentile_2"]), axis=0)
-
     spectrum_summed = 0.0
     for item in range(len(total_spectra)):
         spectrum_summed += total_spectra[item]
+
+    spectrum_var_summed = 0.0
+    for item in range(len(total_var_spectra)):
+        spectrum_var_summed += total_var_spectra[item]  
+
+    y_upper = np.median(spectrum_summed, axis=0) + np.median(spectrum_var_summed, axis=0)
+    y_lower = np.median(spectrum_summed, axis=0) - np.median(spectrum_var_summed, axis=0)
 
     ax1 = axes[1]
     ax1.step(instrument.out_energies[0],
@@ -1063,29 +1124,51 @@ def total_plot_spectra(total_spectra: List, instrument, simulation_data: Dict, c
     ax1.set_title("Sum of spectra")
 
     ax2 = axes[2]
-    ax2.step(instrument.out_energies[0],
-            np.median(percentile[0], axis=0),
-            where='post', color='darkorange', label=f"{graph_data['percentile_0']}"+"$^{th}$ percentile"
-            )
-    ax2.step(instrument.out_energies[0],
-            np.median(percentile[1], axis=0),
-            where='post', color='black', linewidth=0.5,
-            label="$50^{th} percentile$"
-            )
-    ax2.step(instrument.out_energies[0],
-            np.median(percentile[2], axis=0),
-            where='post', color='red', label=f"{graph_data['percentile_2']}"+"$^{th}$ percentile"
-            )
-    ax2.fill_between(instrument.out_energies[0],
-                    np.median(percentile[0], axis=0),
-                    np.median(percentile[2], axis=0),
-                    alpha=0.2, color='red', hatch='\\'*3
-                    )
+    ax2.errorbar(instrument.out_energies[0], y=np.median(spectrum_summed, axis=0), yerr=np.median(spectrum_var_summed, axis=0), 
+                fmt="none", ecolor='red', capsize=2, capthick=3,
+                label='error')
+    ax2.step(instrument.out_energies[0], np.median(spectrum_summed, axis=0), color='black', label="sum powerlaw")
+    ax2.set_title("Spectrum Summed with var sources error")
     ax2.legend(loc='upper right')
-    ax2.set_title("Spectral Envelope")
-    
-    img_path = os.path.join(os_dictionary['img'], f"spectral_modeling_close_to_{object_data['object_name']}.png".replace(" ", "_")).replace("\\", "/")
+    ax2.loglog()
+
+    key = simulation_data["os_dictionary"]["catalog_key"]
+    img_path = os.path.join(os_dictionary['img'], f"{key}_spectral_modeling_close_to_{object_data['object_name']}.png".replace(" ", "_")).replace("\\", "/")
     plt.savefig(img_path)
     plt.show()
+    
+    data = {
+        "Energy": instrument.out_energies[0],
+        "Counts": np.median(spectrum_summed, axis=0),
+        "Upper limit": y_upper,
+        "Lower limit": y_lower
+    }
+    
+    return data
+
+
+def write_txt_file(simulation_data: Dict, data: Dict) -> None:
+    
+    catalog_directory = simulation_data['os_dictionary']["catalog_directory"]
+    key = simulation_data["os_dictionary"]["catalog_key"]
+    txt_path = os.path.join(catalog_directory, f'{key}_output_modeling_plot.txt').replace("\\", "/")
+    
+    data_to_txt = [
+        list(data.keys())
+    ]
+    
+    energy, counts, y_upper, y_lower = list(data.values())
+    data_to_txt.extend([energy[index], counts[index], y_upper[index], y_lower[index]] for index in range(len(energy)))
+    
+    with open(txt_path, 'w') as file:
+        header = "{:<15} {:<15} {:<15} {:<15}".format(*data_to_txt[0])
+        file.write(header + "\n")
+
+        for row in data_to_txt[1:]:
+            new_row = "{:<10.5f}     {:<10.5f}       {:<10.5f}       {:<10.5f}".format(*row)
+            file.write(new_row + "\n")
+            
+    print(f"\n{colored(f'{key}_output_modeling_plot.txt', 'yellow')} has been created in {colored(txt_path, 'blue')}")
+
 
 # ------------------------------------------------------------- #

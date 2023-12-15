@@ -41,6 +41,9 @@ main_group.add_argument('--coord', '-co', type=float,
 parser.add_argument('--radius', '-r', type=float, 
                     help="Enter the radius of the field of view (unit = arcmin)")
 
+parser.add_argument('--exp_time', '-e_t', type=int,
+                    help="Enter the exposure time to modeling data")
+
 parser.add_argument('--catalog', '-ca', type=str, 
                     help="Enter catalog keyword : Xmm_DR13/CSC_2.0/Swift/eRosita/compare_catalog/match")
 
@@ -129,11 +132,14 @@ modeling_file_path = os.path.join(active_workflow, 'modeling_result', name).repl
 if not os.path.exists(modeling_file_path):
     os.mkdir(modeling_file_path)
 
+# creation of plot_var_sources
+plot_var_sources_path = os.path.join(modeling_file_path, "plot_var_sources").replace("\\", "/")
+if not os.path.exists(plot_var_sources_path):
+    os.mkdir(plot_var_sources_path)
+
 output_name = os.path.join(modeling_file_path, 'Pointings').replace("\\", "/")
 if not os.path.exists(output_name):
     os.mkdir(output_name)
-
-os_dictionary = {"modeling_file_path": modeling_file_path}
 
 # --------------------------------------------- #
 
@@ -162,6 +168,8 @@ print('-'*50, '\n')
 telescop_data = {"telescop_name": "nicer",
                  "EffArea": EffArea,
                  "OffAxisAngle": OffAxisAngle,
+                 "nicer_data_arf": nicer_data_arf,
+                 "nicer_data_rmf": nicer_data_rmf,
                  "min_value": 0.3,
                  "max_value": 10.0,
                  "energy_band": "0.2-12.0"}
@@ -194,6 +202,7 @@ if args.catalog == "Xmm_DR13":
     
     os_dictionary = {"active_workflow": active_workflow,
                      "modeling_file_path": modeling_file_path,
+                     "plot_var_sources_path": plot_var_sources_path,
                      "catalog_directory" : xmm_directory,
                      "cloesest_dataset_path": xmm_closest_catalog,
                      "img": xmm_img}
@@ -204,12 +213,14 @@ if args.catalog == "Xmm_DR13":
     nearby_sources_table, nearby_sources_position = xmm.nearby_sources_table,  xmm.nearby_sources_position
     model_dictionary = xmm.model_dictionary
     
+    key = "XMM"
     column_dictionary = {"band_flux_obs" : dict_cat.dictionary_catalog['XMM']["band_flux_obs"],
                          "band_flux_obs_err": dict_cat.dictionary_catalog["XMM"]["band_flux_obs_err"],
                          "energy_band": [0.35, 0.75, 1.5, 3.25, 8.25],
-                         "sigma" : np.array([1e-20, 5e-21, 1e-22, 1e-23, 1e-24], dtype=float),
+                         "sigma": np.array(list(np.linspace(1e-20, 1e-24, len(dict_cat.dictionary_catalog[key]["energy_band_center"])))),
                          "data_to_vignetting": ["SC_RA", "SC_DEC", "IAUNAME"]}
-    key = "XMM"
+    
+    simulation_data["os_dictionary"]["catalog_key"] = key
     
 elif args.catalog == "CSC_2.0":
     # Find the optimal pointing point with the Chandra catalog
@@ -225,6 +236,7 @@ elif args.catalog == "CSC_2.0":
     
     os_dictionary = {"active_workflow": active_workflow,
                      "modeling_file_path": modeling_file_path,
+                     "plot_var_sources_path": plot_var_sources_path,
                      "catalog_directory": chandra_directory,
                      "cloesest_dataset_path": chandra_closest_catalog,
                      "img": chandra_img}
@@ -244,9 +256,10 @@ elif args.catalog == "CSC_2.0":
             column_dictionary = {"band_flux_obs": dict_cat.dictionary_catalog[key]["band_flux_obs"],
                                  "band_flux_obs_err": dict_cat.dictionary_catalog[key]["band_flux_obs_err"],
                                  "energy_band": dict_cat.dictionary_catalog[key]["energy_band_center"],
-                                 "sigma": np.array([1e-20, 1e-22, 1e-24], dtype=float),
+                                 "sigma": np.array(list(np.linspace(1e-20, 1e-24, len(dict_cat.dictionary_catalog[key]["energy_band_center"])))),
                                  "data_to_vignetting": ["RA", "DEC", "Chandra_IAUNAME"]}
             model_dictionary = csc.model_dictionary
+            simulation_data["os_dictionary"]["catalog_key"] = key
             break
         elif answer == "CS_Chandra":
             key = "CS_Chandra"
@@ -254,9 +267,10 @@ elif args.catalog == "CSC_2.0":
             column_dictionary = {"band_flux_obs": dict_cat.dictionary_catalog[key]["band_flux_obs"],
                                  "band_flux_obs_err": dict_cat.dictionary_catalog[key]["band_flux_obs_err"],
                                  "energy_band": dict_cat.dictionary_catalog[key]["energy_band_center"],
-                                 "sigma": np.array([1e-20, 1e-22, 1e-24], dtype=float),
+                                 "sigma": np.array(list(np.linspace(1e-20, 1e-24, len(dict_cat.dictionary_catalog[key]["energy_band_center"])))),
                                  "data_to_vignetting": ["ra", "dec", "name"]}
             model_dictionary = csc.cs_model_dictionary
+            simulation_data["os_dictionary"]["catalog_key"] = key
             break
         else:
             print(f"{colored('Key error ! ', 'red')}. Please retry !")
@@ -264,14 +278,61 @@ elif args.catalog == "CSC_2.0":
     
 elif args.catalog == "Swift":
     # Find the optimal pointing point with the Swift catalog
-    swi = Swift(catalog_path=catalog_path, radius=radius, dictionary=object_data, user_table=add_source_table)
+    
+    swi_directory = os.path.join(modeling_file_path, 'Swift'.replace("\\", "/"))
+    swi_img = os.path.join(swi_directory, 'img'.replace("\\", "/"))
+    swi_closest_catalog = os.path.join(swi_directory, "closest_catalog")
+    if not os.path.exists(swi_directory):
+        os.mkdir(swi_directory)
+        os.mkdir(swi_img)
+        os.mkdir(swi_closest_catalog)
+    
+    os_dictionary = {"active_workflow": active_workflow,
+                     "modeling_file_path": modeling_file_path,
+                     "plot_var_sources_path": plot_var_sources_path,
+                     "catalog_directory" : swi_directory,
+                     "cloesest_dataset_path": swi_closest_catalog,
+                     "img": swi_img}
+    
+    simulation_data["os_dictionary"] = os_dictionary
+    
+    swi = Swift(catalog_path=catalog_path, radius=radius, simulation_data=simulation_data, user_table=add_source_table)
     nearby_sources_table, nearby_sources_position = swi.nearby_sources_table, swi.nearby_sources_position
-    model_dictionary = swi.dictionary_model
+    model_dictionary = swi.model_dictionary
+    
+    key = "Swift"
+    column_dictionary = {"band_flux_obs": dict_cat.dictionary_catalog[key]["band_flux_obs"],
+                         "band_flux_obs_err": dict_cat.dictionary_catalog[key]["band_flux_obs_err"],
+                         "energy_band": dict_cat.dictionary_catalog[key]["energy_band_center"],
+                         "sigma": np.array(list(np.linspace(1e-20, 1e-24, len(dict_cat.dictionary_catalog[key]["energy_band_center"])))),
+                         "data_to_vignetting": ["RA", "DEC", "Swift_IAUNAME"]}
+    
+    simulation_data["os_dictionary"]["catalog_key"] = key
+    
 elif args.catalog == "eRosita":
     # Find the optimal pointing with the eRosita catalog
-    eRo = eRosita(catalog_path=catalog_path, radius=radius, dictionary=object_data, user_table=add_source_table)
+    
+    eRo_directory = os.path.join(modeling_file_path, 'eRosita'.replace("\\", "/"))
+    eRo_img = os.path.join(eRo_directory, 'img'.replace("\\", "/"))
+    eRo_closest_catalog = os.path.join(eRo_directory, "closest_catalog")
+    if not os.path.exists(eRo_directory):
+        os.mkdir(eRo_directory)
+        os.mkdir(eRo_img)
+        os.mkdir(eRo_closest_catalog)
+    
+    eRo = eRosita(catalog_path=catalog_path, radius=radius, simulation_data=simulation_data, user_table=add_source_table)
     nearby_sources_table, nearby_sources_position = eRo.nearby_sources_table, eRo.nearby_sources_position
-    model_dictionary = eRo.dictionary_model
+    model_dictionary = eRo.model_dictionary
+    
+    key = "eRosita"
+    column_dictionary = {"band_flux_obs": dict_cat.dictionary_catalog[key]["band_flux_obs"],
+                         "band_flux_obs_err": dict_cat.dictionary_catalog[key]["band_flux_obs_err"],
+                         "energy_band": dict_cat.dictionary_catalog[key]["energy_band_center"],
+                         "sigma": np.array(list(np.linspace(1e-20, 1e-24, len(dict_cat.dictionary_catalog[key]["energy_band_center"])))),
+                         "data_to_vignetting": ["RA", "DEC", "Swift_IAUNAME"]}
+    
+    simulation_data["os_dictionary"]["catalog_key"] = key
+    
 elif args.catalog == "compare_catalog":
     # Find the optimal pointing point with two catalogs to compare data
     
@@ -285,15 +346,19 @@ elif args.catalog == "compare_catalog":
     
     os_dictionary = {"active_workflow": active_workflow,
                      "modeling_file_path": modeling_file_path,
+                     "catalog_datapath": catalog_datapath,
+                     "output_name": output_name,
+                     "plot_var_sources_path": plot_var_sources_path,
+                     "stilts_software_path": stilts_software_path,
                      "catalog_directory": compare_catalog_directory,
                      "cloesest_dataset_path": compare_catalog_closest_catalog,
                      "img": compare_catalog_img}
     
     simulation_data["os_dictionary"] = os_dictionary
-
-    compare_class = CompareCatalog(catalog_path=catalog_path, radius=radius, simulation_data=simulation_data, user_table=add_source_table)
-    compare_class.opti_point_calcul(simulation_data=simulation_data)
+    
+    compare_class = CompareCatalog(catalog_path=catalog_path, radius=radius, simulation_data=simulation_data, exp_time=args.exp_time)
     sys.exit()
+    
 elif args.catalog == "match":
     
     mixed_directory = os.path.join(modeling_file_path, 'xmmXchandra'.replace("\\", "/"))
@@ -305,6 +370,7 @@ elif args.catalog == "match":
         os.mkdir(mixed_closest_catalog)
     
     os_dictionary = {"active_workflow": active_workflow,
+                     "plot_var_sources_path": plot_var_sources_path,
                      "catalog_datapath": catalog_datapath,
                      "stilts_software_path": stilts_software_path,
                      "topcat_software_path": topcat_software_path,
@@ -315,9 +381,10 @@ elif args.catalog == "match":
                      "img": mixed_img}
     
     simulation_data["os_dictionary"] = os_dictionary
-    
+    os_dictionary["catalog_key"] = "xmmXchandra"
     mixed_catalog = CatalogMatch(catalog_name=("Xmm_DR13", "Chandra"), radius=radius, simulation_data=simulation_data)
     nearby_sources_table = mixed_catalog.nearby_sources_table
+    var_index = mixed_catalog.var_index
     
     # --------------- modeling spectra with jaxspec --------------- #
 
@@ -329,14 +396,17 @@ elif args.catalog == "match":
     model = Tbabs() * Powerlaw()
 
     # load instrument parameters
-    instrument = Instrument.from_ogip_file(nicer_data_arf, nicer_data_rmf, exposure=50_000)
+    instrument = Instrument.from_ogip_file(nicer_data_arf, nicer_data_rmf, exposure=args.exp_time)
 
     # load all of the sources spetcra
-    total_spectra = f.modeling_source_spectra(nearby_sources_table=nearby_sources_table, instrument=instrument, model=model)
+    total_spectra, total_var_spectra = f.modeling_source_spectra(nearby_sources_table=nearby_sources_table, instrument=instrument, model=model, var_index=var_index)
 
     # plot of all spectra data
-    f.total_plot_spectra(total_spectra=total_spectra, instrument=instrument, simulation_data=simulation_data, catalog_name="xmmXchandra")
+    data = f.total_plot_spectra(total_spectra=total_spectra, total_var_spectra=total_var_spectra, instrument=instrument, simulation_data=simulation_data, catalog_name="xmmXchandra")
 
+    # output spectre plot
+    f.write_txt_file(simulation_data=simulation_data, data=data)
+    
     # ------------------------------------------------------------- # 
     
     sys.exit()
@@ -347,8 +417,10 @@ else:
 # --------------- count_rates --------------- #
 
 excel_data_path = os.path.join(active_workflow, 'excel_data').replace("\\", "/")
-
-if platform.system() == "Linux":
+if not os.path.exists(excel_data_path):
+    os.mkdir(excel_data_path)
+    
+if platform.system() == "Linux" or platform.system() == "Darwin":
     count_rates, nearby_sources_table = f.count_rates(nearby_sources_table, model_dictionary, telescop_data)
     # f.py_to_xlsx(excel_data_path=excel_data_path, count_rates=count_rates, object_data=object_data, args=(args.catalog, key), radius=args.radius)
 elif platform.system() == "Windows":
@@ -383,7 +455,7 @@ f.data_map(simulation_data, vector_dictionary, OptimalPointingIdx, nearby_source
 
 # --------------- Calculate vignetting factor --------------- #
 
-vignetting_factor, nearby_sources_table = f.vignetting_factor(OptimalPointingIdx=OptimalPointingIdx, vector_dictionary=vector_dictionary, simulation_data=simulation_data, data=column_dictionary["data_to_vignetting"])
+vignetting_factor, nearby_sources_table = f.vignetting_factor(OptimalPointingIdx=OptimalPointingIdx, vector_dictionary=vector_dictionary, simulation_data=simulation_data, data=column_dictionary["data_to_vignetting"], nearby_sources_table=nearby_sources_table)
 
 # ----------------------------------------------------------- #
 
@@ -421,7 +493,7 @@ def select_catalogsources_around_region(output_name):
         path_to_cat_init = os.path.join(catalog_datapath, cat).replace("\\", "/")
         path_to_cat_final = os.path.join(output_name, cat).replace("\\", "/")
         command = (f"java -jar {stilts_software_path} tmatch2 matcher=exact \
-                   in1='{master_cone_path}' in2='{path_to_cat_init}.fits' out='{path_to_cat_final}.fits'\
+                in1='{master_cone_path}' in2='{path_to_cat_init}.fits' out='{path_to_cat_final}.fits'\
                     values1='{cat}' values2='{cat}_IAUNAME' find=all progress=none")
         command = shlex.split(command)
         subprocess.run(command)
@@ -433,13 +505,15 @@ try:
     select_master_sources_around_region(ra=right_ascension, dec=declination, radius=radius.value, output_name=output_name)
     select_catalogsources_around_region(output_name=output_name)
     master_sources = f.load_master_sources(output_name)
-    f.master_source_plot(master_sources=master_sources, object_data=object_data, number_graph=2)
+    f.master_source_plot(master_sources=master_sources, simulation_data=simulation_data, number_graph=len(master_sources))
 except Exception as error :
     print(f"{colored('An error occured : ', 'red')} {error}")
 
 # ---------------------------------------- #
 
 # --------------- modeling spectra with jaxspec --------------- #
+
+var_index =  f.cross_catalog_index(output_name=output_name, key=key, iauname=column_dictionary["data_to_vignetting"][2], nearby_sources_table=nearby_sources_table)
 
 # setup jaxspec
 config.update("jax_enable_x64", True)
@@ -449,12 +523,15 @@ numpyro.set_platform("cpu")
 model = Tbabs() * Powerlaw()
 
 # load instrument parameters
-instrument = Instrument.from_ogip_file(nicer_data_arf, nicer_data_rmf, exposure=50_000)
+instrument = Instrument.from_ogip_file(nicer_data_arf, nicer_data_rmf, exposure=args.exp_time)
 
 # load all of the sources spetcra
-total_spectra = f.modeling_source_spectra(nearby_sources_table=nearby_sources_table, instrument=instrument, model=model)
+total_spectra, total_var_spectra = f.modeling_source_spectra(nearby_sources_table=nearby_sources_table, instrument=instrument, model=model, var_index=var_index)
 
 # plot of all spectra data
-f.total_plot_spectra(total_spectra=total_spectra, instrument=instrument, simulation_data=simulation_data, catalog_name=args.catalog)
+data = f.total_plot_spectra(total_spectra=total_spectra, total_var_spectra=total_var_spectra, instrument=instrument, simulation_data=simulation_data, catalog_name=args.catalog)
+
+# output spectre plot
+f.write_txt_file(simulation_data=simulation_data, data=data)
 
 # ------------------------------------------------------------- # 

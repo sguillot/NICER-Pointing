@@ -14,6 +14,12 @@ from matplotlib.cm import ScalarMappable
 from typing import Dict, Tuple, Union, List
 from termcolor import colored
 from tqdm import tqdm
+from jaxspec.model.multiplicative import Tbabs
+from jaxspec.model.additive import Powerlaw
+from jax.config import config
+from jaxspec.data.instrument import Instrument
+from jaxspec.data.util import fakeit_for_multiple_parameters
+
 
 import function as f
 import openpyxl
@@ -156,6 +162,7 @@ class XmmCatalog:
             Exception: An exception is raised and the program exits if no sources are found or if an error occurs.
         """   
         pointing_area = radius + 5*u.arcmin
+        name = dictionary["object_name"]
         object_position = dictionary['object_position']
         min_ra, max_ra = object_position.ra - pointing_area, object_position.ra + pointing_area
         min_dec, max_dec = object_position.dec - pointing_area, object_position.dec + pointing_area
@@ -165,12 +172,14 @@ class XmmCatalog:
         nearby_src_table = Table(names=self.xmm_catalog.colnames,
                                  dtype=self.xmm_catalog.dtype)
         
-        for number in range(len(self.xmm_catalog)):
+        print(fr"{colored('Reducing XMM catalog...', 'yellow')} to fov of {radius.value + 5 } arcmin")
+        for number in tqdm(range(len(self.xmm_catalog))):
             if min_ra/u.deg < self.xmm_catalog['SC_RA'][number] < max_ra/u.deg and min_dec/u.deg < self.xmm_catalog['SC_DEC'][number] < max_dec/u.deg:
                 small_table.add_row(self.xmm_catalog[number])
                 
         if len(user_table) == 0:
             src_position = SkyCoord(ra=small_table['SC_RA'], dec=small_table['SC_DEC'], unit=u.deg)
+            print(f"{colored(f'Find sources close to {name} with XMM catalog', 'blue')}")
             for number in tqdm(range(len(small_table))):
                 if f.ang_separation(object_position, src_position[number]) < radius:
                     nearby_src_table.add_row(small_table[number])
@@ -181,6 +190,7 @@ class XmmCatalog:
                 small_table.add_row(user_table[number])
                 
             src_position = SkyCoord(ra=small_table['SC_RA'], dec=small_table['SC_DEC'], unit=u.deg)
+            print(f"{colored(f'Find sources close to {name} with XMM catalog', 'blue')}")
             for number in tqdm(range(len(small_table))):
                 if f.ang_separation(object_position, src_position[number]) < radius:
                     nearby_src_table.add_row(small_table[number])
@@ -263,7 +273,7 @@ class XmmCatalog:
         fig, axes = plt.subplots(1, 1, figsize=(15, 8))
         fig.suptitle("Interpolation Photon Index plot", fontsize=20)
         fig.text(0.5, 0.04, 'Energy [keV]', ha='center', va='center')
-        fig.text(0.04, 0.5, 'Flux [erg/cm^2/s]', ha='center', va='center', rotation='vertical')
+        fig.text(0.04, 0.5, 'Flux $[erg.cm^{-2}.s^{-1}.keV^{-1}]$', ha='center', va='center', rotation='vertical')
         
         for item in range(len(optimization_parameters)):
             flux_obs = optimization_parameters[item][1]
@@ -435,10 +445,15 @@ class XmmCatalog:
         print("\n")
         name = dictionary['object_name']
         obj_ra, obj_dec = dictionary['object_position'].ra, dictionary['object_position'].dec
-        result = ESASky.query_object_catalogs(position=name, catalogs="XMM-EPIC")
-        xmm_epic = Table(result[0])
-        xmm_obs_id = list(xmm_epic["observation_id"])
-        result_fits_images = ESASky.get_images(observation_ids=xmm_obs_id[0], radius=radius, missions="XMM")
+        try:
+            result = ESASky.query_object_catalogs(position=name, catalogs="XMM-EPIC")
+            xmm_epic = Table(result[0])
+            xmm_obs_id = list(xmm_epic["observation_id"])
+            result_fits_images = ESASky.get_images(observation_ids=xmm_obs_id[0], radius=radius, missions="XMM")
+        except Exception as error:
+            print(f"{colored('An error occured : ', 'red')} {error}")
+            result_fits_images = {}
+            
         
         ra_in_x2a = [ra for index, ra in enumerate(self.variability_table['SC_RA']) if self.variability_table['IN_X2A'][index] == True]
         dec_in_x2a = [dec for index, dec in enumerate(self.variability_table['SC_DEC']) if self.variability_table['IN_X2A'][index] == True]
@@ -722,9 +737,8 @@ class Chandra:
         Exception
             Raises an exception if an error occurs during the process.
         """
-        radius = 5 * u.arcmin
         field_of_view = radius + 5*u.arcmin
-
+        name = dictionary["object_name"]
         object_position = dictionary['object_position']
 
         min_ra, max_ra = object_position.ra - field_of_view, object_position.ra + field_of_view
@@ -735,14 +749,16 @@ class Chandra:
 
         nearby_sources_table = Table(names= self.chandra_catalog.colnames,
                                      dtype= self.chandra_catalog.dtype)
-
-        for number in range(len(self.chandra_catalog)):
+        
+        print(fr"{colored('Reducing Chandra catalog...', 'yellow')} to fov of {radius.value + 5 } arcmin")
+        for number in tqdm(range(len(self.chandra_catalog))):
             if min_ra/u.deg < self.chandra_catalog["RA"][number] < max_ra/u.deg and min_dec/u.deg < self.chandra_catalog["DEC"][number] < max_dec/u.deg:
                 small_table.add_row(self.chandra_catalog[number])
                 
         src_position = SkyCoord(ra=small_table['RA'], dec=small_table['DEC'], unit=u.deg)
 
-        for number in range(len(small_table)):
+        print(f"{colored(f'Find sources close to {name} with Chandra catalog', 'blue')}")
+        for number in tqdm(range(len(small_table))):
             if f.ang_separation(object_position, src_position[number]) < radius:
                 nearby_sources_table.add_row(small_table[number])
                 
@@ -751,8 +767,12 @@ class Chandra:
                        "declination": "DEC",
                        "catalog_name": "Chandra"}
             
-        unique_table = f.create_unique_sources_catalog(nearby_sources_table=nearby_sources_table, column_name=column_name)
-
+        if len(nearby_sources_table) != 0:
+            unique_table = f.create_unique_sources_catalog(nearby_sources_table=nearby_sources_table, column_name=column_name)
+        else:
+            print("Nearby sources table from Chandra catalog is empty.")
+            sys.exit()
+            
         nearby_src_position = SkyCoord(ra=unique_table['RA'], dec=unique_table['DEC'], unit=u.deg)
                 
         try :
@@ -929,7 +949,7 @@ class Chandra:
         return cone_search_catalog
             
 
-    def visualization_interp(self, optimization_parameters, photon_index) -> None:
+    def visualization_interp(self, optimization_parameters, photon_index, key) -> None:
         """
         Visualize the interpolation of photon indices.
 
@@ -945,37 +965,26 @@ class Chandra:
         None
             This function plots a graph and does not return any value.
         """
-        number_interp = len(optimization_parameters)
-        number_column = 4
-        number_row = number_interp/number_column
-        if number_row < 1 :
-            number_row = 1
-        elif number_row % 1 == 0:
-            number_row = int(number_interp/number_column)
-        else:
-            number_row = int(number_interp/number_column) + 1 
-
-        figure_interp, axes = plt.subplots(nrows=number_row, ncols=number_column, figsize=(15, 15), sharex=True)
-        figure_interp.subplots_adjust(wspace=0.5, hspace=1.2)
-        figure_interp.suptitle("Interpolation Photon Index", fontsize=20)
-        figure_interp.text(0.5, 0.04, 'Energy [keV]', ha='center', va='center')
-        figure_interp.text(0.04, 0.5, 'Flux [erg/cm^2/s]', ha='center', va='center', rotation='vertical')
+        energy_band = dict_cat.dictionary_catalog[key]["energy_band_center"]
         
-        count = 0
-        for row in range(number_row):
-            for column in range(number_column):
-                if count < number_interp:
-                    energy_band = optimization_parameters[count][0]
-                    flux_obs = optimization_parameters[count][1]
-                    absorb_power_law = optimization_parameters[count][2]
-                    absorb_pho_index = photon_index[count]
-
-                    axes[row][column].errorbar(energy_band, flux_obs, fmt='*', color='red', ecolor='black')
-                    axes[row][column].plot(energy_band, absorb_power_law, linestyle='dashdot', color="darkorange")
-                    axes[row][column].set_title(f"Absorb $\Gamma$ = {absorb_pho_index}", fontsize=7)
-                
-                count += 1
-                
+        fig, axes = plt.subplots(1, 1, figsize=(15, 8))
+        fig.suptitle("Interpolation Photon Index plot", fontsize=20)
+        fig.text(0.5, 0.04, 'Energy [keV]', ha='center', va='center')
+        fig.text(0.04, 0.5, 'Flux $[erg.cm^{-2}.s^{-1}.keV^{-1}]$', ha='center', va='center', rotation='vertical')
+        
+        for item in range(len(optimization_parameters)):
+            flux_obs = optimization_parameters[item][1]
+            flux_obs_err = optimization_parameters[item][2]
+            absorbed_power_law = optimization_parameters[item][3]
+            absorb_pho_index = photon_index[item]
+            
+            axes.errorbar(energy_band, flux_obs, flux_obs_err, fmt='*', color='red', ecolor='black')
+            axes.plot(energy_band, absorbed_power_law, label=f"$\Gamma$ = {absorb_pho_index:.8f}")
+            # axes.step(energy_band, flux_obs, where='pre', label=f"$\Gamma$ = {absorb_pho_index:.8f}")
+    
+        axes.legend(loc="upper left", ncol=4, fontsize=6)
+        axes.loglog()
+        
         plt.show()
 
 
@@ -993,7 +1002,7 @@ class Chandra:
                            "energy_band_center": dict_cat.dictionary_catalog[key]["energy_band_center"],
                            "energy_band_half_width": dict_cat.dictionary_catalog[key]["energy_band_half_width"]}
             
-        def model(energy_band, constant, gamma):
+        def absorbed_power_law(energy_band, constant, gamma):
             sigma = np.array([1e-20, 1e-22, 1e-24], dtype=float)
             return (constant * energy_band **(-gamma)) * (np.exp(-sigma*3e20))
         
@@ -1010,14 +1019,14 @@ class Chandra:
         yerr_array = [num/det for num, det in zip(flux_err_obs, tab_width)]
         
         try:
-            popt, pcov = curve_fit(model, interp_data["energy_band_center"], y_array, sigma=yerr_array)
+            popt, pcov = curve_fit(absorbed_power_law, interp_data["energy_band_center"], y_array, sigma=yerr_array)
             constant, photon_index = popt
         except Exception as error:
             photon_index = 1.7
             
-        params = (y_array, yerr_array, interp_data["energy_band_center"])
+        optimization_parameters = (interp_data["energy_band_center"], y_array, yerr_array, absorbed_power_law(interp_data["energy_band_center"], *popt))
             
-        return photon_index, params 
+        return photon_index, optimization_parameters 
         
 
     def get_phoindex_nh(self):
@@ -1041,6 +1050,8 @@ class Chandra:
                 self.cs_nh_list.append(nh_value*1e20)
             else:
                 self.cs_nh_list.append(3e20)
+                
+        self.visualization_interp(optimization_parameters=cs_parameters_list, photon_index=cs_photon_index_list, key=cs_key)
 
         for index, name in enumerate(list(self.cone_search_catalog['name'])): 
             if name in self.nearby_sources_table["Chandra_IAUNAME"]:
@@ -1057,7 +1068,9 @@ class Chandra:
                     self.nh_list.append(self.cone_search_catalog["nh_gal"][index]*1e20)
                 else:
                     self.nh_list.append(3e20)
-                    
+        
+        self.visualization_interp(optimization_parameters=parameters_list, photon_index=photon_index_list, key=key)
+        
         self.nearby_sources_table["Photon Index"] = photon_index_list
         self.nearby_sources_table["Nh"] = self.nh_list
         
@@ -1157,7 +1170,7 @@ class Swift:
     """
 
 
-    def __init__(self, catalog_path: str, radius: Quantity, dictionary: dict, user_table: Table) -> None:
+    def __init__(self, catalog_path: str, radius: Quantity, simulation_data: dict, user_table: Table) -> None:
         """
         Initializes the Swift class with a catalog path, search radius, dictionary of target object information, 
         and a user-defined table.
@@ -1169,12 +1182,13 @@ class Swift:
         - user_table (Table): A user-defined table of sources.
         """
         self.swi_catalog = self.open_catalog(catalog_path)
-        self.nearby_sources_table, self.nearby_sources_position = self.find_nearby_sources(radius=radius, dictionary=dictionary)
+        self.nearby_sources_table, self.nearby_sources_position = self.find_nearby_sources(radius=radius, object_data=simulation_data["object_data"])
         
-        self.neighbourhood_of_object(radius=radius, dictionary=dictionary)
+        self.neighbourhood_of_object(radius=radius, simulation_data=simulation_data)
+        self.photon_index = self.get_phoindex_nh()
         self.model_dictionary = self.dictionary_model()
-        
-    
+
+
     def open_catalog(self, catalog_path: str)-> Table:
         """
         Opens and reads a FITS catalog file and returns it as an Astropy Table.
@@ -1191,7 +1205,7 @@ class Swift:
             return result_table
         
         
-    def find_nearby_sources(self, radius: Quantity, dictionary: dict) -> Tuple[Table, SkyCoord]:
+    def find_nearby_sources(self, radius: Quantity, object_data: dict) -> Tuple[Table, SkyCoord]:
         """
         Finds sources in the Swift catalog that are within a certain radius from the target object.
 
@@ -1203,8 +1217,8 @@ class Swift:
         - Tuple[Table, SkyCoord]: A table of nearby sources and their sky coordinates.
         """
         field_of_view = radius + 5*u.arcmin
-
-        object_position = dictionary['object_position']
+        name = object_data["object_name"]
+        object_position = object_data['object_position']
 
         min_ra, max_ra = object_position.ra - field_of_view, object_position.ra + field_of_view
         min_dec, max_dec = object_position.dec - field_of_view, object_position.dec + field_of_view
@@ -1212,36 +1226,49 @@ class Swift:
         small_table = Table(names=self.swi_catalog.colnames,
                             dtype=self.swi_catalog.dtype)
 
-        nearby_src_table = Table(names=self.swi_catalog.colnames,
-                                 dtype=self.swi_catalog.dtype)
+        nearby_sources_table = Table(names= self.swi_catalog.colnames,
+                                     dtype= self.swi_catalog.dtype)
 
-        for number in range(len(self.swi_catalog)):
+        print(fr"{colored('Reducing Swift catalog...', 'yellow')} to fov of {radius.value + 5 } arcmin")
+        for number in tqdm(range(len(self.swi_catalog))):
             if min_ra/u.deg < self.swi_catalog["RA"][number] < max_ra/u.deg and min_dec/u.deg < self.swi_catalog["DEC"][number] < max_dec/u.deg:
                 small_table.add_row(self.swi_catalog[number])
                 
         src_position = SkyCoord(ra=small_table['RA'], dec=small_table['DEC'], unit=u.deg)
                 
-        for number in range(len(small_table)):
+        print(f"{colored(f'Find sources close to {name} with Swift catalog', 'blue')}")
+        for number in tqdm(range(len(small_table))):
             if f.ang_separation(object_position, src_position[number]) < radius:
-                nearby_src_table.add_row(small_table[number])
-                
-        column_names = ['Swift_IAUNAME', 'RA', 'DEC', 'Flux', 'Flux1', 'Flux2', 'Flux3']    
-        nearby_src_table = f.sources_to_unique_sources(result_table=nearby_src_table, column_names=column_names)
-                
-        nearby_src_position = SkyCoord(ra=nearby_src_table['RA'], dec=nearby_src_table['DEC'], unit=u.deg)
+                nearby_sources_table.add_row(small_table[number])
+
+        column_name = {"source_name": "Swift_IAUNAME", 
+                       "right_ascension": "RA",
+                       "declination": "DEC",
+                       "catalog_name": "Swift"}
+        
+        if len(nearby_sources_table) != 0:
+            try:
+                unique_table = f.create_unique_sources_catalog(nearby_sources_table=nearby_sources_table, column_name=column_name)
+            except Exception as error:
+                print(f"{colored('An error occured : ', 'red')} {error}")
+        else:
+            print("Nearby sources table from Swift catalog is empty.")
+            sys.exit()
+            
+        nearby_src_position = SkyCoord(ra=unique_table['RA'], dec=unique_table['DEC'], unit=u.deg)
                 
         try :
-            if len(nearby_src_table) != 0:
-                print((f"We have detected {len(nearby_src_table)} sources close to {dictionary['object_name']}"))
-                return nearby_src_table, nearby_src_position
+            if len(unique_table) != 0:
+                print((f"We have detected {len(unique_table)} sources close to {object_data['object_name']}"))
+                return unique_table, nearby_src_position
             else:
-                print(f"No sources detected close to {dictionary['object_name']}.")
+                print(f"No sources detected close to {object_data['object_name']}.")
                 sys.exit()
         except Exception as error:
             print(f"An error occured : {error}")
 
 
-    def neighbourhood_of_object(self, radius: Quantity, dictionary: dict) -> None:
+    def neighbourhood_of_object(self, radius: Quantity, simulation_data: dict) -> None:
         """
         Visualizes the neighborhood of the target object and nearby sources.
 
@@ -1249,8 +1276,9 @@ class Swift:
         - radius (float): Search radius (in degrees) for finding nearby sources.
         - dictionary (dict): A dictionary containing information about the target object.
         """
-
-        object_position = dictionary['object_position']
+        object_data = simulation_data["object_data"]
+        object_position = object_data['object_position']
+        os_dictionary = simulation_data["os_dictionary"]
     
         swi_ra = self.nearby_sources_table['RA']
         swi_dec = self.nearby_sources_table['DEC']
@@ -1259,19 +1287,130 @@ class Swift:
         corrected_swi_dec = list(set(swi_dec))
         
         figure_1, axes = plt.subplots(1, 1, figsize=(12, 8))
-        figure_1.suptitle(f"Neighbourhood of {dictionary['object_name']}, radius = {radius}", fontsize=20)
+        figure_1.suptitle(f"Neighbourhood of {object_data['object_name']}, radius = {radius}", fontsize=20)
         
-        axes.scatter(corrected_swi_ra, corrected_swi_dec, c='black', s=10, marker='*', label=f"Sources close to {dictionary['object_name']}, nbr_src : {len(corrected_swi_ra)}")
-        axes.scatter(object_position.ra, object_position.dec, c='red', s=100, marker='+', label=f"{dictionary['object_name']}")
+        axes.scatter(corrected_swi_ra, corrected_swi_dec, s=30, facecolors='none', edgecolors='black', label=f"Sources : {len(self.nearby_sources_table)}")
+        axes.scatter(object_position.ra, object_position.dec, c='red', s=100, marker='*', label=f"{object_data['object_name']}")
         axes.set_xlabel('Right Ascension')
         axes.set_ylabel('Declination')
         axes.legend(loc='upper right')
         
+        img = os_dictionary["img"]
+        img_path = os.path.join(img, f"neighbourhood_of_{object_data['object_name']}.png".replace(" ", "_"))
+        plt.savefig(img_path)
         plt.show()
     
     
-    def dictionary_model(self):
-        pass
+    def visualization_inter(self, optimization_parameters, photon_index, key):
+        energy_band = dict_cat.dictionary_catalog[key]["energy_band_center"]
+            
+        fig, axes = plt.subplots(1, 1, figsize=(15, 8))
+        fig.suptitle("Interpolation Photon Index plot", fontsize=20)
+        fig.text(0.5, 0.04, 'Energy [keV]', ha='center', va='center')
+        fig.text(0.04, 0.5, 'Flux $[erg.cm^{-2}.s^{-1}.keV^{-1}]$', ha='center', va='center', rotation='vertical')
+        
+        for item in range(len(optimization_parameters)):
+            flux_obs = optimization_parameters[item][1]
+            flux_obs_err = optimization_parameters[item][2]
+            absorbed_power_law = optimization_parameters[item][3]
+            absorb_pho_index = photon_index[item]
+            
+            axes.errorbar(energy_band, flux_obs, flux_obs_err, fmt='*', color='red', ecolor='black')
+            axes.plot(energy_band, absorbed_power_law, label=f"$\Gamma$ = {absorb_pho_index:.8f}")
+            # axes.step(energy_band, flux_obs, where='pre', label=f"$\Gamma$ = {absorb_pho_index:.8f}")
+
+        axes.legend(loc="upper left", ncol=4, fontsize=6)
+        axes.loglog()
+        
+        plt.show()
+        
+
+    def get_photon_index(self, table, key, index):
+        interp_data = {"band_flux_obs": dict_cat.dictionary_catalog[key]["band_flux_obs"],
+                       "band_flux_obs_err": dict_cat.dictionary_catalog[key]["band_flux_obs_err"],
+                       "energy_band_center": dict_cat.dictionary_catalog[key]["energy_band_center"],
+                       "energy_band_half_width": dict_cat.dictionary_catalog[key]["energy_band_half_width"]}
+        
+        def absorbed_power_law(energy_band, constant, gamma):
+            sigma = np.array(np.linspace(1e-20, 1e-24, len(energy_band)), dtype=float)
+            return (constant * energy_band **(-gamma)) * (np.exp(-sigma*3e20))
+
+        tab_width = 2 * interp_data["energy_band_half_width"]
+        
+        flux_obs = [table[band_flux][index] for band_flux in interp_data["band_flux_obs"]]
+        
+        flux_err = [[table[err_0][index] for err_0 in interp_data["band_flux_obs_err"][0]],
+                    [table[err_1][index] for err_1 in interp_data["band_flux_obs_err"][1]]]
+        
+        flux_err_obs = [np.mean([err_0, err_1]) for (err_0, err_1) in zip(flux_err[0], flux_err[1])]
+        
+        y_array = [num/det for num, det in zip(flux_obs, tab_width)]
+        yerr_array = [num/det for num, det in zip(flux_err_obs, tab_width)]
+        
+        try:
+            popt, pcov = curve_fit(absorbed_power_law, interp_data["energy_band_center"], y_array, sigma=yerr_array)
+            constant, photon_index = popt
+        except Exception as error:
+            popt = (1e-14, 1.7)
+            
+        optimization_parameters = (interp_data["energy_band_center"], y_array, yerr_array, absorbed_power_law(interp_data["energy_band_center"], *popt))
+            
+        return photon_index, optimization_parameters 
+
+
+    def get_phoindex_nh(self):
+        key = "Swift"
+        photon_index_list, parameters_list, nh_list = [], [], []
+
+        for index in range(len(self.nearby_sources_table)):
+            nh_list.append(3e20)
+            photon, params = self.get_photon_index(table=self.nearby_sources_table, key=key, index=index)
+            photon_index_list.append(photon if photon > 0.0 else 1.7)
+            parameters_list.append(params)
+        
+        self.visualization_inter(optimization_parameters=parameters_list, photon_index=photon_index_list, key=key)
+        
+        self.nearby_sources_table["Photon Index"] = photon_index_list
+        self.nearby_sources_table["Nh"] = nh_list
+        
+        return photon_index_list
+    
+    
+    def dictionary_model(self) -> Dict[str, Dict[str, Union[str, float]]]:
+        model_dictionary = {}
+        number_source = len(self.nearby_sources_table)
+
+        model = np.array([], dtype=str)
+        model_value = np.array([], dtype=float)
+        flux_obs = dict_cat.dictionary_catalog["Swift"]["flux_obs"]
+        
+        swi_flux = np.array([self.nearby_sources_table[flux_obs][item] for item in range(number_source)], dtype=float)
+        nh_value = np.array([self.nearby_sources_table["Nh"][item] for item in range(number_source)], dtype=float)
+        
+        # Pour le moment seulement 'power' indiquant le modèle a utiliser pour la commande pimms
+        for item in range(number_source):
+            model = np.append(model, 'power')    
+            
+        for item in range(number_source):
+            if model[item] == 'power':
+                model_value = np.append(model_value, self.nearby_sources_table["Photon Index"][item])
+            elif model[item] == 'black_body':
+                pass # Pas de valeur pour le moment...
+            elif model[item] == 'temp':
+                pass # Pas de valeur pour le moment... (dernier model pimms)
+
+        for item in range(number_source):
+
+            dictionary = {
+                "model": model[item],
+                "model_value": model_value[item],
+                "flux": swi_flux[item],
+                "column_dentsity": nh_value[item]
+            }
+
+            model_dictionary[f"src_{item}"] = dictionary
+            
+        return model_dictionary 
 
 
 class eRosita:
@@ -1287,7 +1426,7 @@ class eRosita:
     """
 
 
-    def __init__(self, catalog_path: str, radius: Quantity, dictionary: dict, user_table: Table) -> None:
+    def __init__(self, catalog_path: str, radius: Quantity, simulation_data: dict, user_table: Table) -> None:
         """
         Initializes the eRosita class with a catalog path, search radius, dictionary of target object information,
         and a user-defined table.
@@ -1299,9 +1438,10 @@ class eRosita:
         - user_table (Table): A user-defined table of sources.
         """
         self.eRo_catalog = self.open_catalog(catalog_path)
-        self.nearby_sources_table, self.nearby_sources_position = self.find_nearby_sources(radius=radius, dictionary=dictionary)
+        self.nearby_sources_table, self.nearby_sources_position = self.find_nearby_sources(radius=radius, simulation_data=simulation_data)
         
-        self.neighbourhood_of_object(radius=radius, dictionary=dictionary)
+        self.neighbourhood_of_object(radius=radius, simulation_data=simulation_data)
+        self.photon_index = self.get_phoindex_nh()
         self.model_dictionary = self.dictionary_model()
         
         
@@ -1321,7 +1461,7 @@ class eRosita:
             return result_table
         
         
-    def find_nearby_sources(self, radius: Quantity, dictionary: dict) -> Tuple[Table, SkyCoord]:
+    def find_nearby_sources(self, radius: Quantity, simulation_data: dict) -> Tuple[Table, SkyCoord]:
         """
         Finds sources in the eRosita catalog that are within a certain radius from the target object.
 
@@ -1333,8 +1473,9 @@ class eRosita:
         - Tuple[Table, SkyCoord]: A table of nearby sources and their sky coordinates.
         """
         field_of_view = radius + 5*u.arcmin
-
-        object_position = dictionary['object_position']
+        object_data = simulation_data["object_data"]
+        object_name = object_data["object_name"]
+        object_position = object_data['object_position']
 
         min_ra, max_ra = object_position.ra - field_of_view, object_position.ra + field_of_view
         min_dec, max_dec = object_position.dec - field_of_view, object_position.dec + field_of_view
@@ -1342,27 +1483,44 @@ class eRosita:
         small_table = Table(names=self.eRo_catalog.colnames,
                             dtype=self.eRo_catalog.dtype)
 
-        nearby_src_table = Table(names=self.eRo_catalog.colnames,
-                                 dtype=self.eRo_catalog.dtype)
+        nearby_sources_table = Table(names=self.eRo_catalog.colnames,
+                                     dtype=self.eRo_catalog.dtype)
 
-        for number in range(len(self.eRo_catalog)):
+        print(fr"{colored('Reducing Swift catalog...', 'yellow')} to fov of {radius.value + 5 } arcmin")
+        for number in tqdm(range(len(self.eRo_catalog))):
             if min_ra/u.deg < self.eRo_catalog["RA"][number] < max_ra/u.deg and min_dec/u.deg < self.eRo_catalog["DEC"][number] < max_dec/u.deg:
                 small_table.add_row(self.eRo_catalog[number])
                 
         src_position = SkyCoord(ra=small_table['RA'], dec=small_table['DEC'], unit=u.deg)
                 
-        for number in range(len(small_table)):
+        print(f"{colored(f'Find sources close to {object_name} with eRosita catalog', 'blue')}")
+        for number in tqdm(range(len(small_table))):
             if f.ang_separation(object_position, src_position[number]) < radius:
-                nearby_src_table.add_row(small_table[number])
-                
-        nearby_src_position = SkyCoord(ra=nearby_src_table['RA'], dec=nearby_src_table['DEC'], unit=u.deg)
+                nearby_sources_table.add_row(small_table[number])
+        
+        column_name = {"source_name": "eRosita_IAUNAME",
+                       "right_ascension": "RA",
+                       "declination": "DEC",
+                       "catalog_name": "eRosita"}
+        
+        if len(nearby_sources_table) != 0:
+            try:
+                unique_table = f.create_unique_sources_catalog(nearby_sources_table=nearby_sources_table, column_name=column_name)
+            except Exception as error:
+                print(f"{colored('An error occured : ', 'red')} {error}")
+        else:
+            print("Nearby sources table from Swift catalog is empty.")
+            sys.exit()
+        
+           
+        nearby_src_position = SkyCoord(ra=unique_table['RA'], dec=unique_table['DEC'], unit=u.deg)
                 
         try :
-            if len(nearby_src_table) != 0:
-                print((f"We have detected {len(nearby_src_table)} sources close to {dictionary['object_name']}"))
-                return nearby_src_table, nearby_src_position
+            if len(unique_table) != 0:
+                print((f"We have detected {len(unique_table)} sources close to {object_data['object_name']}"))
+                return unique_table, nearby_src_position
             else:
-                print(f"No sources detected close to {dictionary['object_name']}.")
+                print(f"No sources detected close to {object_data['object_name']}.")
                 sys.exit()
         except Exception as error:
             print(f"An error occured : {error}")
@@ -1393,91 +1551,1004 @@ class eRosita:
         plt.show()
 
 
-    def dictionary_model(self):
-        pass
+    def visualization_inter(self, optimization_parameters, photon_index, key):
+        energy_band = dict_cat.dictionary_catalog[key]["energy_band_center"]
+            
+        fig, axes = plt.subplots(1, 1, figsize=(15, 8))
+        fig.suptitle("Interpolation Photon Index plot", fontsize=20)
+        fig.text(0.5, 0.04, 'Energy [keV]', ha='center', va='center')
+        fig.text(0.04, 0.5, 'Flux $[erg.cm^{-2}.s^{-1}.keV^{-1}]$', ha='center', va='center', rotation='vertical')
+        
+        for item in range(len(optimization_parameters)):
+            flux_obs = optimization_parameters[item][1]
+            flux_obs_err = optimization_parameters[item][2]
+            absorbed_power_law = optimization_parameters[item][3]
+            absorb_pho_index = photon_index[item]
+            
+            axes.errorbar(energy_band, flux_obs, flux_obs_err, fmt='*', color='red', ecolor='black')
+            axes.plot(energy_band, absorbed_power_law, label=f"$\Gamma$ = {absorb_pho_index:.8f}")
+            # axes.step(energy_band, flux_obs, where='pre', label=f"$\Gamma$ = {absorb_pho_index:.8f}")
+
+        axes.legend(loc="upper left", ncol=4, fontsize=6)
+        axes.loglog()
+        
+        plt.show()
+        
+
+    def get_photon_index(self, table, key, index):
+        interp_data = {"band_flux_obs": dict_cat.dictionary_catalog[key]["band_flux_obs"],
+                       "band_flux_obs_err": dict_cat.dictionary_catalog[key]["band_flux_obs_err"],
+                       "energy_band_center": dict_cat.dictionary_catalog[key]["energy_band_center"],
+                       "energy_band_half_width": dict_cat.dictionary_catalog[key]["energy_band_half_width"]}
+        
+        def absorbed_power_law(energy_band, constant, gamma):
+            sigma = np.array(np.linspace(1e-20, 1e-24, len(energy_band)), dtype=float)
+            return (constant * energy_band **(-gamma)) * (np.exp(-sigma*3e20))
+
+        tab_width = 2 * interp_data["energy_band_half_width"]
+        
+        flux_obs = [table[band_flux][index] for band_flux in interp_data["band_flux_obs"]]
+        
+        flux_err = [[table[err_0][index] for err_0 in interp_data["band_flux_obs_err"][0]],
+                    [table[err_1][index] for err_1 in interp_data["band_flux_obs_err"][1]]]
+        
+        flux_err_obs = [np.mean([err_0, err_1]) for (err_0, err_1) in zip(flux_err[0], flux_err[1])]
+        
+        y_array = [num/det for num, det in zip(flux_obs, tab_width)]
+        yerr_array = [num/det for num, det in zip(flux_err_obs, tab_width)]
+        
+        try:
+            popt, pcov = curve_fit(absorbed_power_law, interp_data["energy_band_center"], y_array, sigma=yerr_array)
+            constant, photon_index = popt
+        except Exception as error:
+            popt = (1e-14, 1.7)
+            
+        optimization_parameters = (interp_data["energy_band_center"], y_array, yerr_array, absorbed_power_law(interp_data["energy_band_center"], *popt))
+            
+        return photon_index, optimization_parameters 
 
 
+    def get_phoindex_nh(self):
+        key = "eRosita"
+        photon_index_list, parameters_list, nh_list = [], [], []
+
+        for index in range(len(self.nearby_sources_table)):
+            nh_list.append(3e20)
+            photon, params = self.get_photon_index(table=self.nearby_sources_table, key=key, index=index)
+            photon_index_list.append(photon if photon > 0.0 else 1.7)
+            parameters_list.append(params)
+        
+        self.visualization_inter(optimization_parameters=parameters_list, photon_index=photon_index_list, key=key)
+        
+        self.nearby_sources_table["Photon Index"] = photon_index_list
+        self.nearby_sources_table["Nh"] = nh_list
+        
+        return photon_index_list
+    
+    
+    def dictionary_model(self) -> Dict[str, Dict[str, Union[str, float]]]:
+        model_dictionary = {}
+        number_source = len(self.nearby_sources_table)
+
+        model = np.array([], dtype=str)
+        model_value = np.array([], dtype=float)
+        flux_obs = dict_cat.dictionary_catalog["eRosita"]["flux_obs"]
+        
+        swi_flux = np.array([self.nearby_sources_table[flux_obs][item] for item in range(number_source)], dtype=float)
+        nh_value = np.array([self.nearby_sources_table["Nh"][item] for item in range(number_source)], dtype=float)
+        
+        # Pour le moment seulement 'power' indiquant le modèle a utiliser pour la commande pimms
+        for item in range(number_source):
+            model = np.append(model, 'power')    
+            
+        for item in range(number_source):
+            if model[item] == 'power':
+                model_value = np.append(model_value, self.nearby_sources_table["Photon Index"][item])
+            elif model[item] == 'black_body':
+                pass # Pas de valeur pour le moment...
+            elif model[item] == 'temp':
+                pass # Pas de valeur pour le moment... (dernier model pimms)
+
+        for item in range(number_source):
+
+            dictionary = {
+                "model": model[item],
+                "model_value": model_value[item],
+                "flux": swi_flux[item],
+                "column_dentsity": nh_value[item]
+            }
+
+            model_dictionary[f"src_{item}"] = dictionary
+            
+        return model_dictionary 
+
+
+    
 class CompareCatalog:
-    """
-    A class used to compare two astronomical catalogs for common and nearby sources.
     
-    Attributes
-    ----------
-    catalog_1 : Table
-        First catalog to be compared.
-    catalog_2 : Table
-        Second catalog to be compared.
-    catalog_1_name : str
-        Name of the first catalog.
-    catalog_2_name : str
-        Name of the second catalog.
-    nearby_src_table_1 : Table
-        Table of nearby sources from the first catalog.
-    nearby_src_table_2 : Table
-        Table of nearby sources from the second catalog.
-    nearby_src_position_1 : SkyCoord
-        Sky coordinates of the nearby sources from the first catalog.
-    nearby_src_position_2 : SkyCoord
-        Sky coordinates of the nearby sources from the second catalog.
-    model_dictionary_1 : Dict[str, Dict[str, Union[str, float]]]
-        Dictionary containing the model details for each source in the first catalog.
-    model_dictionary_2 : Dict[str, Dict[str, Union[str, float]]]
-        Dictionary containing the model details for each source in the second catalog.
-    count_rate_1 : np.ndarray
-        Array of count rates for each source in the first catalog.
-    count_rate_2 : np.ndarray
-        Array of count rates for each source in the second catalog.
-    vector_dictionary : Dict
-        (not described, as the method `opti_point_calcul` is not fully provided)
-    OptimalPointingIdx_1 : (type not provided)
-        Index of the optimal pointing for the first catalog.
-    OptimalPointingIdx_2 : (type not provided)
-        Index of the optimal pointing for the second catalog.
-    
-    Methods
-    -------
-    __init__(self, catalog_path, radius, dictionary, user_table) -> None:
-        Initializes the CompareCatalog object by loading the catalogs, finding nearby sources, and performing various calculations.
-    open_catalog(self, catalogs_path, radius, dictionary) -> Tuple[Table, Table, str, str]:
-        Opens and processes the catalogs from the given paths.
-    optimization(self, number, table) -> Tuple[float, float]:
-        Performs an optimization calculation based on the provided number and table.
-    add_photon_nh_and_gamma_xmm(self, table) -> Tuple[Table, Table]:
-        Adds photon, NH, and gamma columns to the XMM catalog.
-    add_pho_csc(self, table) -> Table:
-        Adds photon information to the CSC catalog.
-    var_function(self, dictionary) -> Tuple[Table, Table]:
-        Applies a variable function based on the provided dictionary.
-    find_nearby_sources(self, radius, dictionary) -> Tuple[Table, Table, SkyCoord, SkyCoord]:
-        Finds sources in both catalogs that are within a certain radius.
-    neighbourhood_of_object(self, radius, dictionary) -> None:
-        Defines the neighbourhood of an object based on radius and dictionary.
-    model_dictionary(self) -> Tuple[Dict[str, Dict[str, Union[str, float]]], Dict[str, Dict[str, Union[str, float]]]]:
-        Generates dictionaries with model details for each source in both catalogs.
-    count_rate(self) -> Tuple[np.ndarray, np.ndarray]:
-        Calculates the count rate for each source in both catalogs.
-    opti_point_calcul(self, simulation_data) -> None:
-        Calculates the optimal pointing based on simulation data (method not fully provided).
-    """
+    def __init__(self, catalog_path: List, radius, simulation_data: dict, exp_time: int) -> None:
+        path_1, path_2 = catalog_path[0], catalog_path[1]
+        key_1, key_2 = catalog_path[2], catalog_path[3]
 
- 
-    def __init__(self, catalog_path: str, radius: Quantity, simulation_data: dict, user_table: Table) -> None:
-        
-        self.catalog_1, self.catalog_2, self.catalog_1_name, self.catalog_2_name = self.open_catalog(catalogs_path=catalog_path, radius=radius, object_data=simulation_data["object_data"])
-        self.nearby_sources_table_1, self.nearby_sources_table_2, self.nearby_sources_position_1, self.nearby_sources_position_2 = self.find_nearby_sources(radius=radius, object_data=simulation_data["object_data"])
-        self.neighbourhood_of_object(radius=radius, simulation_data=simulation_data)
-        self.model_dictionary_1, self.model_dictionary_2 = self.model_dictionary()
-        
-        if platform.system() == "Linux":
-            self.count_rate_1, self.count_rate_2 = self.count_rate()
+        table_1, table_2 = self.open_catalog(key=(key_1, key_2), path=(path_1, path_2), radius=radius, object_data=simulation_data["object_data"])
+        self.nearby_sources_table_1, self.nearby_sources_table_2, self.nearby_sources_position_1, self.nearby_sources_position_2 = self.find_nearby_sources(table=(table_1, table_2), radius=radius, simulation_data=simulation_data, key=(key_1, key_2))
+
+        # ---------- Xmm_DR13 photon index and nh value --------- #
+        if "Xmm_DR13" in [key_1, key_2]:
+            print(f"\nCalculation of photon index and nh value for {colored('Xmm DR13 catalog', 'yellow')}.")
+            #TODO add method to find variable sources in xmm 2 athena catalog with index_table
+            xmm_index = [key_1, key_2].index("Xmm_DR13")
+            if xmm_index == 0:
+                self.nearby_sources_table_1, self.index_table = self.photon_index_nh_for_xmm(os_dictionary=simulation_data["os_dictionary"], xmm_index=xmm_index)
+                vignet_data_1 = ["SC_RA", "SC_DEC", "IAUNAME"]
+            elif xmm_index == 1:
+                self.nearby_sources_table_2, self.index_table = self.photon_index_nh_for_xmm(os_dictionary=simulation_data["os_dictionary"], xmm_index=xmm_index)
+                vignet_data_2 = ["SC_RA", "SC_DEC", "IAUNAME"]
+
+        # ---------- CS_Chandra photon index and nh value ---------- #
+        if "CSC_2.0" in [key_1, key_2]:
+            print(f"\nCalculation of photon index and nh value for {colored('Chandra cone search catalog', 'yellow')}.")
+            csc_index = [key_1, key_2].index("CSC_2.0")
+            #TODO add method to find variable sources in chandra cone search catalog
+            if csc_index == 0:
+                self.nearby_sources_table_1 = self.threshold(cone_search_catalog=self.nearby_sources_table_1)
+                self.nearby_sources_table_1 = self.photon_index_nh_for_csc(csc_index=csc_index)
+                vignet_data_1 = ["ra", "dec", "name"]
+            elif csc_index == 1:
+                self.nearby_sources_table_2 = self.threshold(cone_search_catalog=self.nearby_sources_table_2)
+                self.nearby_sources_table_2 = self.photon_index_nh_for_csc(csc_index=csc_index)
+                vignet_data_2 = ["ra", "dec", "name"]
+
+        # ---------- Swift photon index and nh value ---------- #
+        if "Swift" in [key_1, key_2]:
+            print(f"\nCalculation of photon index and nh value for {colored('Swift catalog', 'yellow')}.")
+            swi_index = [key_1, key_2].index("Swift")
+            if swi_index == 0:
+                self.nearby_sources_table_1 = self.photon_index_nh_for_other_catalog(key="Swift", table=self.nearby_sources_table_1)
+                vignet_data_1 = ["RA", "DEC", "Swift_IAUNAME"]
+            if swi_index == 1:
+                self.nearby_sources_table_2 = self.photon_index_nh_for_other_catalog(key="Swift", table=self.nearby_sources_table_2)
+                vignet_data_2 = ["RA", "DEC", "Swift_IAUNAME"]
+
+        # ---------- eRosita photon index and nh value ---------- #
+        if "eRosita" in [key_1, key_2]:
+            print(f"\nCalculation of photon index and nh value for {colored('eRosita catalog', 'yellow')}.")
+            ero_index = [key_1, key_2].index("eRosita")
+            if ero_index == 0:
+                self.nearby_sources_table_1 = self.photon_index_nh_for_other_catalog(key="eRosita", table=self.nearby_sources_table_1)
+                vignet_data_1 = ["RA", "DEC", "eRosita_IAUNAME"]
+            if ero_index == 1:
+                self.nearby_sources_table_2 = self.photon_index_nh_for_other_catalog(key="eRosita", table=self.nearby_sources_table_2)
+                vignet_data_2 = ["RA", "DEC", "eRosita_IAUNAME"]
+
+        self.neighbourhood_of_object(key=(key_1, key_2), simulation_data=simulation_data, radius=radius)
+        self.model_dictionary_1, self.model_dictionary_2 = self.dictionary_model(key=(key_1, key_2))
+
+        if platform.system() == "Linux" or platform.system() == "Darwin":
+            self.count_rates_1, self.count_rates_2 = self.count_rate()
         elif platform.system() == "Windows":
-            if catalog_path[2] == "Xmm_DR13" and catalog_path[3] == "CSC_2.0":
-                self.count_rate_1, self.nearby_sources_table_1 = self.xslx_to_py(args=catalog_path[2], table=self.nearby_sources_table_1, simulation_data=simulation_data, radius=radius.value)
-                self.count_rate_2, self.nearby_sources_table_2 = self.xslx_to_py(args=catalog_path[3], table=self.nearby_sources_table_2, simulation_data=simulation_data, radius=radius.value)
-            elif catalog_path[2] == "CSC_2.0" and catalog_path[3] == "Xmm_DR13":
-                self.count_rate_1, self.nearby_sources_table_1 = self.xslx_to_py(args=catalog_path[2], table=self.nearby_sources_table_1, simulation_data=simulation_data, radius=radius.value)
-                self.count_rate_2, self.nearby_sources_table_2 = self.xslx_to_py(args=catalog_path[3], table=self.nearby_sources_table_2, simulation_data=simulation_data, radius=radius.value)
+            self.count_rates_1, self.nearby_sources_table_1 = self.xslx_to_py(args=key_1, table=self.nearby_sources_table_1, simulation_data=simulation_data, radius=radius.value)
+            self.count_rates_2, self.nearby_sources_table_2 = self.xslx_to_py(args=key_2, table=self.nearby_sources_table_2, simulation_data=simulation_data, radius=radius.value)
 
+
+        self.vector_dictionary_1, self.vector_dictionary_2, self.OptimalPointingIdx_1, self.OptimalPointingIdx_2 = self.calculate_opti_point(simulation_data=simulation_data, key=(key_1, key_2))
+
+
+        self.vignetting_factor_1, self.nearby_sources_table_1 = f.vignetting_factor(OptimalPointingIdx=self.OptimalPointingIdx_1, vector_dictionary=self.vector_dictionary_1, simulation_data=simulation_data, data=vignet_data_1, nearby_sources_table=self.nearby_sources_table_1)
+        self.vignetting_factor_2, self.nearby_sources_table_2 = f.vignetting_factor(OptimalPointingIdx=self.OptimalPointingIdx_2, vector_dictionary=self.vector_dictionary_2, simulation_data=simulation_data, data=vignet_data_2, nearby_sources_table=self.nearby_sources_table_2)
+
+        self.master_source_path = self.variability_table(simulation_data=simulation_data, radius=radius.value)
+        
+        print(f"{colored(f'Find variable index for {key_1} catalog', 'blue')}")
+        self.var_index_1 = self.variability_index(key=key_1, iauname=vignet_data_1[2], nearby_sources_table=self.nearby_sources_table_1)
+        print(f"{colored(f'Find variable index for {key_2} catalog', 'blue')}")
+        self.var_index_2 = self.variability_index(key=key_2, iauname=vignet_data_2[2], nearby_sources_table=self.nearby_sources_table_2)
+        
+        self.total_spectra_1, self.total_spectra_2, self.total_var_spectra_1, self.total_var_spectra_2, self.instrument = self.modeling_source_spectra(simulation_data=simulation_data, exp_time=exp_time, key=(key_1, key_2))
+        self.data_1, self.data_2 = self.total_spectra_plot(simulation_data=simulation_data, radius=radius.value, key=(key_1, key_2))
+        
+        self.write_txt_file(simulation_data=simulation_data, data_1=self.data_1, data_2=self.data_2, key=(key_1, key_2))
+        
+    
+    def open_catalog(self, key: Tuple, path:Tuple, radius, object_data: Dict) -> Tuple[Table, Table]:
+        if key[0] == "CSC_2.0":
+            cone = vo.dal.SCSService('http://cda.cfa.harvard.edu/csc2scs/coneSearch') 
+            name = SkyCoord.from_name(object_data['object_name'])
+            cone_search_catalog = cone.search(pos=name, radius=radius, verbosity=3)
+            table_1 = cone_search_catalog.to_table()
+            self.cone_search_table = table_1
+            
+            with fits.open(path[1]) as data:
+                table_2 = Table(data[1].data)
+                
+            print(f"{key[0]} and {key[1]} catalog are loaded !")
+            
+        elif key[1] == "CSC_2.0":
+            cone = vo.dal.SCSService('http://cda.cfa.harvard.edu/csc2scs/coneSearch') 
+            name = SkyCoord.from_name(object_data['object_name'])
+            cone_search_catalog = cone.search(pos=name, radius=radius, verbosity=3)
+            table_2 = cone_search_catalog.to_table()
+            self.cone_search_table = table_2
+            
+            with fits.open(path[0]) as data:
+                table_1 = Table(data[1].data)
+                
+            print(f"{key[0]} and {key[1]} catalog are loaded !")
+        
+        else:
+            with fits.open(path[0]) as data_1, fits.open(path[1]) as data_2:
+                table_1 = Table(data_1[1].data)
+                table_2 = Table(data_2[1].data)
+                
+            print(f"{key[0]} and {key[1]} catalog are loaded !")
+                
+        return table_1, table_2
+    
+    
+    def find_nearby_sources(self, table, radius, simulation_data, key: Tuple) -> Tuple[Table, Table, SkyCoord, SkyCoord]:
+        object_data = simulation_data["object_data"]
+        object_position = object_data['object_position']
+        object_name = object_data["object_name"]
+        
+        table_1, table_2 = table
+        
+        field_of_view = radius + 5*u.arcmin
+        min_ra, max_ra = object_position.ra - field_of_view, object_position.ra + field_of_view
+        min_dec, max_dec = object_position.dec - field_of_view, object_position.dec + field_of_view
+        
+        if key[0] == "CSC_2.0":
+            if key [1] == "Xmm_DR13":
+                # ---------- Xmm catalog ---------- #
+                small_table_2 = Table(names=table_2.colnames,
+                                      dtype=table_2.dtype)
+                nearby_sources_table_2 = Table(names=table_2.colnames,
+                                               dtype=table_2.dtype)
+                
+                print(fr"{colored('Reducing Xmm catalog...', 'yellow')} to fov of {radius.value + 5 } arcmin")
+                for number in tqdm(range(len(table_2))):
+                    if min_ra/u.deg < table_2["SC_RA"][number] < max_ra/u.deg and min_dec/u.deg < table_2["SC_DEC"][number] < max_dec/u.deg:
+                        small_table_2.add_row(table_2[number])
+                        
+                src_position = SkyCoord(ra=small_table_2['SC_RA'], dec=small_table_2['SC_DEC'], unit=u.deg)
+
+                print(f"{colored(f'Find sources close to {object_name} with Chandra catalog', 'blue')}")
+                for number in tqdm(range(len(small_table_2))):
+                    if f.ang_separation(object_position, src_position[number]) < radius:
+                        nearby_sources_table_2.add_row(small_table_2[number])
+                nearby_sources_position_2 = SkyCoord(ra=nearby_sources_table_2["SC_RA"], dec=nearby_sources_table_2["SC_DEC"], unit=u.deg)
+                
+                # ---------- Chandra cone search catalog ---------- #
+                nearby_sources_table_1 = self.cone_search_table
+                nearby_sources_position_1 = SkyCoord(ra=nearby_sources_table_1["ra"], dec=nearby_sources_table_1["dec"], unit=u.deg)
+                
+                print(f"{len(nearby_sources_table_1)} sources was detected with Chandra catalog and {len(nearby_sources_table_2)} sources with Xmm catalog close to {object_name}")
+                return nearby_sources_table_1, nearby_sources_table_2, nearby_sources_position_1, nearby_sources_position_2
+            
+            else:
+                # ---------- catalog Swift or eRosita ---------- #
+                small_table_2 = Table(names=table_2.colnames,
+                                      dtype=table_2.dtype)
+                not_unique_table = Table(names=table_2.colnames,
+                                               dtype=table_2.dtype)
+                
+                print(f"{colored(f'Reducing {key[1]} catalog...', 'yellow')} to fov of {radius.value + 5 } arcmin")
+                for number in tqdm(range(len(table_2))):
+                    if min_ra/u.deg < table_2["RA"][number] < max_ra/u.deg and min_dec/u.deg < table_2["DEC"][number] < max_dec/u.deg:
+                        small_table_2.add_row(table_2[number])
+                        
+                src_position = SkyCoord(ra=small_table_2['RA'], dec=small_table_2['DEC'], unit=u.deg)
+
+                print(f"{colored(f'Find sources close to {object_name} with {key[1]} catalog', 'blue')}")
+                for number in tqdm(range(len(small_table_2))):
+                    if f.ang_separation(object_position, src_position[number]) < radius:
+                        not_unique_table.add_row(small_table_2[number])
+                
+                if len(not_unique_table) != 0:
+                    if key[1] == "Swift":
+                        column_name = {"source_name": "Swift_IAUNAME",
+                                       "right_ascension": "RA",
+                                       "declination": "DEC",
+                                       "catalog_name": "Swift"}
+                    elif key[1] == "eRosita":
+                        column_name = {"source_name": "eRosita_IAUNAME",
+                                       "right_ascension": "RA",
+                                       "declination": "DEC",
+                                       "catalog_name": "eRosita"}
+
+                    nearby_sources_table_2 = f.create_unique_sources_catalog(nearby_sources_table=not_unique_table, column_name=column_name)
+                    nearby_sources_position_2 = SkyCoord(ra=nearby_sources_table_2["RA"], dec=nearby_sources_table_2["DEC"], unit=u.deg)
+                    
+                    # ---------- Chandra cone search catalog ---------- #
+                    nearby_sources_table_1 = self.cone_search_table
+                    nearby_sources_position_1 = SkyCoord(ra=nearby_sources_table_1["ra"], dec=nearby_sources_table_1["dec"], unit=u.deg)
+                    
+                    print(f"{len(nearby_sources_table_1)} sources was detected with Chandra catalog and {len(nearby_sources_table_2)} sources with {key[1]} catalog close to {object_name}")
+                    return nearby_sources_table_1, nearby_sources_table_2, nearby_sources_position_1, nearby_sources_position_2
+                else:
+                    print(f"No sources detected in {colored(key[1], 'red')} catalog !")
+                    sys.exit()
+                
+        elif key[1] == "CSC_2.0":
+            if key[0] == "Xmm_DR13":
+                # ---------- Xmm catalog ---------- #
+                small_table_1 = Table(names=table_1.colnames,
+                                      dtype=table_1.dtype)
+                nearby_sources_table_1 = Table(names=table_1.colnames,
+                                               dtype=table_1.dtype)
+                
+                print(fr"{colored(f'Reducing {key[0]} catalog...', 'yellow')} to fov of {radius.value + 5 } arcmin")
+                for number in tqdm(range(len(table_1))):
+                    if min_ra/u.deg < table_1["SC_RA"][number] < max_ra/u.deg and min_dec/u.deg < table_1["SC_DEC"][number] < max_dec/u.deg:
+                        small_table_1.add_row(table_1[number])
+                        
+                src_position = SkyCoord(ra=small_table_1['SC_RA'], dec=small_table_1['SC_DEC'], unit=u.deg)
+
+                print(f"{colored(f'Find sources close to {object_name} with {key[0]} catalog', 'blue')}")
+                for number in tqdm(range(len(small_table_1))):
+                    if f.ang_separation(object_position, src_position[number]) < radius:
+                        nearby_sources_table_1.add_row(small_table_1[number])
+                nearby_sources_position_1 = SkyCoord(ra=nearby_sources_table_1["SC_RA"], dec=nearby_sources_table_1["SC_DEC"], unit=u.deg)
+                
+                # ---------- Chandra cone search catalog ---------- #
+                nearby_sources_table_2 = self.cone_search_table
+                nearby_sources_position_2 = SkyCoord(ra=nearby_sources_table_2["ra"], dec=nearby_sources_table_2["dec"], unit=u.deg)
+                
+                print(f"{len(nearby_sources_table_1)} sources was detected with Xmm catalog and {len(nearby_sources_table_2)} sources with Chandra catalog close to {object_name}")
+                return nearby_sources_table_1, nearby_sources_table_2, nearby_sources_position_1, nearby_sources_position_2
+                
+            else:
+                # ---------- catalog Swift or eRosita ---------- #
+                small_table_1 = Table(names=table_1.colnames,
+                                      dtype=table_1.dtype)
+                not_unique_table = Table(names=table_1.colnames,
+                                         dtype=table_1.dtype)
+                
+                print(f"{colored(f'Reducing {key[0]} catalog...', 'yellow')} to fov of {radius.value + 5 } arcmin")
+                for number in tqdm(range(len(table_1))):
+                    if min_ra/u.deg < table_1["RA"][number] < max_ra/u.deg and min_dec/u.deg < table_1["DEC"][number] < max_dec/u.deg:
+                        small_table_1.add_row(table_1[number])
+                        
+                src_position = SkyCoord(ra=small_table_1["RA"], dec=small_table_1["DEC"], unit=u.deg)
+
+                print(f"{colored(f'Find sources close to {object_name} with {key[0]} catalog', 'blue')}")
+                for number in tqdm(range(len(small_table_1))):
+                    if f.ang_separation(object_position, src_position[number]) < radius:
+                        not_unique_table.add_row(small_table_1[number])
+                if len(not_unique_table) != 0:
+                    if key[0] == "Swift":
+                        column_name = {"source_name": "Swift_IAUNAME",
+                                       "right_ascension": "RA",
+                                       "declination": "DEC",
+                                       "catalog_name": "Swift"}
+                    elif key[0] == "eRosita":
+                        column_name = {"source_name": "eRosita_IAUNAME",
+                                       "right_ascension": "RA",
+                                       "declination": "DEC",
+                                       "catalog_name": "eRosita"}
+                    
+                    nearby_sources_table_1 = f.create_unique_sources_catalog(nearby_sources_table=not_unique_table, column_name=column_name)
+                    nearby_sources_position_1 = SkyCoord(ra=nearby_sources_table_1["RA"], dec=nearby_sources_table_1["DEC"], unit=u.deg)
+                    
+                    # ---------- Chandra cone search catalog ---------- #
+                    nearby_sources_table_2 = self.cone_search_table
+                    nearby_sources_position_2 = SkyCoord(ra=nearby_sources_table_2["ra"], dec=nearby_sources_table_2["dec"], unit=u.deg)
+                    
+                    print(f"{len(nearby_sources_table_1)} sources was detected with {key[0]} catalog and {len(nearby_sources_table_2)} sources with Chandra catalog close to {object_name}")
+                    return nearby_sources_table_1, nearby_sources_table_2, nearby_sources_position_1, nearby_sources_position_2
+                else:
+                    print(f"No sources detected in {colored(key[0], 'red')} catalog !")
+                    sys.exit()
+        else:
+            if key[0] == "Xmm_DR13" :
+                # ---------- Xmm catalog ---------- #
+                small_table_1 = Table(names=table_1.colnames,
+                                      dtype=table_1.dtype)
+                nearby_sources_table_1 = Table(names=table_1.colnames,
+                                               dtype=table_1.dtype)
+                
+                # On gère ici la première table dans le cas ou elle est Xmm_DR13
+                print(f"{colored(f'Reducing {key[0]} catalog...', 'yellow')} to fov of {radius.value + 5 } arcmin")
+                for number in tqdm(range(len(table_1))):
+                    if min_ra/u.deg < table_1["SC_RA"][number] < max_ra/u.deg and min_dec/u.deg < table_1["SC_DEC"][number] < max_dec/u.deg:
+                        small_table_1.add_row(table_1[number])
+                        
+                src_position = SkyCoord(ra=small_table_1["SC_RA"], dec=small_table_1["SC_DEC"], unit=u.deg)
+
+                print(f"{colored(f'Find sources close to {object_name} with {key[0]} catalog', 'blue')}")
+                for number in tqdm(range(len(small_table_1))):
+                    if f.ang_separation(object_position, src_position[number]) < radius:
+                        nearby_sources_table_1.add_row(small_table_1[number])
+                        
+                nearby_sources_position_1 = SkyCoord(ra=nearby_sources_table_1["SC_RA"], dec=nearby_sources_table_1["SC_DEC"], unit=u.deg)
+                
+                # ---------- catalog Swift or eRosita ---------- #
+                
+                small_table_2 = Table(names=table_2.colnames,
+                                      dtype=table_2.dtype)
+                not_unique_table = Table(names=table_2.colnames,
+                                         dtype=table_2.dtype)
+                
+                print(f"{colored(f'Reducing {key[1]} catalog...', 'yellow')} to fov of {radius.value + 5 } arcmin")
+                for number in tqdm(range(len(table_2))):
+                    if min_ra/u.deg < table_2["RA"][number] < max_ra/u.deg and min_dec/u.deg < table_2["DEC"][number] < max_dec/u.deg:
+                        small_table_2.add_row(table_2[number])
+                        
+                src_position = SkyCoord(ra=small_table_2["RA"], dec=small_table_2["DEC"], unit=u.deg)
+
+                print(f"{colored(f'Find sources close to {object_name} with {key[1]} catalog', 'blue')}")
+                for number in tqdm(range(len(small_table_2))):
+                    if f.ang_separation(object_position, src_position[number]) < radius:
+                        not_unique_table.add_row(small_table_2[number])
+                if len(not_unique_table) != 0:
+                    if key[1] == "Swift":
+                        column_name = {"source_name": "Swift_IAUNAME",
+                                       "right_ascension": "RA",
+                                       "declination": "DEC",
+                                       "catalog_name": "Swift"}
+                    elif key[1] == "eRosita":
+                        column_name = {"source_name": "eRosita_IAUNAME",
+                                       "right_ascension": "RA",
+                                       "declination": "DEC",
+                                       "catalog_name": "eRosita"}
+                                    
+                    nearby_sources_table_2 = f.create_unique_sources_catalog(nearby_sources_table=not_unique_table, column_name=column_name)
+                    nearby_sources_position_2 = SkyCoord(ra=nearby_sources_table_2["RA"], dec=nearby_sources_table_2["DEC"], unit=u.deg)
+                    
+                    print(f"{len(nearby_sources_table_1)} sources was detected with {key[0]} catalog and {len(nearby_sources_table_2)} sources with {key[1]} catalog close to {object_name}")
+                    return nearby_sources_table_1, nearby_sources_table_2, nearby_sources_position_1, nearby_sources_position_2
+                else:
+                    print(f"No sources detected in {colored(key[1], 'red')} catalog !")
+                    sys.exit()
+                
+            elif key[1] == "Xmm_DR13":
+                # ---------- catalog Swift or eRosita ---------- #
+                small_table_1 = Table(names=table_1.colnames,
+                                      dtype=table_1.dtype)
+                not_unique_table = Table(names=table_1.colnames,
+                                         dtype=table_1.dtype)
+                
+                print(f"{colored(f'Reducing {key[0]} catalog...', 'yellow')} to fov of {radius.value + 5 } arcmin")
+                for number in tqdm(range(len(table_1))):
+                    if min_ra/u.deg < table_1["RA"][number] < max_ra/u.deg and min_dec/u.deg < table_1["DEC"][number] < max_dec/u.deg:
+                        small_table_1.add_row(table_1[number])
+                        
+                src_position = SkyCoord(ra=small_table_1["RA"], dec=small_table_1["DEC"], unit=u.deg)
+
+                print(f"{colored(f'Find sources close to {object_name} with {key[0]} catalog', 'blue')}")
+                for number in tqdm(range(len(small_table_1))):
+                    if f.ang_separation(object_position, src_position[number]) < radius:
+                        not_unique_table.add_row(small_table_1[number])
+                
+                if len(not_unique_table) != 0:
+                    if key[0] == "Swift":
+                        column_name = {"source_name": "Swift_IAUNAME",
+                                       "right_ascension": "RA",
+                                       "declination": "DEC",
+                                       "catalog_name": "Swift"}
+                    elif key[0] == "eRosita":
+                        column_name = {"source_name": "eRosita_IAUNAME",
+                                       "right_ascension": "RA",
+                                       "declination": "DEC",
+                                       "catalog_name": "eRosita"}
+                    
+                    nearby_sources_table_1 = f.create_unique_sources_catalog(nearby_sources_table=not_unique_table, column_name=column_name)
+                    nearby_sources_position_1 = SkyCoord(ra=nearby_sources_table_1["RA"], dec=nearby_sources_table_1["DEC"], unit=u.deg)
+                    
+                    # ---------- Xmm catalog ---------- #
+                    
+                    small_table_2 = Table(names=table_2.colnames,
+                                        dtype=table_2.dtype)
+                    nearby_sources_table_2 = Table(names=table_2.colnames,
+                                                dtype=table_2.dtype)
+                    
+                    print(f"{colored(f'Reducing {key[1]} catalog...', 'yellow')} to fov of {radius.value + 5 } arcmin")
+                    for number in tqdm(range(len(table_2))):
+                        if min_ra/u.deg < table_2["SC_RA"][number] < max_ra/u.deg and min_dec/u.deg < table_2["SC_DEC"][number] < max_dec/u.deg:
+                            small_table_2.add_row(table_2[number])
+                            
+                    src_position = SkyCoord(ra=small_table_2['SC_RA'], dec=small_table_2['SC_DEC'], unit=u.deg)
+
+                    print(f"{colored(f'Find sources close to {object_name} with {key[1]} catalog', 'blue')}")
+                    for number in tqdm(range(len(small_table_2))):
+                        if f.ang_separation(object_position, src_position[number]) < radius:
+                            nearby_sources_table_2.add_row(small_table_2[number])
+                    nearby_sources_position_2 = SkyCoord(ra=nearby_sources_table_2["SC_RA"], dec=nearby_sources_table_2["SC_DEC"], unit=u.deg)
+                    
+                    print(f"{len(nearby_sources_table_1)} sources was detected with {key[0]} catalog and {len(nearby_sources_table_2)} sources with {key[1]} catalog close to {object_name}")
+                    return nearby_sources_table_1, nearby_sources_table_2, nearby_sources_position_1, nearby_sources_position_2
+                else:
+                    print(f"No sources detected in {colored(key[0], 'red')} catalog !")
+                    sys.exit()
+                
+            else:
+                # ---------- eRosita or Swift catalog ---------- #
+                small_table_1 = Table(names=table_1.colnames,
+                                      dtype=table_1.dtype)
+                not_unique_table_1 = Table(names=table_1.colnames,
+                                           dtype=table_1.dtype)
+                
+                print(f"{colored(f'Reducing {key[0]} catalog...', 'yellow')} to fov of {radius.value + 5 } arcmin")
+                for number in tqdm(range(len(table_1))):
+                    if min_ra/u.deg < table_1["RA"][number] < max_ra/u.deg and min_dec/u.deg < table_1["DEC"][number] < max_dec/u.deg:
+                        small_table_1.add_row(table_1[number])
+                        
+                src_position = SkyCoord(ra=small_table_1["RA"], dec=small_table_1["DEC"], unit=u.deg)
+
+                print(f"{colored(f'Find sources close to {object_name} with {key[0]} catalog', 'blue')}")
+                for number in tqdm(range(len(small_table_1))):
+                    if f.ang_separation(object_position, src_position[number]) < radius:
+                        not_unique_table_1.add_row(small_table_1[number])
+                        
+                if len(not_unique_table_1) != 0:
+                    if key[0] == "Swift":
+                        column_name = {"source_name": "Swift_IAUNAME",
+                                       "right_ascension": "RA",
+                                       "declination": "DEC",
+                                       "catalog_name": "Swift"}
+                    elif key[0] == "eRosita":
+                        column_name = {"source_name": "eRosita_IAUNAME",
+                                       "right_ascension": "RA",
+                                       "declination": "DEC",
+                                       "catalog_name": "eRosita"}
+                        
+                    nearby_sources_table_1 = f.create_unique_sources_catalog(nearby_sources_table=not_unique_table_1, column_name=column_name)
+                    nearby_sources_position_1 = SkyCoord(ra=nearby_sources_table_1["RA"], dec=nearby_sources_table_1["DEC"], unit=u.deg)
+
+                    # ---------- eRosita or Swift catalog ---------- #
+                    small_table_2 = Table(names=table_2.colnames,
+                                        dtype=table_2.dtype)
+                    not_unique_table_2 = Table(names=table_2.colnames,
+                                            dtype=table_2.dtype)
+                    
+                    print(f"{colored(f'Reducing {key[1]} catalog...', 'yellow')} to fov of {radius.value + 5 } arcmin")
+                    for number in tqdm(range(len(table_2))):
+                        if min_ra/u.deg < table_2["RA"][number] < max_ra/u.deg and min_dec/u.deg < table_2["DEC"][number] < max_dec/u.deg:
+                            small_table_2.add_row(table_2[number])
+                            
+                    src_position = SkyCoord(ra=small_table_2["RA"], dec=small_table_2["DEC"], unit=u.deg)
+
+                    print(f"{colored(f'Find sources close to {object_name} with {key[1]} catalog', 'blue')}")
+                    for number in tqdm(range(len(small_table_2))):
+                        if f.ang_separation(object_position, src_position[number]) < radius:
+                            not_unique_table_2.add_row(small_table_2[number])
+                    
+                    if len(not_unique_table_2) != 0:
+                        if key[1] == "Swift":
+                            column_name = {"source_name": "Swift_IAUNAME",
+                                           "right_ascension": "RA",
+                                           "declination": "DEC",
+                                           "catalog_name": "Swift"}
+                        elif key[1] == "eRosita":
+                            column_name = {"source_name": "eRosita_IAUNAME",
+                                           "right_ascension": "RA",
+                                           "declination": "DEC",
+                                           "catalog_name": "eRosita"}
+                            
+                        nearby_sources_table_2 = f.create_unique_sources_catalog(nearby_sources_table=not_unique_table_2, column_name=column_name)
+                        nearby_sources_position_2 = SkyCoord(ra=nearby_sources_table_2["RA"], dec=nearby_sources_table_2["DEC"], unit=u.deg)
+                        
+                        print(f"{len(nearby_sources_table_1)} sources was detected with {key[0]} catalog and {len(nearby_sources_table_2)} sources with {key[1]} catalog close to {object_name}")
+                        return nearby_sources_table_1, nearby_sources_table_2, nearby_sources_position_1, nearby_sources_position_2
+                    else:
+                        print(f"No sources detected in {colored(key[1], 'red')} catalog !")
+                        sys.exit()
+                else:
+                    print(f"No sources detected in {colored(key[0], 'red')} catalog !")
+                    sys.exit()
+                    
+    
+    def optimization(self, index: int, key: str, table: Table) -> Tuple[List, List]:
+        
+        if key == "XMM":
+            interp_data = {"band_flux_obs": dict_cat.dictionary_catalog[key]["band_flux_obs"],
+                           "band_flux_obs_err": dict_cat.dictionary_catalog[key]["band_flux_obs_err"],
+                           "energy_band_center": dict_cat.dictionary_catalog[key]["energy_band_center"],
+                           "energy_band_half_width": dict_cat.dictionary_catalog[key]["energy_band_half_width"]}
+        
+        if key == "CS_Chandra":
+            interp_data = {"band_flux_obs": dict_cat.dictionary_catalog[key]["band_flux_obs"],
+                           "band_flux_obs_err": dict_cat.dictionary_catalog[key]["band_flux_obs_err"],
+                           "energy_band_center": dict_cat.dictionary_catalog[key]["energy_band_center"],
+                           "energy_band_half_width": dict_cat.dictionary_catalog[key]["energy_band_half_width"]}
+        
+        if key == "Swift":
+            interp_data = {"band_flux_obs": dict_cat.dictionary_catalog[key]["band_flux_obs"],
+                           "band_flux_obs_err": dict_cat.dictionary_catalog[key]["band_flux_obs_err"],
+                           "energy_band_center": dict_cat.dictionary_catalog[key]["energy_band_center"],
+                           "energy_band_half_width": dict_cat.dictionary_catalog[key]["energy_band_half_width"]}
+        
+        if key == "eRosita":
+            interp_data = {"band_flux_obs": dict_cat.dictionary_catalog[key]["band_flux_obs"],
+                           "band_flux_obs_err": dict_cat.dictionary_catalog[key]["band_flux_obs_err"],
+                           "energy_band_center": dict_cat.dictionary_catalog[key]["energy_band_center"],
+                           "energy_band_half_width": dict_cat.dictionary_catalog[key]["energy_band_half_width"]}
+
+        def absorbed_power_law(energy_band, constant, gamma):
+            sigma = np.array(np.linspace(1e-20, 1e-24, len(energy_band)), dtype=float)
+            return (constant * energy_band ** (-gamma)) * (np.exp(-sigma * 3e20))
+        
+        tab_width = 2 * interp_data["energy_band_half_width"]
+        
+        flux_obs = [table[name][index] for name in interp_data["band_flux_obs"]]
+        flux_err = [[table[err_0][index] for err_0 in interp_data["band_flux_obs_err"][0]],
+                    [table[err_1][index] for err_1 in interp_data["band_flux_obs_err"][1]]]
+
+        flux_err_obs = [np.mean([flux_err_0, flux_err_1]) for flux_err_0, flux_err_1 in zip(flux_err[0], flux_err[1])]
+        
+        y_array = [num/det for num, det in zip(flux_obs, tab_width)]
+        yerr_array = [num/det for num, det in zip(flux_err_obs, tab_width)]
+        
+        popt, pcov = curve_fit(absorbed_power_law, interp_data["energy_band_center"], y_array, sigma=yerr_array)
+        constant, absorb_pho_index = popt
+
+        optimization_parameters = (interp_data["energy_band_center"], y_array, yerr_array, absorbed_power_law(interp_data["energy_band_center"], *popt))
+        
+        return optimization_parameters, absorb_pho_index
+    
+    
+    def visualization_interp(self, optimization_parameters, photon_index, key) -> None:
+        energy_band = dict_cat.dictionary_catalog[key]["energy_band_center"]
+        
+        fig, axes = plt.subplots(1, 1, figsize=(15, 8))
+        fig.suptitle("Interpolation Photon Index plot", fontsize=20)
+        fig.text(0.5, 0.04, 'Energy [keV]', ha='center', va='center')
+        fig.text(0.04, 0.5, 'Flux $[erg.cm^{-2}.s^{-1}.keV^{-1}]$', ha='center', va='center', rotation='vertical')
+        
+        for item in range(len(optimization_parameters)):
+            flux_obs = optimization_parameters[item][1]
+            flux_obs_err = optimization_parameters[item][2]
+            absorbed_power_law = optimization_parameters[item][3]
+            absorb_pho_index = photon_index[item]
+            
+            axes.errorbar(energy_band, flux_obs, flux_obs_err, fmt='*', color='red', ecolor='black')
+            axes.plot(energy_band, absorbed_power_law, label=f"$\Gamma$ = {absorb_pho_index:.8f}")
+            # axes.step(energy_band, flux_obs, where='pre', label=f"$\Gamma$ = {absorb_pho_index:.8f}")
+    
+        axes.legend(loc="upper left", ncol=4, fontsize=6)
+        axes.loglog()
+        
+        plt.show()
+    
+    
+    def photon_index_nh_for_xmm(self, os_dictionary: Dict, xmm_index: int) -> Tuple[Table, List]:
+        catalog_datapath = os_dictionary["catalog_datapath"]
+        xmm_dr11_path = os.path.join(catalog_datapath, "4XMM_DR11cat_v1.0.fits").replace("\\", "/")
+        xmm_2_athena_path = os.path.join(catalog_datapath, "xmm2athena_D6.1_V3.fits").replace("\\", "/")
+
+        while True:
+            try:
+                with fits.open(xmm_dr11_path) as data:
+                    xmm_dr11_table = Table(data[1].data)
+                    print(f"{colored('Xmm DR11', 'green')} catalog is loaded.")
+                    break
+            except Exception as error:
+                print(f"{colored('An error occured : ', 'red')} {error}")
+                xmm_dr11_path = str(input("Enter a new path for xmm_dr11 catalog : \n"))
+        while True:
+            try:
+                with fits.open(xmm_2_athena_path) as data:
+                    xmm_2_athena_table = Table(data[1].data)
+                    print(f"{colored('Xmm 2 Athena', 'green')} catalog is loaded.")
+                    break
+            except Exception as error:
+                print(f"{colored('An error occured : ', 'red')} {error}")
+                xmm_2_athena_path = str(input("Enter a new path for xmm_2_athena catalog : \n"))
+
+        if xmm_index == 0:
+            nearby_sources_table = self.nearby_sources_table_1
+        else: 
+            nearby_sources_table = self.nearby_sources_table_2
+
+        sources_number = len(nearby_sources_table)
+        name_list = nearby_sources_table["IAUNAME"]
+        nearby_sources_table_dr11 = Table(names=xmm_dr11_table.colnames,
+                                          dtype=xmm_dr11_table.dtype)
+
+        index_dr11 = np.array([], dtype=int)
+        for name in name_list:
+            if name in xmm_dr11_table["IAUNAME"]:
+                index_name = list(xmm_dr11_table["IAUNAME"]).index(name)
+                index_dr11 = np.append(index_dr11, index_name)
+                nearby_sources_table_dr11.add_row(xmm_dr11_table[index_name])
+
+        index_x2a = np.array([], dtype=int)
+        for det_id in nearby_sources_table_dr11["DETID"]:
+            if det_id in xmm_2_athena_table["DETID"]:
+                index_det_id = list(xmm_2_athena_table["DETID"]).index(det_id)
+                index_x2a = np.append(index_x2a, index_det_id)
+            else:
+                index_x2a = np.append(index_x2a, "No data found")
+
+        column_names = ["Index in nearby_sources_table", "Index in xmm_dr11", "Index in x2a"]
+        column_data = [[item for item in range(sources_number)], index_dr11, index_x2a]
+        index_table = Table(names=column_names,
+                            data=column_data)
+        
+        nh_list, photon_index_list, optimization_parameters = [], [], []
+        for index in range(sources_number):
+            if index_table["Index in x2a"][index] != "No data found":
+                nh = xmm_2_athena_table["logNH_med"][index]
+                nh_list.append(np.exp(nh * np.log(10)))
+                photon_index_list.append(xmm_2_athena_table['PhoIndex_med'][index])
+            else:
+                nh_list.append(3e20)
+                params, photon_index = self.optimization(index=index, key="XMM", table=nearby_sources_table)
+                photon_index_list.append(photon_index)
+                optimization_parameters.append(params)
+                
+        self.visualization_interp(optimization_parameters=optimization_parameters, photon_index=photon_index_list, key="XMM")
+        
+        col_names = ["Photon Index", "Nh"]
+        col_data = [photon_index_list, nh_list]
+        
+        for name, data in zip(col_names, col_data):
+            nearby_sources_table[name] = data
+            
+        return nearby_sources_table, index_table
+        
+
+    def threshold(self, cone_search_catalog) -> Table:
+        source_number = len(cone_search_catalog)
+        key = "CS_Chandra"
+
+        # name : flux_powlaw_aper_b
+        # algo to replace -- by the min numerical value of the list
+        flux_obs = dict_cat.dictionary_catalog[key]["flux_obs"]
+        flux_data = []
+        for item in range(source_number):
+            # iterate for each item in the list
+            if not isinstance(cone_search_catalog[flux_obs][item], np.ma.core.MaskedConstant):
+                # put in flux_data list each item of type different to np.ma.core.MaskedConstant
+                flux_data.append(cone_search_catalog[flux_obs][item])
+        flux = list(cone_search_catalog[flux_obs])
+        corrected_flux_obs = np.nan_to_num(flux, nan=np.min(flux_data))
+        cone_search_catalog[flux_obs] = corrected_flux_obs
+
+        for name in dict_cat.dictionary_catalog[key]["flux_obs_err"]:
+            flux_err = []
+            for item in range(source_number):
+                # iterate for each item in the list
+                if not isinstance(cone_search_catalog[name][item], np.ma.core.MaskedConstant):
+                    # put in flux_err list each item of type different to np.ma.core.MaskedConstant
+                    flux_err.append(cone_search_catalog[name][item])
+            flux_err_obs = list(cone_search_catalog[name])
+            corrected_flux_err_obs = np.nan_to_num(flux_err_obs, nan=np.min(flux_err))
+            cone_search_catalog[name] = corrected_flux_err_obs
+
+        # name : flux_powlaw_aper__s/m/h
+        # algo to replace -- by the min numerical value of the list
+        for name in dict_cat.dictionary_catalog[key]["band_flux_obs"]:
+            # itera name in band_flux_obs 
+            data = []
+            for item in range(source_number):
+                # iterate for each item in the list
+                if not isinstance(cone_search_catalog[name][item], np.ma.core.MaskedConstant):
+                    # put in data list each item of type different to np.ma.core.MaskedConstant
+                    data.append(cone_search_catalog[name][item])
+            flux = list(cone_search_catalog[name])
+            corrected_flux = np.nan_to_num(flux, nan=np.min(data))
+            cone_search_catalog[name] = corrected_flux
+
+
+        # name : flux_powlaw_aper_lo/hi_lim_s/m/h
+        err_flux_neg, err_flux_pos = dict_cat.dictionary_catalog[key]["band_flux_obs_err"][0], dict_cat.dictionary_catalog[key]["band_flux_obs_err"][1]
+        # algo to replace -- by the min numerical value of the list
+        for err_name_0, err_name_1 in zip(err_flux_neg, err_flux_pos):
+            neg_data, pos_data = [], []
+            for item in range(source_number):
+                # iterate for each item in the list
+                if not isinstance(cone_search_catalog[err_name_0][item], np.ma.core.MaskedConstant):
+                    # put in neg_data list each item of type different to np.ma.core.MaskedConstant
+                    neg_data.append(cone_search_catalog[err_name_0][item])
+                if not isinstance(cone_search_catalog[err_name_1][item], np.ma.core.MaskedConstant):
+                    # put in pos_data list each item of type different to np.ma.core.MaskedConstant
+                    pos_data.append(cone_search_catalog[err_name_1][item])
+                    
+            neg_flux, pos_flux = list(cone_search_catalog[err_name_0]), list(cone_search_catalog[err_name_1])
+            corrected_neg_flux = np.nan_to_num(neg_flux, nan=np.min(neg_data))
+            corrected_pos_flux = np.nan_to_num(pos_flux, nan=np.min(pos_data))
+            
+            cone_search_catalog[err_name_0] = corrected_neg_flux
+            cone_search_catalog[err_name_1] = corrected_pos_flux
+            
+        return cone_search_catalog
+
+
+    def photon_index_nh_for_csc(self, csc_index: int) -> Table:
+        if csc_index == 0:
+            nearby_sources_table = self.nearby_sources_table_1
+        else:
+            nearby_sources_table = self.nearby_sources_table_2
+            
+        photon_index_list, nh_list, optimization_parameters = [], [], []
+        
+        for (index, photon), nh_value in zip(enumerate(nearby_sources_table["powlaw_gamma"]), nearby_sources_table["nh_gal"]):
+            if photon != 0:
+                photon_index_list.append(photon)
+            else:
+                params, photon_index = self.optimization(index=index, key="CS_Chandra", table=nearby_sources_table)
+                photon_index_list.append(photon_index if photon_index > 0.0 else 1.7)
+                optimization_parameters.append(params)
+                
+            if nh_value != 0:
+                nh_list.append(nh_value)
+            else:
+                nh_list.append(3e20)
+
+        self.visualization_interp(optimization_parameters=optimization_parameters, photon_index=photon_index_list, key="CS_Chandra")
+
+        col_names = ["Photon Index", "Nh"]
+        col_data = [photon_index_list, nh_list]
+        
+        for name, data in zip(col_names, col_data):
+            nearby_sources_table[name] = data
+            
+        return nearby_sources_table
+        
+        
+    def photon_index_nh_for_other_catalog(self, key, table) -> Table:
+        photon_index_list, nh_list, optimization_parameters = [], [], []
+        
+        number_source = len(table)
+        
+        for index in range(number_source):
+            params, photon_index = self.optimization(index=index, key=key, table=table)
+            photon_index_list.append(photon_index if photon_index > 0.0 else 1.7)
+            optimization_parameters.append(params)
+            nh_list.append(3e20)
+        
+        self.visualization_interp(optimization_parameters=optimization_parameters, photon_index=photon_index_list, key=key)
+
+        col_names = ["Photon Index", "Nh"]
+        col_data = [photon_index_list, nh_list]
+        
+        for name, data in zip(col_names, col_data):
+            table[name] = data
+            
+        return table
+        
+    
+    def neighbourhood_of_object(self, key: Tuple[str, str], simulation_data: Dict, radius) -> None:
+        object_data = simulation_data["object_data"]
+        object_name = object_data["object_name"]
+        obj_ra, obj_dec = object_data["object_position"].ra, object_data["object_position"].dec
+        
+        if key[0] == "Xmm_DR13" and key[1] == "CSC_2.0":
+            ra_1, ra_2 = "SC_RA", "ra"
+            dec_1, dec_2 = "SC_DEC", "dec"
+        elif key[0] == "CSC_2.0" and key[1] == "Xmm_DR13":
+            ra_1, ra_2 = "ra", "SC_RA"
+            dec_1, dec_2 = "dec", "SC_DEC"
+        elif key[0] == "Xmm_DR13" and (key[1] == "Swift" or key[1] == "eRosita"):
+            ra_1, ra_2 = "SC_RA", "RA"
+            dec_1, dec_2 = "SC_DEC", "DEC"
+        elif key[0] == "CSC_2.0" and (key[1] == "Swift" or key[1] == "eRosita"):
+            ra_1, ra_2 = "ra", "RA"
+            dec_1, dec_2 = "dec", "DEC"
+        elif (key[0] == "Swift" or key[0] == "eRosita") and key[1] == "Xmm_DR13":
+            ra_1, ra_2 = "RA", "SC_RA"
+            dec_1, dec_2 = "DEC", "SC_DEC"
+        elif (key[0] == "Swift" or key[0] == "eRosita") and key[1] == "CSC_2.0":
+            ra_1, ra_2 = "RA", "ra"
+            dec_1, dec_2 = "DEC", "dec"
+        else:
+            print("Invalid key !")
+            sys.exit()
+            
+        figure_1, axes = plt.subplots(1, 2, figsize=(17, 9), sharey=True)
+        figure_1.suptitle(f"Neighbourhood of {object_name}, radius = {radius}", fontsize=20)
+        figure_1.text(0.7, 0.04, 'Right Ascension [deg]', ha='center', va='center', fontsize=16)
+        figure_1.text(0.04, 0.5, 'Declination [deg]', ha='center', va='center', rotation='vertical', fontsize=16)
+        
+        ax0, ax1 = axes[0], axes[1]
+        
+        cat_1_ra, cat_1_dec = self.nearby_sources_table_1[ra_1], self.nearby_sources_table_1[dec_1]
+        ax0.scatter(cat_1_ra, cat_1_dec, s=30, edgecolors='black', facecolors='none', label=f"{len(cat_1_ra)} sources")
+        ax0.scatter(obj_ra, obj_dec, s=120, marker="*", facecolors='none', edgecolors='red', label=f"{object_name}")
+        ax0.legend(loc="upper right")
+        ax0.set_title(f"With {key[0]} catalog")
+        
+        cat_2_ra, cat_2_dec = self.nearby_sources_table_2[ra_2], self.nearby_sources_table_2[dec_2]
+        ax1.scatter(cat_2_ra, cat_2_dec, s=30, edgecolors='black', facecolors='none', label=f"{len(cat_2_ra)} sources")
+        ax1.scatter(obj_ra, obj_dec, s=120, marker="*", facecolors='none', edgecolors='red', label=f"{object_name}")
+        ax1.legend(loc="upper right")
+        ax1.set_title(f"With {key[1]} catalog")
+        
+        os_dictionary = simulation_data["os_dictionary"]
+        img = os_dictionary["img"]
+        img_path = os.path.join(img, f"{key[0]}_{key[1]}_neighbourhood_of_{object_name}.png".replace(" ", "_")).replace("\\", "/")
+        plt.savefig(img_path)
+        plt.show()
+
+
+    def dictionary_model(self, key: Tuple[str, str]) -> Tuple[Dict, Dict]:
+        model_dictionary_1, model_dictionary_2 = {}, {}
+        
+        key_0 = key[0]
+        key_1 = key[1]
+        
+        if key_0 == "Xmm_DR13":
+            key_0 = "XMM"
+        elif key_1 == "Xmm_DR13":
+            key_1 = "XMM"
+            
+        if key_0 == "CSC_2.0":
+            key_0 = "CS_Chandra"
+        elif key_1 == "CSC_2.0":
+            key_1 = "CS_Chandra"
+        
+        flux_obs_1 = dict_cat.dictionary_catalog[key_0]["flux_obs"]
+        flux_obs_2 = dict_cat.dictionary_catalog[key_1]["flux_obs"]
+        
+        for index in range(len(self.nearby_sources_table_1)):
+
+            dictionary = {
+                "model": 'power',
+                "model_value": self.nearby_sources_table_1["Photon Index"][index],
+                "flux": self.nearby_sources_table_1[flux_obs_1][index],
+                "column_dentsity": self.nearby_sources_table_1["Nh"][index]
+            }
+
+            model_dictionary_1[f"src_{index}"] = dictionary
+            
+        for index in range(len(self.nearby_sources_table_2)):
+
+            dictionary = {
+                "model": 'power',
+                "model_value": self.nearby_sources_table_2["Photon Index"][index],
+                "flux": self.nearby_sources_table_2[flux_obs_2][index],
+                "column_dentsity": self.nearby_sources_table_2["Nh"][index]
+            }
+
+            model_dictionary_2[f"src_{index}"] = dictionary
+            
+        return model_dictionary_1, model_dictionary_2
+        
+    #TODO test with Linux
+    def count_rate(self) -> Tuple[List, List]:
+        number_source_1 = len(self.nearby_sources_table_1)
+        number_source_2 = len(self.nearby_sources_table_2)
+        
+        ct_rates_1, ct_rates_2 = np.array([], dtype=float), np.array([], dtype=float)
+
+        for item in range(number_source_1):
+            model_1 = self.model_dictionary_1[f"src_{item}"]["model"]
+            model_value_1 = self.model_dictionary_1[f"src_{item}"]["model_value"]
+            flux_1 =  self.model_dictionary_1[f"src_{item}"]["flux"]
+            nh_1 = self.model_dictionary_1[f"src_{item}"]["column_dentsity"]
+                    
+            pimms_cmds = f"instrument nicer 0.3-10.0\nfrom flux ERGS 0.2-12.0\nmodel galactic nh {nh_1}\nmodel {model_1} {model_value_1} 0.0\ngo {flux_1}\nexit\n"
+            
+            with open('pimms_script.xco', 'w') as file:
+                file.write(pimms_cmds)
+                file.close()
+                
+            result = subprocess.run(['pimms', '@pimms_script.xco'], stdout=subprocess.PIPE).stdout.decode(sys.stdout.encoding)
+            ct_rate_value = float(result.split("predicts")[1].split('cps')[0])
+            ct_rates_1 = np.append(ct_rates_1, ct_rate_value)
+            
+            self.nearby_sources_table_1["count_rate"] = ct_rates_1
+            
+        for item in range(number_source_2):
+            model_2 = self.model_dictionary_2[f"src_{item}"]["model"]
+            model_value_2 = self.model_dictionary_2[f"src_{item}"]["model_value"]
+            flux_2 =  self.model_dictionary_2[f"src_{item}"]["flux"]
+            nh_2 = self.model_dictionary_2[f"src_{item}"]["column_dentsity"]
+                    
+            pimms_cmds = f"instrument nicer 0.3-10.0\nfrom flux ERGS 0.2-12.0\nmodel galactic nh {nh_2}\nmodel {model_2} {model_value_2} 0.0\ngo {flux_2}\nexit\n"
+            
+            with open('pimms_script.xco', 'w') as file:
+                file.write(pimms_cmds)
+                file.close()
+                
+            result = subprocess.run(['pimms', '@pimms_script.xco'], stdout=subprocess.PIPE).stdout.decode(sys.stdout.encoding)
+            ct_rate_value = float(result.split("predicts")[1].split('cps')[0])
+            ct_rates_2 = np.append(ct_rates_2, ct_rate_value)
+            
+            self.nearby_sources_table_2["count_rate"] = ct_rates_2
+        
+        return ct_rates_1, ct_rates_2
+    
     
     def xslx_to_py(self, args, table, simulation_data, radius) -> Tuple[List, Table]:
         
@@ -1509,630 +2580,14 @@ class CompareCatalog:
         return count_rates, table
     
     
-    def open_catalog(self, catalogs_path: str, radius: Quantity, object_data: dict) -> Tuple[Table, Table, str, str]:
-        if "catalog_data/Chandra.fits" not in catalogs_path:
-            with fits.open(catalogs_path[0], memmap=True) as data1, fits.open(catalogs_path[1], memmap=True) as data2:
-                result_1, result_2 = Table(data1[1].data), Table(data2[1].data)
-                data1.close()
-                data2.close()
-                return result_1, result_2, catalogs_path[2], catalogs_path[3]
-        else:
-            index = catalogs_path.index("catalog_data/Chandra.fits")
-            if index == 0 :
-                with fits.open(catalogs_path[1], memmap=True) as data:
-                    result_2 = Table(data[1].data)
-                    data.close()
-                cone = vo.dal.SCSService('http://cda.cfa.harvard.edu/csc2scs/coneSearch') 
-                name = SkyCoord.from_name(object_data['object_name'])
-                self.cone_search_catalog = cone.search(pos=name, radius=radius, verbosity=3)
-                return self.cone_search_catalog.to_table(), result_2, catalogs_path[2], catalogs_path[3]
-            
-            elif index == 1 :
-                with fits.open(catalogs_path[0], memmap=True) as data:
-                    result_1 = Table(data[1].data)
-                    data.close()
-                cone = vo.dal.SCSService('http://cda.cfa.harvard.edu/csc2scs/coneSearch') 
-                name = SkyCoord.from_name(object_data['object_name'])
-                self.cone_search_catalog = cone.search(pos=name, radius=radius, verbosity=3)
-                return result_1, self.cone_search_catalog.to_table(), catalogs_path[2], catalogs_path[3]
-
-         
-    def optimization(self, number: int, table: Table) -> Tuple[float, float]:
-        
-        def absorbed_power_law(x, constant, gamma):
-            sigma = np.array([1e-20, 5e-21, 1e-22, 1e-23, 1e-24], dtype=float)
-            return (constant * x ** (-gamma)) * (np.exp(-sigma * 3e20))
-        
-        energy_band = np.array([0.35, 0.75, 1.5, 3.25, 8.25], dtype=float)
-        flux_obs = np.array([table[f"SC_EP_{item + 1}_FLUX"][number] for item in range(5)], dtype=float)
-        flux_obs_err = np.array([table[f"SC_EP_{item + 1}_FLUX_ERR"][number] for item in range(5)], dtype=float)
-            
-        try:
-            popt, pcov = curve_fit(absorbed_power_law, energy_band, flux_obs, sigma=flux_obs_err)
-            constant, photon_index = popt
-            return constant, photon_index
-        except Exception as error:
-            constant, photon_index = 2e-15, 1.0
-            return constant, photon_index
-         
-         
-    def add_photon_nh_and_gamma_xmm(self, table: Table) -> Tuple[Table, Table]:
-        nbr_src = len(table)
-        name_list = table['IAUNAME']
-        xmm_dr11_table = Table(names=self.xmm_catalog.colnames,
-                               dtype=self.xmm_catalog.dtype)
-        index_in_xd11 = []
-        for name in name_list:
-            if name in self.xmm_catalog['IAUNAME']:
-                index = list(self.xmm_catalog['IAUNAME']).index(name)
-                index_in_xd11.append(index)
-                xmm_dr11_table.add_row(self.xmm_catalog[index])
-            else:
-                print(f"{name} is missing")
-        index_in_x2a = []
-        message = "No data founded"
-        for det_id in xmm_dr11_table["DETID"]:
-            if det_id in self.x2a_catalog["DETID"]:
-                index = list(self.x2a_catalog["DETID"]).index(det_id)
-                index_in_x2a.append(index)
-            else:
-                index_in_x2a.append(message)
-        print("Finish message put in list")
-        col_name = ["Index in nearby_src_table", "Index in XmmDR11", "Index in Xmm2Athena"]
-        data = [[n for n in range(nbr_src)], index_in_xd11, index_in_x2a]
-        index_table = Table(data=data,
-                            names=col_name)
-        log_nh, col_photon_index = [], []
-        for number in range(nbr_src):
-            if index_table["Index in Xmm2Athena"][number] != message:
-                log_nh.append(self.x2a_catalog["logNH_med"][number])
-                col_photon_index.append(self.x2a_catalog["PhoIndex_med"][number])
-            else:
-                log_nh.append(0.0)
-                constant, photon_index = self.optimization(number, table)
-                col_photon_index.append(photon_index)
-        print("Finish optimization")
-        col_nh = [np.exp(value * np.log(10)) if value != 0.0 else 3e20 for value in log_nh]
-        col_names = ["PhoIndex", "Nh"]
-        col_data = [col_photon_index, col_nh]
-        for name, data in zip(col_names, col_data):
-            table[name] = data
-            
-        return table, index_table   
-         
-           
-    def add_pho_csc(self, table: Table) -> Table:
-        
-        def get_gamma (index, table):
-            
-            flux = np.array([], dtype=float)
-            for value in ['s', 'm', 'h']:
-                flux = np.append(flux, table[f"flux_aper_{value}"][index])
-            
-            energy_range = np.array([0.85, 1.6, 4.5], dtype=float)
-            
-            def power_law(x, constant, gamma):
-                return constant * (x ** (-gamma))
-            
-            try:
-                popt, pcov = curve_fit(power_law, energy_range, flux)
-                constant, photon_index = popt
-                return photon_index
-            except Exception:
-                constant, photon_index = 2e-15, 1.0
-                return photon_index
-        
-        pho_index = np.array([], dtype=float)
-        
-        for index, pho in enumerate(table["powlaw_gamma"]):
-            if not isinstance(pho, np.ma.core.MaskedConstant):
-                pho_index= np.append(pho_index, pho)
-            elif isinstance(pho, np.ma.core.MaskedConstant):
-                pho_index = np.append(pho_index, get_gamma(index, table))
-
-        table['PhoIndex_csc'] = pho_index
-        
-        return table
-    
-    
-    def var_function(self, dictionary: dict) -> Tuple[Table, Table]:
-        if self.catalog_1_name == "CSC_2.0" or self.catalog_2_name == "Xmm_DR13" and self.catalog_1_name =="Xmm_DR13" or self.catalog_2_name =="CSC_2.0":
-            x2a_path = "catalog_data/xmm2athena_D6.1_V3.fits"
-            xmm_path = "catalog_data/4XMM_DR11cat_v1.0.fits"
-            with fits.open(x2a_path) as data_x2a, fits.open(xmm_path) as data_xmm:
-                self.x2a_catalog = Table(data_x2a[1].data)
-                self.xmm_catalog = Table(data_xmm[1].data)
-                data_xmm.close()
-                data_x2a.close()
-
-        
-        if self.catalog_1_name == "CSC_2.0" and self.catalog_2_name == "Xmm_DR13":
-            
-            # -------------------- Cone search -------------------- #
-            
-            inter, intra = self.catalog_1['var_inter_prob_b'], self.catalog_1['var_intra_prob_b']
-            var_column_cs = np.array([])
-            
-            self.catalog_1 = self.add_pho_csc(self.catalog_1)
-            
-            for inter_value, intra_value in zip(inter, intra):
-                if isinstance(inter_value, np.ma.core.MaskedConstant) and isinstance(intra_value, np.ma.core.MaskedConstant):
-                    var_column_cs = np.append(var_column_cs, 0.0)
-                elif isinstance(inter_value, np.ma.core.MaskedConstant) or isinstance(intra_value, np.ma.core.MaskedConstant):
-                    if isinstance(inter_value, np.ma.core.MaskedConstant):
-                        var_column_cs = np.append(var_column_cs, intra_value)
-                    else:
-                        var_column_cs = np.append(var_column_cs, inter_value)
-                else:
-                    mean_value = np.mean([inter_value, intra_value])
-                    var_column_cs = np.append(var_column_cs, mean_value)  
-            self.catalog_1['Variability'] = var_column_cs
-            
-            mean_value, new_flux_aper_b = [], []
-            for flux in self.catalog_1["flux_aper_b"]:
-                if not isinstance(flux, np.ma.core.MaskedConstant) and flux < 2e-15:
-                    mean_value.append(flux)
-            mean_flux = np.mean(mean_value)
-            
-            for flux in self.catalog_1['flux_aper_b']:
-                if not isinstance(flux, np.ma.core.MaskedConstant):
-                    new_flux_aper_b.append(flux)
-                else:
-                    new_flux_aper_b.append(mean_flux)
-            self.catalog_1['flux_aper_b'] = new_flux_aper_b
-            
-            # -------------------- Xmm_catalog -------------------- #
-
-            self.nearby_src_table_2, index_table = self.add_photon_nh_and_gamma_xmm(self.nearby_src_table_2)
-            
-            nbr_src = len(self.nearby_src_table_2)
-            message = "No data founded"
-            name = dictionary["object_name"]
-
-            index_array, iauname_array, sc_ra_array = np.array([], dtype=int), np.array([], dtype=str), np.array([], dtype=float)
-            sc_dec_array, sc_fvar_array, in_x2a_array = np.array([], dtype=float), np.array([], dtype=float), np.array([], dtype=bool)
-
-            for number in range(nbr_src):
-                if not np.isnan(self.xmm_catalog["SC_FVAR"][index_table["Index in XmmDR11"][number]]):
-
-                    index_array = np.append(index_array, index_table["Index in nearby_src_table"][number])
-                    iauname_array = np.append(iauname_array, self.nearby_src_table_2["IAUNAME"][number])
-                    sc_ra_array = np.append(sc_ra_array, self.nearby_src_table_2["SC_RA"][number])
-                    sc_dec_array = np.append(sc_dec_array, self.nearby_src_table_2["SC_DEC"][number])
-                    sc_fvar_array = np.append(sc_fvar_array, self.nearby_src_table_2["SC_FVAR"][number])
-
-                    if index_table["Index in Xmm2Athena"][number] != message:
-                        in_x2a_array = np.append(in_x2a_array, True)
-                    else:
-                        in_x2a_array = np.append(in_x2a_array, False)
-
-            column_names = ["INDEX", "IAUNAME", "SC_RA", "SC_DEC", "SC_FVAR", "IN_X2A"]
-            data_array = [index_array, iauname_array, sc_ra_array, sc_dec_array, sc_fvar_array, in_x2a_array]
-            self.variability_table = Table()
-
-            for data, name in zip(data_array, column_names):
-                self.variability_table[name] = data
-
-            message_xmm = f"Among {len(self.nearby_src_table_2)} sources detected close to {name}, {len(index_array)} of them are variable. Using DR13 Catalog."
-            print(message_xmm)
-            message_xmm2ath = f"Among {len(index_array)} variable sources, {list(self.variability_table['IN_X2A']).count(True)} are in Xmm2Athena and {list(self.variability_table['IN_X2A']).count(False)} are not in Xmm2Athena. "    
-            print(message_xmm2ath)
-
-            return self.catalog_1, self.nearby_src_table_2
-                    
-        elif self.catalog_1_name == "Xmm_DR13" and self.catalog_2_name == "CSC_2.0":
-            
-            # -------------------- Cone search -------------------- #
-            
-            inter, intra = self.catalog_2['var_inter_prob_b'], self.catalog_2['var_intra_prob_b']
-            var_column_cs = np.array([])
-            
-            self.catalog_2 = self.add_pho_csc(self.catalog_2)
-            
-            for inter_value, intra_value in zip(inter, intra):
-                if isinstance(inter_value, np.ma.core.MaskedConstant) and isinstance(intra_value, np.ma.core.MaskedConstant):
-                    var_column_cs = np.append(var_column_cs, 0.0)
-                elif isinstance(inter_value, np.ma.core.MaskedConstant) or isinstance(intra_value, np.ma.core.MaskedConstant):
-                    if isinstance(inter_value, np.ma.core.MaskedConstant):
-                        var_column_cs = np.append(var_column_cs, intra_value)
-                    else:
-                        var_column_cs = np.append(var_column_cs, inter_value)
-                else:
-                    mean_value = np.mean([inter_value, intra_value])
-                    var_column_cs = np.append(var_column_cs, mean_value)
-            self.catalog_2['Variability'] = var_column_cs
-            
-            mean_value, new_flux_aper_b = [], []
-            for flux in self.catalog_2["flux_aper_b"]:
-                if not isinstance(flux, np.ma.core.MaskedConstant) and flux < 2e-15:
-                    mean_value.append(flux)
-            mean_flux = np.mean(mean_value)    
-        
-            for flux in self.catalog_2['flux_aper_b']:
-                if not isinstance(flux, np.ma.core.MaskedConstant):
-                    new_flux_aper_b.append(flux)
-                else:
-                    new_flux_aper_b.append(mean_flux)
-            self.catalog_2['flux_aper_b'] = new_flux_aper_b
-            
-            # -------------------- Xmm_catalog -------------------- #
-                    
-            self.nearby_src_table_1, index_table = self.add_photon_nh_and_gamma_xmm(self.nearby_src_table_1)
-            
-            nbr_src = len(self.nearby_src_table_1)
-            message = "No data founded"
-            name = dictionary["object_name"]
-
-            index_array, iauname_array, sc_ra_array = np.array([], dtype=int), np.array([], dtype=str), np.array([], dtype=float)
-            sc_dec_array, sc_fvar_array, in_x2a_array = np.array([], dtype=float), np.array([], dtype=float), np.array([], dtype=bool)
-
-            for number in range(nbr_src):
-                if not np.isnan(self.xmm_catalog["SC_FVAR"][index_table["Index in XmmDR11"][number]]):
-
-                    index_array = np.append(index_array, index_table["Index in nearby_src_table"][number])
-                    iauname_array = np.append(iauname_array, self.nearby_src_table_1["IAUNAME"][number])
-                    sc_ra_array = np.append(sc_ra_array, self.nearby_src_table_1["SC_RA"][number])
-                    sc_dec_array = np.append(sc_dec_array, self.nearby_src_table_1["SC_DEC"][number])
-                    sc_fvar_array = np.append(sc_fvar_array, self.nearby_src_table_1["SC_FVAR"][number])
-
-                    if index_table["Index in Xmm2Athena"][number] != message:
-                        in_x2a_array = np.append(in_x2a_array, True)
-                    else:
-                        in_x2a_array = np.append(in_x2a_array, False)
-
-            column_names = ["INDEX", "IAUNAME", "SC_RA", "SC_DEC", "SC_FVAR", "IN_X2A"]
-            data_array = [index_array, iauname_array, sc_ra_array, sc_dec_array, sc_fvar_array, in_x2a_array]
-            self.variability_table = Table()
-
-            for data, name in zip(data_array, column_names):
-                self.variability_table[name] = data
-
-            message_xmm = f"Among {len(self.nearby_src_table_1)} sources detected close to {name}, {len(index_array)} of them are variable. Using DR13 Catalog."
-            print(message_xmm)
-            message_xmm2ath = f"Among {len(index_array)} variable sources, {list(self.variability_table['IN_X2A']).count(True)} are in Xmm2Athena and {list(self.variability_table['IN_X2A']).count(False)} are not in Xmm2Athena. "    
-            print(message_xmm2ath)        
-            
-            return self.nearby_src_table_1, self.catalog_2
-            
-            
-    def find_nearby_sources(self, radius: Quantity, object_data: dict) -> Tuple[Table, Table, SkyCoord, SkyCoord]:
-        
-        field_of_view = radius + 5*u.arcmin
-        object_position = object_data['object_position']
-        min_ra, max_ra = object_position.ra - field_of_view, object_position.ra + field_of_view
-        min_dec, max_dec = object_position.dec - field_of_view, object_position.dec + field_of_view
-        
-        if self.catalog_1_name == "Xmm_DR13" and self.catalog_2_name =="CSC_2.0":
-            ra_1, dec_1 = "SC_RA", "SC_DEC"
-            ra_2, dec_2 = 'ra', 'dec'
-            
-            nbr_src_1 = len(self.catalog_1)
-            
-            table_1 = Table(names=self.catalog_1.colnames,
-                            dtype=self.catalog_1.dtype)
-            
-            self.nearby_src_table_1 = Table(names=self.catalog_1.colnames,
-                                            dtype=self.catalog_1.dtype)
-            
-            for n_1 in range(nbr_src_1):
-                if min_ra/u.deg < self.catalog_1[ra_1][n_1] < max_ra/u.deg and min_dec/u.deg < self.catalog_1[dec_1][n_1] < max_dec/u.deg:
-                    table_1.add_row(self.catalog_1[n_1])
-            
-            nbr_nearby_src_1 = len(table_1)
-            src_position = SkyCoord(ra=table_1[ra_1], dec=table_1[dec_1], unit=u.deg)
-            for n_1 in range(nbr_nearby_src_1):
-                if f.ang_separation(object_position, src_position[n_1]) < radius:
-                    self.nearby_src_table_1.add_row(table_1[n_1])
-                    
-            self.nearby_src_position_1 = SkyCoord(ra=list(self.nearby_src_table_1[ra_1]), dec=list(self.nearby_src_table_1[dec_1]), unit=u.deg)
-            self.nearby_src_position_2 = SkyCoord(ra=list(self.catalog_2[ra_2]), dec=list(self.catalog_2[dec_2]), unit=u.deg)
-            self.nearby_src_table_1, self.catalog_2 = self.var_function(dictionary=object_data)
-            
-            try:
-                if len(self.nearby_src_table_1) != 0 or len(self.catalog_2) != 0:
-                    print(f"We have detected {len(self.nearby_src_table_1)} sources in {self.catalog_1_name} and {len(self.catalog_2)} sources in {self.catalog_2_name} close to {object_data['object_name']}")
-                    return self.nearby_src_table_1, self.catalog_2, self.nearby_src_position_1, self.nearby_src_position_2
-                else:
-                    print(f"We can't compare catalogs because no sources was detected in one of the catalog")
-                    sys.exit()
-            except Exception as error:
-                print(f"An error occured : {error}")
-        
-        elif self.catalog_1_name == "CSC_2.0" and self.catalog_2_name =="Xmm_DR13":
-            ra_1, dec_1 = "ra", "dec"
-            ra_2, dec_2 = "SC_RA", "SC_DEC"
-            
-            nbr_src_2 = len(self.catalog_2)
-            
-            table_2 = Table(names=self.catalog_2.colnames,
-                            dtype=self.catalog_2.dtype)
-            
-            self.nearby_src_table_2 = Table(names=self.catalog_2.colnames,
-                                            dtype=self.catalog_2.dtype)
-            
-            for n_2 in range(nbr_src_2):
-                if min_ra/u.deg < self.catalog_2[ra_2][n_2] < max_ra/u.deg and min_dec/u.deg < self.catalog_2[dec_2][n_2] < max_dec/u.deg:
-                    table_2.add_row(self.catalog_2[n_2])
-            
-            nbr_nearby_src_2 = len(table_2)
-            src_position = SkyCoord(ra=table_2[ra_2], dec=table_2[dec_2], unit=u.deg)
-            for n_2 in range(nbr_nearby_src_2):
-                if f.ang_separation(object_position, src_position[n_2]) < radius:
-                    self.nearby_src_table_2.add_row(table_2[n_2])
-                    
-            self.nearby_src_position_1 = SkyCoord(ra=list(self.catalog_1[ra_1]), dec=list(self.catalog_1[dec_1]), unit=u.deg)
-            self.nearby_src_position_2 = SkyCoord(ra=list(self.nearby_src_table_2[ra_2]), dec=list(self.nearby_src_table_2[dec_2]), unit=u.deg)
-            self.catalog_1, self.nearby_src_table_2 = self.var_function(dictionary=object_data)
-            
-            try:
-                if len(self.catalog_2) != 0 or len(self.nearby_src_table_2) != 0:
-                    print(f"We have detected {len(self.catalog_1)} sources in {self.catalog_1_name} and {len(self.nearby_src_table_2)} sources in {self.catalog_2_name} close to {object_data['object_name']}")
-                    return self.catalog_1, self.nearby_src_table_2, self.nearby_src_position_1, self.nearby_src_position_2
-                else:
-                    print(f"We can't compare catalogs because no sources was detected in one of the catalog")
-                    sys.exit()
-            except Exception as error:
-                print(f"An error occured : {error}")
-
-
-    def neighbourhood_of_object(self, radius: Quantity, simulation_data: dict) -> None:
-        
-        object_data = simulation_data["object_data"]
-        os_dictionary = simulation_data["os_dictionary"]
-        
-        name = object_data["object_name"]
-        obj_ra, obj_dec = object_data["object_position"].ra, object_data["object_position"].dec
-        ra_in_x2a = [ra for index, ra in enumerate(self.variability_table['SC_RA']) if self.variability_table['IN_X2A'][index] == True]
-        dec_in_x2a = [dec for index, dec in enumerate(self.variability_table['SC_DEC']) if self.variability_table['IN_X2A'][index] == True]
-        ra_in_dr11 = [ra for index, ra in enumerate(self.variability_table['SC_RA']) if self.variability_table['IN_X2A'][index] == False]
-        dec_in_dr11 = [dec for index, dec in enumerate(self.variability_table['SC_DEC']) if self.variability_table['IN_X2A'][index] == False]
-        
-        figure = plt.figure(figsize=(17, 9))
-        figure.suptitle(f"Neighbourhood of {name}", fontsize=20)
-
-        result = ESASky.query_object_catalogs(position=name, catalogs="XMM-EPIC")
-        xmm_epic = Table(result[0])
-        xmm_obs_id = list(xmm_epic["observation_id"])
-        result_fits_images = ESASky.get_images(observation_ids=xmm_obs_id[0], radius=radius, missions=["XMM", "Chandra"])
-        
-        if len(result_fits_images) != 0:
-            image = result_fits_images["XMM"][0][0].data[0, :, :]
-            wcs = WCS(result_fits_images["XMM"][0][0].header)
-            _wcs_ = wcs.dropaxis(2)
-            norm = ImageNormalize(image, interval=PercentileInterval(98.0), stretch=LinearStretch())
-            
-            if self.catalog_1_name == "Xmm_DR13" and self.catalog_2_name == "CSC_2.0":
-                title_1, title_2 = "Xmm_DR13", "CSC_2.0"
-                axes_0 = figure.add_subplot(221, projection=_wcs_)
-                axes_1 = figure.add_subplot(223, projection=_wcs_, sharex=axes_0, sharey=axes_0)
-                axes_2 = figure.add_subplot(222)
-                axes_3 = figure.add_subplot(224)
-                axes_2.tick_params(axis='x', which='both', labelbottom=False)
-                axes_0.set_title(f"{title_1}")
-                axes_2.set_title(f"{title_2}")
-                
-                xmm_ra = list(self.nearby_sources_table_1['SC_RA'])
-                xmm_dec = list(self.nearby_sources_table_1['SC_DEC'])
-                csc_ra = list(self.nearby_sources_table_2["ra"])
-                csc_dec = list(self.nearby_sources_table_2["dec"])
-                cs_ra_var = [ra for index, ra in enumerate(list(self.nearby_sources_table_2['ra'])) if self.nearby_sources_table_2['Variability'][index] != 0.0]
-                cs_ra_invar = [ra for index, ra in enumerate(list(self.nearby_sources_table_2['ra'])) if self.nearby_sources_table_2['Variability'][index] == 0.0]
-                cs_dec_var = [dec for index, dec in enumerate(list(self.nearby_sources_table_2['dec'])) if self.nearby_sources_table_2['Variability'][index] != 0.0]
-                cs_dec_invar = [dec for index, dec in enumerate(list(self.nearby_sources_table_2['dec'])) if self.nearby_sources_table_2['Variability'][index] == 0.0]
-                
-            elif self.catalog_1_name == "CSC_2.0" and self.catalog_2_name == "Xmm_DR13":
-                title_1, title_2 = "CSC_2.0", "Xmm_DR13"
-                axes_0 = figure.add_subplot(222, projection=_wcs_)
-                axes_1 = figure.add_subplot(224, projection=_wcs_, sharex=axes_0, sharey=axes_0)
-                axes_2 = figure.add_subplot(221)
-                axes_3 = figure.add_subplot(223)
-                axes_2.tick_params(axis='x', which='both', labelbottom=False)
-                axes_0.set_title(f"{title_2}")
-                axes_2.set_title(f"{title_1}")
-
-                xmm_ra = list(self.nearby_sources_table_2['SC_RA'])
-                xmm_dec = list(self.nearby_sources_table_2['SC_DEC'])
-                csc_ra = list(self.nearby_sources_table_1["ra"])
-                csc_dec = list(self.nearby_sources_table_1["dec"])
-                cs_ra_var = [ra for index, ra in enumerate(list(self.nearby_sources_table_1['ra'])) if self.nearby_sources_table_1['Variability'][index] != 0.0]
-                cs_ra_invar = [ra for index, ra in enumerate(list(self.nearby_sources_table_1['ra'])) if self.nearby_sources_table_1['Variability'][index] == 0.0]
-                cs_dec_var = [dec for index, dec in enumerate(list(self.nearby_sources_table_1['dec'])) if self.nearby_sources_table_1['Variability'][index] != 0.0]
-                cs_dec_invar = [dec for index, dec in enumerate(list(self.nearby_sources_table_1['dec'])) if self.nearby_sources_table_1['Variability'][index] == 0.0]
-
-            axes_0.coords[0].set_format_unit(u.hourangle)
-            axes_0.coords[1].set_format_unit(u.deg) 
-            axes_0.imshow(image, cmap='gray', origin='lower', norm=norm, interpolation='nearest', aspect='equal')
-            axes_0.scatter(xmm_ra, xmm_dec, s=30, transform=axes_0.get_transform('fk5'), facecolors='none', edgecolors='orange', label=f"Sources : {len(xmm_ra)}")
-            axes_0.scatter(obj_ra, obj_dec, s=100, marker="*", transform=axes_0.get_transform('fk5'), facecolors='none', edgecolors='red', label=f"{name}")
-            axes_0.set_xlabel(" ")
-            axes_0.set_ylabel(" ")
-            # xlim, ylim = plt.xlim(), plt.ylim()
-            # value_x, value_y = 180, 180
-            # axes_0.set_xlim(xmin=xlim[0]+value_x, xmax=xlim[1]-value_x)
-            # axes_0.set_ylim(ymin=ylim[0]+value_y, ymax=ylim[1]-value_y)
-
-            axes_1.imshow(image, cmap='gray', origin='lower', norm=norm, interpolation='nearest', aspect='equal')
-            axes_1.scatter(xmm_ra, xmm_dec, s=30, transform=axes_1.get_transform('fk5'), facecolors='none', edgecolors='orange', label=f"Sources : {len(xmm_ra)}")
-            axes_1.scatter(ra_in_dr11, dec_in_dr11, s=30, transform=axes_1.get_transform('fk5'), facecolors='none', edgecolors='blue', label=f"Var src not in x2a : {len(ra_in_dr11)} sources")
-            axes_1.scatter(ra_in_x2a, dec_in_x2a, s=30, transform=axes_1.get_transform('fk5'), facecolors='none', edgecolors='hotpink', label=f"Var src in x2a : {len(ra_in_x2a)} sources")
-            axes_1.scatter(obj_ra, obj_dec, s=100, marker="*", transform=axes_1.get_transform('fk5'), facecolors='none', edgecolors='red', label=f"{name}")
-            axes_1.set_xlabel(" ")
-            axes_1.set_ylabel(" ")
-            
-        elif len(result_fits_images) == 0:
-            figure.text(0.5, 0.04, 'Right Ascension [deg]', ha='center', va='center', fontsize=16)
-            figure.text(0.04, 0.5, 'Declination [deg]', ha='center', va='center', rotation='vertical', fontsize=16)
-            
-            if self.catalog_1_name == "Xmm_DR13" and self.catalog_2_name == "CSC_2.0":
-                title_1, title_2 = "Xmm_DR13", "CSC_2.0"
-                axes_0 = figure.add_subplot(221)
-                axes_1 = figure.add_subplot(223)
-                axes_2 = figure.add_subplot(222)
-                axes_3 = figure.add_subplot(224)
-                axes_0.tick_params(axis='x', which='both', labelbottom=False)
-                axes_2.tick_params(axis='both', which='both', labelbottom=False, labelleft=False)
-                axes_3.tick_params(axis='y', which='both', labelleft=False)
-                axes_0.set_title(f"{title_1}")
-                axes_2.set_title(f"{title_2}")
-                
-                xmm_ra = list(self.nearby_sources_table_1['SC_RA'])
-                xmm_dec = list(self.nearby_sources_table_1['SC_DEC'])
-                csc_ra = list(self.nearby_sources_table_2["ra"])
-                csc_dec = list(self.nearby_sources_table_2["dec"])
-                cs_ra_var = [ra for index, ra in enumerate(list(self.nearby_sources_table_2['ra'])) if self.nearby_sources_table_2['Variability'][index] != 0.0]
-                cs_ra_invar = [ra for index, ra in enumerate(list(self.nearby_sources_table_2['ra'])) if self.nearby_sources_table_2['Variability'][index] == 0.0]
-                cs_dec_var = [dec for index, dec in enumerate(list(self.nearby_sources_table_2['dec'])) if self.nearby_sources_table_2['Variability'][index] != 0.0]
-                cs_dec_invar = [dec for index, dec in enumerate(list(self.nearby_sources_table_2['dec'])) if self.nearby_sources_table_2['Variability'][index] == 0.0]
-                
-            elif self.catalog_1_name == "CSC_2.0" and self.catalog_2_name == "Xmm_DR13":
-                title_1, title_2 = "CSC_2.0", "Xmm_DR13"
-                axes_0 = figure.add_subplot(222)
-                axes_1 = figure.add_subplot(224)
-                axes_2 = figure.add_subplot(221)
-                axes_3 = figure.add_subplot(223)
-                axes_0.tick_params(axis='both', which='both', labelbottom=False, labelleft=False)
-                axes_2.tick_params(axis='x', which='both', labelbottom=False)
-                axes_1.tick_params(axis='y', which='both', labelleft=False)
-                axes_0.set_title(f"{title_2}")
-                axes_2.set_title(f"{title_1}")
-                
-                xmm_ra = list(self.nearby_sources_table_2['SC_RA'])
-                xmm_dec = list(self.nearby_sources_table_2['SC_DEC'])
-                csc_ra = list(self.nearby_sources_table_1["ra"])
-                csc_dec = list(self.nearby_sources_table_1["dec"])
-                cs_ra_var = [ra for index, ra in enumerate(list(self.nearby_sources_table_1['ra'])) if self.nearby_sources_table_1['Variability'][index] != 0.0]
-                cs_ra_invar = [ra for index, ra in enumerate(list(self.nearby_sources_table_1['ra'])) if self.nearby_sources_table_1['Variability'][index] == 0.0]
-                cs_dec_var = [dec for index, dec in enumerate(list(self.nearby_sources_table_1['dec'])) if self.nearby_sources_table_1['Variability'][index] != 0.0]
-                cs_dec_invar = [dec for index, dec in enumerate(list(self.nearby_sources_table_1['dec'])) if self.nearby_sources_table_1['Variability'][index] == 0.0]
-                
-            axes_0.scatter(xmm_ra, xmm_dec, s=30, facecolors='none', edgecolors='black', label=f"Sources : {len(xmm_ra)}")
-            axes_0.scatter(obj_ra, obj_dec, s=100, marker="*", facecolors='none', edgecolors='red', label=f"{name}")
-            
-            axes_1.scatter(xmm_ra, xmm_dec, s=30, facecolors='none', edgecolors='orange', label=f"Sources : {len(xmm_ra)}")
-            axes_1.scatter(ra_in_dr11, dec_in_dr11, s=30, facecolors='none', edgecolors='blue', label=f"Var src not in x2a : {len(ra_in_dr11)} sources")
-            axes_1.scatter(ra_in_x2a, dec_in_x2a, s=30, facecolors='none', edgecolors='hotpink', label=f"Var src in x2a : {len(ra_in_x2a)} sources")
-            axes_1.scatter(obj_ra, obj_dec, s=100, marker="*", facecolors='none', edgecolors='red', label=f"{name}")
-        
-        axes_0.legend(loc="upper right", fontsize=8)
-        
-        axes_1.legend(loc='upper right', ncol=2, fontsize=8)
-        
-        axes_2.scatter(csc_ra, csc_dec, facecolors='none', edgecolors='black', s=30, label=f"Nearby sources : {len(csc_ra)}")
-        axes_2.scatter(object_data["object_position"].ra, object_data["object_position"].dec, s=100, marker="*", facecolors='none', edgecolors='red', label=f"{object_data['object_name']}")
-        axes_2.legend(loc="upper right", fontsize=8)
-        
-        axes_3.scatter(cs_ra_var, cs_dec_var, s=30, facecolors='none', edgecolors='darkorange', label=f"Var src : {len(cs_ra_var)} sources")
-        axes_3.scatter(cs_ra_invar, cs_dec_invar, s=30, facecolors='none', edgecolors='blue', label=f"Invar src : {len(cs_ra_invar)} sources")
-        axes_3.scatter(obj_ra, obj_dec, marker='*', s=100, facecolors='none', edgecolors='red', label=f"{name}")
-        axes_3.legend(loc="upper right", ncol=2, fontsize=8)
-
-        img = os_dictionary["img"]
-        img_path = os.path.join(img, f"neighbourhood_of_{name}.png").replace("\\", "/")
-        plt.savefig(img_path)
-        plt.show()
-        
-        
-    def model_dictionary(self) -> Tuple[Dict[str, Dict[str, Union[str, float]]], Dict[str, Dict[str, Union[str, float]]]]:
-        
-        model_dictionary_1 = {}
-        model_dictionary_2 = {}
-        
-        if self.catalog_1_name == "Xmm_DR13" and self.catalog_2_name == "CSC_2.0":
-            flux_value_1, flux_value_2 = "SC_EP_8_FLUX", "flux_aper_b"
-            m_1, m_2 = "PhoIndex", "PhoIndex_csc"
-            nh_value_1, nh_value_2 = "Nh", "nh_gal"
-        elif self.catalog_1_name == "CSC_2.0" and self.catalog_2_name == "Xmm_DR13":
-            flux_value_1, flux_value_2 = "flux_aper_b", "SC_EP_8_FLUX"
-            m_1, m_2 = "PhoIndex_csc", "PhoIndex"
-            nh_value_1, nh_value_2 = "nh_gal", "Nh"
-        
-        nbr_src_1, nbr_src_2 = len(self.nearby_sources_table_1), len(self.nearby_sources_table_2)
-        self.model_1, self.model_2 = {}, {}
-        
-        model_1, model_2 = np.array(['power' for item in range(nbr_src_1)], dtype=str), np.array(['power' for item in range(nbr_src_2)], dtype=str)
-        
-        model_value_1 = np.array([self.nearby_sources_table_1[m_1][n_1] for n_1 in range(nbr_src_1)], dtype=float)
-        model_value_2 = np.array([self.nearby_sources_table_2[m_2][n_2]for n_2 in range(nbr_src_2)], dtype=float)
-        
-        flux_1 = np.array([self.nearby_sources_table_1[flux_value_1][n_1] for n_1 in range(nbr_src_1)], dtype=float)
-        flux_2 = np.array([self.nearby_sources_table_2[flux_value_2][n_2] for n_2 in range(nbr_src_2)], dtype=float)
-        
-        nh_1 = np.array([self.nearby_sources_table_1[nh_value_1][n_1] for n_1 in range(nbr_src_1)], dtype=float)
-        nh_2 = np.array([self.nearby_sources_table_2[nh_value_2][n_2] for n_2 in range(nbr_src_2)], dtype=float)
-
-        for item in range(nbr_src_1):
-
-            dictionary = {
-                "model": model_1[item],
-                "model_value": model_value_1[item],
-                "flux": flux_1[item],
-                "column_dentsity": nh_1[item]
-            }
-
-            model_dictionary_1[f"src_{item}"] = dictionary
-            
-        for item in range(nbr_src_2):
-
-            dictionary = {
-                "model": model_2[item],
-                "model_value": model_value_2[item],
-                "flux": flux_2[item],
-                "column_dentsity": nh_2[item]
-            }
-
-            model_dictionary_2[f"src_{item}"] = dictionary
-            
-        return model_dictionary_1, model_dictionary_2
-
-
-    def count_rate(self) -> Tuple[np.ndarray, np.ndarray]:
-        nbr_src_1 = len(self.nearby_src_table_1)
-        nbr_src_2 = len(self.nearby_src_table_2)
-        
-        ct_rates_1, ct_rates_2 = np.array([], dtype=float), np.array([], dtype=float)
-
-        for item in range(nbr_src_1):
-            model_1 = self.model_dictionary_1[f"src_{item}"]["model"]
-            model_value_1 = self.model_dictionary_1[f"src_{item}"]["model_value"]
-            flux_1 =  self.model_dictionary_1[f"src_{item}"]["flux"]
-            nh_1 = self.model_dictionary_1[f"src_{item}"]["column_dentsity"]
-                    
-            pimms_cmds = f"instrument nicer 0.3-10.0\nfrom flux ERGS 0.2-12.0\nmodel galactic nh {nh_1}\nmodel {model_1} {model_value_1} 0.0\ngo {flux_1}\nexit\n"
-            
-            with open('pimms_script.xco', 'w') as file:
-                file.write(pimms_cmds)
-                file.close()
-                
-            result = subprocess.run(['pimms', '@pimms_script.xco'], stdout=subprocess.PIPE).stdout.decode(sys.stdout.encoding)
-            ct_rate_value = float(result.split("predicts")[1].split('cps')[0])
-            ct_rates_1 = np.append(ct_rates_1, ct_rate_value)
-            
-        for item in range(nbr_src_2):
-            model_2 = self.model_dictionary_2[f"src_{item}"]["model"]
-            model_value_2 = self.model_dictionary_2[f"src_{item}"]["model_value"]
-            flux_2 =  self.model_dictionary_2[f"src_{item}"]["flux"]
-            nh_2 = self.model_dictionary_2[f"src_{item}"]["column_dentsity"]
-                    
-            pimms_cmds = f"instrument nicer 0.3-10.0\nfrom flux ERGS 0.2-12.0\nmodel galactic nh {nh_2}\nmodel {model_2} {model_value_2} 0.0\ngo {flux_2}\nexit\n"
-            
-            with open('pimms_script.xco', 'w') as file:
-                file.write(pimms_cmds)
-                file.close()
-                
-            result = subprocess.run(['pimms', '@pimms_script.xco'], stdout=subprocess.PIPE).stdout.decode(sys.stdout.encoding)
-            ct_rate_value = float(result.split("predicts")[1].split('cps')[0])
-            ct_rates_2 = np.append(ct_rates_2, ct_rate_value)
-        
-        return ct_rates_1, ct_rates_2
-    
-    
-    def opti_point_calcul(self, simulation_data: dict) -> None:
+    def calculate_opti_point(self, simulation_data, key) -> Tuple[Dict, Dict, int, int]:
         min_value, max_value, step = -7.0, 7.1, 0.05
         DeltaRA = Angle(np.arange(min_value, max_value, step), unit=u.deg)/60
         DeltaDEC = Angle(np.arange(min_value, max_value, step), unit=u.deg)/60
         
         telescop_data = simulation_data["telescop_data"]
         object_data = simulation_data["object_data"]
+        object_name = object_data["object_name"]
         
         RA_grid, DEC_grid = np.meshgrid(DeltaRA, DeltaDEC)
 
@@ -2165,64 +2620,346 @@ class CompareCatalog:
             SRCrates_2[item] = np.sum(SRCcountrateScaled_2[item])
             SNR_2[item] = f.signal_to_noise(PSRrates[item], SRCrates_2[item], simulation_data["INSTbkgd"], simulation_data["EXPtime"])
         
+        OptimalPointingIdx_1 = np.where(SNR_1==max(SNR_1))[0][0]
+        SRCoptimalSEPAR_1 = f.ang_separation(self.nearby_sources_position_1, SkyCoord(ra=SampleRA[OptimalPointingIdx_1]*u.degree, dec=SampleDEC[OptimalPointingIdx_1]*u.degree)).arcmin
+        SRCoptimalRATES_1 = f.scaled_ct_rate(SRCoptimalSEPAR_1, self.count_rates_1, telescop_data["EffArea"], telescop_data["OffAxisAngle"])
         
-        self.OptimalPointingIdx_1 = np.where(SNR_1==max(SNR_1))[0][0]
-        SRCoptimalSEPAR_1 = f.ang_separation(self.nearby_sources_position_1, SkyCoord(ra=SampleRA[self.OptimalPointingIdx_1]*u.degree, dec=SampleDEC[self.OptimalPointingIdx_1]*u.degree)).arcmin
-        SRCoptimalRATES_1 = f.scaled_ct_rate(SRCoptimalSEPAR_1, self.count_rate_1, telescop_data["EffArea"], telescop_data["OffAxisAngle"])
+        OptimalPointingIdx_2 = np.where(SNR_2==max(SNR_2))[0][0]
+        SRCoptimalSEPAR_2 = f.ang_separation(self.nearby_sources_position_2, SkyCoord(ra=SampleRA[OptimalPointingIdx_1]*u.degree, dec=SampleDEC[OptimalPointingIdx_2]*u.degree)).arcmin
+        SRCoptimalRATES_2 = f.scaled_ct_rate(SRCoptimalSEPAR_2, self.count_rates_2, telescop_data["EffArea"], telescop_data["OffAxisAngle"])     
         
-        self.OptimalPointingIdx_2 = np.where(SNR_2==max(SNR_2))[0][0]
-        SRCoptimalSEPAR_2 = f.ang_separation(self.nearby_sources_position_2, SkyCoord(ra=SampleRA[self.OptimalPointingIdx_1]*u.degree, dec=SampleDEC[self.OptimalPointingIdx_2]*u.degree)).arcmin
-        SRCoptimalRATES_2 = f.scaled_ct_rate(SRCoptimalSEPAR_2, self.count_rate_2, telescop_data["EffArea"], telescop_data["OffAxisAngle"])     
+        vector_dictionary_1 = {'SampleRA': SampleRA,
+                               'SampleDEC': SampleDEC,
+                               'PSRrates': PSRrates,
+                               'SRCrates_2': SRCrates_2,
+                               'SRCoptimalRATES_1':SRCoptimalRATES_1,
+                               'SNR_1': SNR_1}
+        
+        vector_dictionary_2 = {'SampleRA': SampleRA,
+                               'SampleDEC': SampleDEC,
+                               'PSRrates': PSRrates,
+                               'SRCrates_2': SRCrates_2,
+                               'SRCoptimalRATES_2':SRCoptimalRATES_2,
+                               'SNR_2': SNR_2}
 
-        self.vector_dictionary = {'Sample_RA': SampleRA,
-                                  'Sample_DEC': SampleDEC,
-                                  'PSRrates': PSRrates,
-                                  'vecteur_1':{'SRCrates_1': SRCrates_1,
-                                               'SRCoptimalRATES_1':SRCoptimalRATES_1,
-                                               'SNR_1': SNR_1
-                                               },
-                                  'vecteur_2':{'SRCrates_1': SRCrates_1,
-                                               'SRCoptimalRATES_2': SRCoptimalRATES_2,
-                                               'SNR_2': SNR_2
-                                               }
-                                  }
-
-        if self.catalog_1_name == "Xmm_DR13" and self.catalog_2_name == "CSC_2.0":
-            title_0, title_1 = f"Xmm_DR13\nopti_point : {self.vector_dictionary['Sample_RA'][self.OptimalPointingIdx_1]}, {self.vector_dictionary['Sample_DEC'][self.OptimalPointingIdx_1]}", f"CSC_2.0\nopti_point: {self.vector_dictionary['Sample_RA'][self.OptimalPointingIdx_2]}, {self.vector_dictionary['Sample_DEC'][self.OptimalPointingIdx_2]}"
-        elif self.catalog_1_name == "CSC_2.0" and self.catalog_2_name == "Xmm_DR13":
-            title_0, title_1 = f"CSC_2.0\nopti_point : {self.vector_dictionary['Sample_RA'][self.OptimalPointingIdx_1]}, {self.vector_dictionary['Sample_DEC'][self.OptimalPointingIdx_1]}", f"Xmm_DR13\nopti_point: {self.vector_dictionary['Sample_RA'][self.OptimalPointingIdx_2]}, {self.vector_dictionary['Sample_DEC'][self.OptimalPointingIdx_2]}"
+        opti_ra_1, opti_dec_1 = vector_dictionary_1['SampleRA'][OptimalPointingIdx_1], vector_dictionary_1['SampleDEC'][OptimalPointingIdx_1]
+        opti_ra_2, opti_dec_2 = vector_dictionary_2['SampleRA'][OptimalPointingIdx_2], vector_dictionary_2['SampleDEC'][OptimalPointingIdx_2]
         
-        figure_map, axes = plt.subplots(1, 2, figsize=(15, 8), sharey=True)
-        figure_map.suptitle(f"S/N map for {object_data['object_name']}")
+        figure_map, axes = plt.subplots(1, 2, figsize=(17, 9), sharey=True)
+        figure_map.suptitle(f"S/N map for {object_data['object_name']}", fontsize=20)
         figure_map.text(0.5, 0.04, 'Right Ascension [deg]', ha='center', va='center', fontsize=16)
         figure_map.text(0.04, 0.5, 'Declination [deg]', ha='center', va='center', rotation='vertical', fontsize=16)
 
         ax0 = axes[0]
-        ax0.plot(self.nearby_sources_position_1.ra, self.nearby_sources_position_1.dec, marker='.', color='black', linestyle='')
-        ax0.plot(object_data["object_position"].ra, object_data["object_position"].dec, marker='*', color="green", linestyle='')
-        ax0.plot(self.vector_dictionary['Sample_RA'][self.OptimalPointingIdx_1], self.vector_dictionary['Sample_DEC'][self.OptimalPointingIdx_1], marker="+", color='red', linestyle='')
-        ax0.scatter(self.vector_dictionary['Sample_RA'], self.vector_dictionary['Sample_DEC'], c=self.vector_dictionary["vecteur_1"]["SNR_1"], s=10, edgecolor='face')
-        ax0.set_title(title_0)
+        ax0.plot(self.nearby_sources_position_1.ra, self.nearby_sources_position_1.dec, marker='.', color='black', linestyle='', label=f"{len(self.nearby_sources_position_1.ra)} sources")
+        ax0.plot(object_data["object_position"].ra, object_data["object_position"].dec, marker='*', color="green", linestyle='', label=f"{object_data['object_name']}")
+        ax0.plot(opti_ra_1, opti_dec_1, marker="+", color='red', linestyle='', label="Optimal pointing point")
+        ax0.scatter(vector_dictionary_1['SampleRA'], vector_dictionary_1['SampleDEC'], c=vector_dictionary_1["SNR_1"], s=10, edgecolor='face')
+        ax0.set_title(f"With {key[0]} catalog\n Optimal pointing point : {opti_ra_1} deg, {opti_dec_1} deg")
+        ax0.legend(loc="upper right", ncol=2)
 
         ax1 = axes[1]
-        ax1.plot(self.nearby_sources_position_2.ra, self.nearby_sources_position_2.dec, marker='.', color='black', linestyle='')
-        ax1.plot(object_data["object_position"].ra, object_data["object_position"].dec, marker='*', color="green", linestyle='')
-        ax1.plot(self.vector_dictionary['Sample_RA'][self.OptimalPointingIdx_2], self.vector_dictionary['Sample_DEC'][self.OptimalPointingIdx_2], marker="+", color='red', linestyle='')
-        ax1.scatter(self.vector_dictionary['Sample_RA'], self.vector_dictionary['Sample_DEC'], c=self.vector_dictionary["vecteur_2"]["SNR_2"], s=10, edgecolor='face')
-        ax1.set_title(title_1)
+        ax1.plot(self.nearby_sources_position_2.ra, self.nearby_sources_position_2.dec, marker='.', color='black', linestyle='', label=f"{len(self.nearby_sources_position_2.ra)} sources")
+        ax1.plot(object_data["object_position"].ra, object_data["object_position"].dec, marker='*', color="green", linestyle='', label=f"{object_data['object_name']}")
+        ax1.plot(opti_ra_2, opti_dec_2, marker="+", color='red', linestyle='', label="Optimal pointing point")
+        ax1.scatter(vector_dictionary_2['SampleRA'], vector_dictionary_2['SampleDEC'], c=vector_dictionary_2["SNR_2"], s=10, edgecolor='face')
+        ax1.set_title(f"With {key[1]} catalog\n Optimal pointing point : {opti_ra_2} deg, {opti_dec_2} deg")
+        ax1.legend(loc="upper right", ncol=2)
  
-        norm = plt.Normalize(vmin=min(self.vector_dictionary["vecteur_1"]["SNR_1"] + self.vector_dictionary["vecteur_2"]["SNR_2"]), vmax=max(self.vector_dictionary["vecteur_1"]["SNR_1"] + self.vector_dictionary["vecteur_2"]["SNR_2"]))
+        norm = plt.Normalize(vmin=min(vector_dictionary_1["SNR_1"] + vector_dictionary_2["SNR_2"]), vmax=max(vector_dictionary_1["SNR_1"] + vector_dictionary_2["SNR_2"]))
         sm = ScalarMappable(cmap='viridis', norm=norm)
         divider = make_axes_locatable(ax1)
         cax = divider.append_axes("right", size="5%", pad=0.05)
         color_bar = figure_map.colorbar(sm, cax=cax)
         color_bar.set_label("S/N")
         
-        img = simulation_data["os_dictionary"]["img"]
-        img_path = os.path.join(img, f"SNR_{object_data['object_name']}.png")
+        os_dictionary = simulation_data["os_dictionary"]
+        img = os_dictionary["img"]
+        img_path = os.path.join(img, f"{key[0]}_{key[1]}_SNR_{object_name}.png".replace(" ", "_")).replace("\\", "/")
         plt.savefig(img_path)
         plt.show()
 
+        return vector_dictionary_1, vector_dictionary_2, OptimalPointingIdx_1, OptimalPointingIdx_2
+    
+    
+    def variability_table(self, simulation_data: Dict, radius: int) -> str:
+        os_dictionary = simulation_data["os_dictionary"]
+        catalog_datapath = os_dictionary["catalog_datapath"]
+        stilts_software_path = os_dictionary["stilts_software_path"]
+        output_name = os_dictionary["output_name"]
+        
+        master_source_path = os.path.join(catalog_datapath, 'Master_source.fits').replace("\\", "/")
+        
+        def select_master_sources_around_region(ra, dec, radius, output_name):
+            """Radius is in arcminutes"""
+            print(f"Extracting sources around region: RA {ra} and Dec {dec}")
+            master_cone_path = os.path.join(output_name, 'Master_source_cone.fits').replace("\\", "/")
+            command = (f"java -jar {stilts_software_path} tpipe {master_source_path} cmd='"+
+                    f'select skyDistanceDegrees({ra},{dec},MS_RA,MS_DEC)*60<{radius} '+
+                    f"' out={master_cone_path}")
+            command = shlex.split(command)
+            subprocess.run(command)
+
+
+        def select_catalogsources_around_region(output_name):
+            print('Selecting catalog sources')
+            master_cone_path = os.path.join(output_name, 'Master_source_cone.fits').replace("\\", "/")
+            for cat in dict_cat.catalogs:
+                path_to_cat_init = os.path.join(catalog_datapath, cat).replace("\\", "/")
+                path_to_cat_final = os.path.join(output_name, cat).replace("\\", "/")
+                command = (f"java -jar {stilts_software_path} tmatch2 matcher=exact \
+                        in1='{master_cone_path}' in2='{path_to_cat_init}.fits' out='{path_to_cat_final}.fits'\
+                            values1='{cat}' values2='{cat}_IAUNAME' find=all progress=none")
+                command = shlex.split(command)
+                subprocess.run(command)
+
+        object_data = simulation_data["object_data"]
+        right_ascension = object_data["object_position"].ra.value
+        declination = object_data["object_position"].dec.value
+        try:
+            print(f"\n{colored('Load Erwan s code for :', 'yellow')} {object_data['object_name']}")
+            select_master_sources_around_region(ra=right_ascension, dec=declination, radius=radius, output_name=output_name)
+            select_catalogsources_around_region(output_name=output_name)
+            master_sources = f.load_master_sources(output_name)
+            f.master_source_plot(master_sources=master_sources, simulation_data=simulation_data, number_graph=len(master_sources))
+        except Exception as error :
+            print(f"{colored('An error occured : ', 'red')} {error}")
+            
+        return master_source_path
+    
+    
+    def variability_index(self, key: str, iauname: str, nearby_sources_table: Table) -> List:
+        with fits.open(self.master_source_path) as data:
+            master_source_cone = Table(data[1].data)
+        
+        if key == "CSC_2.0":
+            key = "Chandra"
+        elif key == "Xmm_DR13":
+            key = "XMM"
+        
+        msc_name = [name for name in master_source_cone[key] if name != ""]
+        var_index_in_nearby_sources_table = []
+        for name in msc_name:
+            if name in nearby_sources_table[iauname]:
+                index_in_table = list(nearby_sources_table[iauname]).index(name)
+                var_index_in_nearby_sources_table.append(index_in_table)
+                
+        return var_index_in_nearby_sources_table
+    
+    
+    def modeling_source_spectra(self, simulation_data: Dict, exp_time: int, key: Tuple[str, str]) -> Tuple[List, List]:
+        model = Tbabs() * Powerlaw()
+        telescop_data = simulation_data["telescop_data"]
+        nicer_data_arf = telescop_data["nicer_data_arf"]
+        nicer_data_rmf = telescop_data["nicer_data_rmf"]
+        
+        instrument = Instrument.from_ogip_file(nicer_data_arf, nicer_data_rmf, exposure=exp_time)
+        
+        print(f"\n{colored(f'Modeling spectra for {key[0]} catalog... ', 'yellow')}")
+        size = 10_000
+        
+        total_spectra_1, total_var_spectra_1 = [], []
+        for index, vignet_factor in tqdm(enumerate(self.nearby_sources_table_1["vignetting_factor"])):
+            parameters = {}
+            parameters = {
+                "tbabs_1": {"N_H": np.full(size, self.nearby_sources_table_1["Nh"][index]/1e22)},
+                "powerlaw_1": {
+                    "alpha": np.full(size, self.nearby_sources_table_1["Photon Index"][index] if self.nearby_sources_table_1["Photon Index"][index] > 0.0 else 1.7),
+                    "norm": np.full(size, 1e-5),
+                }
+            }
+            
+            spectra = fakeit_for_multiple_parameters(instrument=instrument, model=model, parameters=parameters) * vignet_factor
+            
+            if index in self.var_index_1:
+                total_var_spectra_1.append(spectra)
+            
+            total_spectra_1.append(spectra)
+        
+        print(f"\n{colored(f'Modeling spectra for {key[1]} catalog... ', 'yellow')}")
+        total_spectra_2, total_var_spectra_2 = [], []
+        for index, vignet_factor in tqdm(enumerate(self.nearby_sources_table_2["vignetting_factor"])):
+            parameters = {}
+            parameters = {
+                "tbabs_1": {"N_H": np.full(size, self.nearby_sources_table_2["Nh"][index]/1e22)},
+                "powerlaw_1": {
+                    "alpha": np.full(size, self.nearby_sources_table_2["Photon Index"][index] if self.nearby_sources_table_2["Photon Index"][index] > 0.0 else 1.7),
+                    "norm": np.full(size, 1e-5),
+                }
+            }
+            
+            spectra = fakeit_for_multiple_parameters(instrument=instrument, model=model, parameters=parameters) * vignet_factor
+            
+            if index in self.var_index_1:
+                total_var_spectra_2.append(spectra)
+            
+            total_spectra_2.append(spectra)
+            
+            
+        return total_spectra_1, total_spectra_2, total_var_spectra_1, total_var_spectra_2, instrument
+     
+    
+    def total_spectra_plot(self, simulation_data: Dict, radius: float, key: Tuple[str, str]):
+        
+        object_name = simulation_data["object_data"]["object_name"]
+        
+        figure_spectra, axes = plt.subplots(2, 3, figsize=(17, 8), sharey=True, sharex=True)
+        figure_spectra.suptitle(f"Spectral modeling close to {object_name}", fontsize=20)
+        figure_spectra.text(0.5, 0.04, 'Energy [keV]', ha='center', va='center', fontsize=16)
+        figure_spectra.text(0.04, 0.5, 'Counts [cts/s]', ha='center', va='center', rotation='vertical', fontsize=16)
+        
+        figure_spectra.text(0.07, 0.75, f'{key[0]}', ha='center', va='center', rotation='vertical', fontsize=14)
+        figure_spectra.text(0.07, 0.25, f'{key[1]}', ha='center', va='center', rotation='vertical', fontsize=14)
+        
+        graph_data = {"min_lim_x": 0.2,
+                      "max_lim_x": 10.0}
+        
+        for ax_row in axes:
+            for ax in ax_row:
+                ax.loglog()
+                ax.set_xlim([graph_data["min_lim_x"], graph_data["max_lim_x"]])
+        
+        ax00, ax01, ax02 = axes[0][0], axes[0][1], axes[0][2]
+        ax10, ax11, ax12 = axes[1][0], axes[1][1], axes[1][2]
+        figure_spectra.delaxes(ax02)
+        figure_spectra.delaxes(ax12)
+        
+        # ---------- first row ---------- #
+        
+        for spectra in self.total_spectra_1:
+            ax00.step(self.instrument.out_energies[0],
+                      np.median(spectra, axis=0),
+                      where="post")
+        ax00.set_title("All spectra of nearby sources table")
+        
+        spectrum_summed_1 = 0.0
+        for index in range(len(self.total_spectra_1)):
+            spectrum_summed_1 += self.total_spectra_1[index]
+
+        spectrum_var_summed_1 = 0.0
+        for index in range(len(self.total_var_spectra_1)):
+            spectrum_var_summed_1 += self.total_var_spectra_1[index]
+        
+        ax01.errorbar(self.instrument.out_energies[0], y=np.median(spectrum_summed_1, axis=0), yerr=np.median(spectrum_var_summed_1, axis=0), 
+                    fmt="none", ecolor='red', capsize=2, capthick=3,
+                    label='error')
+        ax01.step(self.instrument.out_energies[0], np.median(spectrum_summed_1, axis=0), color='black', label="sum powerlaw")
+        ax01.set_title("Spectrum Summed with var sources error")
+        ax01.legend(loc='upper right')
+        
+        # ---------- second row ---------- #
+        
+        for spectra in self.total_spectra_2:
+            ax10.step(self.instrument.out_energies[0],
+                      np.median(spectra, axis=0),
+                      where="post")
+        
+        spectrum_summed_2 = 0.0
+        for index in range(len(self.total_spectra_2)):
+            spectrum_summed_2 += self.total_spectra_2[index]
+
+        spectrum_var_summed_2 = 0.0
+        for index in range(len(self.total_var_spectra_2)):
+            spectrum_var_summed_2 += self.total_var_spectra_2[index]
+            
+        ax11.errorbar(self.instrument.out_energies[0], y=np.median(spectrum_summed_2, axis=0), yerr=np.median(spectrum_var_summed_2, axis=0), 
+                    fmt="none", ecolor='red', capsize=2, capthick=3,
+                    label='error')
+        ax11.step(self.instrument.out_energies[0], np.median(spectrum_summed_2, axis=0), color='black', label="sum powerlaw")
+        ax11.legend(loc='upper right')
+        
+        # ---------- big axes ---------- #
+        
+        new_ax = figure_spectra.add_subplot(1, 3, 3)
+        new_ax.errorbar(self.instrument.out_energies[0], y=np.median(spectrum_summed_1, axis=0), yerr=np.median(spectrum_var_summed_1, axis=0),
+                        fmt="none", ecolor='red', capsize=2, capthick=3, alpha=0.1, label='error_1')
+        new_ax.step(self.instrument.out_energies[0], np.median(spectrum_summed_1, axis=0), color='black', label=f"sum powerlaw {key[0]}")
+        new_ax.set_title("Spectrum Summed with var sources error")
+        new_ax.legend(loc='upper right')
+        
+        new_ax.errorbar(self.instrument.out_energies[0], y=np.median(spectrum_summed_2, axis=0), yerr=np.median(spectrum_var_summed_2, axis=0),
+                        fmt="none", ecolor='darkorange', capsize=2, capthick=3, alpha=0.1, label='error_2')
+        new_ax.step(self.instrument.out_energies[0], np.median(spectrum_summed_2, axis=0), color='navy', label=f"sum powerlaw {key[1]}")
+        new_ax.set_title("Spectrum Summed with var sources error")
+        new_ax.legend(loc='upper right')
+        
+        new_ax.legend(loc="upper right", ncol=2)
+        new_ax.set_xlim([graph_data["min_lim_x"], graph_data["max_lim_x"]])
+        new_ax.loglog()
+        
+        # ---------- get envelop ---------- #
+        
+        y_upper_1 = np.median(spectrum_summed_1, axis=0) + np.median(spectrum_var_summed_1, axis=0)
+        y_lower_1 = np.median(spectrum_summed_1, axis=0) - np.median(spectrum_var_summed_1, axis=0)
+        
+        y_upper_2 = np.median(spectrum_summed_2, axis=0) + np.median(spectrum_var_summed_2, axis=0)
+        y_lower_2 = np.median(spectrum_summed_2, axis=0) - np.median(spectrum_var_summed_2, axis=0)
+        
+        data_1 = {
+            "Energy": self.instrument.out_energies[0],
+            "Counts": np.median(spectrum_summed_1, axis=0),
+            "Upper limit": y_upper_1,
+            "Lower limit": y_lower_1
+        }
+        
+        data_2 = {
+            "Energy": self.instrument.out_energies[0],
+            "Counts": np.median(spectrum_summed_2, axis=0),
+            "Upper limit": y_upper_2,
+            "Lower limit": y_lower_2
+        }
+
+        os_dictionary = simulation_data["os_dictionary"]
+        img = os_dictionary["img"]
+        img_path = os.path.join(img, f"{key[0]}_{key[1]}_spectral_modeling_close_to_{object_name}.png".replace(" ", "_")).replace("\\", "/")
+        plt.savefig(img_path)
+        plt.show()
+        
+        return data_1, data_2
+    
+    
+    def write_txt_file(self, simulation_data: Dict, data_1: Dict, data_2: Dict, key: Tuple[str, str]) -> None:
+    
+        catalog_directory = simulation_data['os_dictionary']["catalog_directory"]
+        txt_path_1 = os.path.join(catalog_directory, f'{key[0]}_output_modeling_plot.txt').replace("\\", "/")
+        
+        data_to_txt_1 = [
+            list(data_1.keys())
+        ]
+        
+        energy, counts, y_upper, y_lower = list(data_1.values())
+        data_to_txt_1.extend([energy[index], counts[index], y_upper[index], y_lower[index]] for index in range(len(energy)))
+        
+        with open(txt_path_1, 'w') as file:
+            header = "{:<15} {:<15} {:<15} {:<15}".format(*data_to_txt_1[0])
+            file.write(header + "\n")
+
+            for row in data_to_txt_1[1:]:
+                new_row = "{:<10.5f}     {:<10.5f}       {:<10.5f}       {:<10.5f}".format(*row)
+                file.write(new_row + "\n")
+                
+        print(f"\n{colored(f'{key[0]}_output_modeling_plot.txt', 'yellow')} has been created in {colored(txt_path_1, 'blue')}")
+        
+        
+        txt_path_2 = os.path.join(catalog_directory, f'{key[1]}_output_modeling_plot.txt').replace("\\", "/")
+        
+        data_to_txt_2 = [
+            list(data_2.keys())
+        ]
+        
+        energy, counts, y_upper, y_lower = list(data_2.values())
+        data_to_txt_2.extend([energy[index], counts[index], y_upper[index], y_lower[index]] for index in range(len(energy)))
+        
+        with open(txt_path_2, 'w') as file:
+            header = "{:<15} {:<15} {:<15} {:<15}".format(*data_to_txt_2[0])
+            file.write(header + "\n")
+
+            for row in data_to_txt_2[1:]:
+                new_row = "{:<10.5f}     {:<10.5f}       {:<10.5f}       {:<10.5f}".format(*row)
+                file.write(new_row + "\n")
+                
+        print(f"\n{colored(f'{key[1]}_output_modeling_plot.txt', 'yellow')} has been created in {colored(txt_path_2, 'blue')}")
+    
 
 # --------------- Software Class --------------- #
 
@@ -2522,7 +3259,8 @@ class CatalogMatch:
         self.write_fits_table(os_dictionary=simulation_data["os_dictionary"])
         
         self.master_source_cone = self.load_master_source_cone(radius=radius.value, simulation_data=simulation_data)
-    
+        self.var_index = self.cross_table_index()
+        
 
     def load_catalog(self, catalog_name: Tuple[str, str], os_dictionary: Dict) -> Tuple[Table, Table]:
         name_1, name_2 = catalog_name
@@ -2561,7 +3299,7 @@ class CatalogMatch:
         return cone_search_catalog.to_table()
 
     
-    def unique_sources_table(self, nearby_sources_table, column_name):
+    def unique_sources_table(self, nearby_sources_table, column_name) -> Table:
         key = column_name["catalog_name"]
 
         dict_flux_name = {"flux_obs": dict_cat.dictionary_catalog[key]["flux_obs"],
@@ -3008,8 +3746,11 @@ class CatalogMatch:
         
         key = "xmmXchandra"
         catalog ="match"
-
-        if platform.system() == "Linux":
+        
+        if not os.path.exists(excel_data_path):
+            os.mkdir(excel_data_path)
+            
+        if platform.system() == "Linux" or platform.system() == "Darwin":
             count_rates, self.nearby_sources_table = f.count_rates(self.nearby_sources_table, self.model_dictionary, telescop_data)
             # f.py_to_xlsx(excel_data_path=excel_data_path, count_rates=count_rates, object_data=object_data, args=(catalog, key), radius=radius)
         elif platform.system() == "Windows":
@@ -3156,5 +3897,26 @@ class CatalogMatch:
             
         return master_source_cone
     
-    
+
+    def cross_table_index(self) -> List:
+        key_0, key_1 = self.catalog_key
+        msc_xmm_name = [name for name in self.master_source_cone[key_0] if name != ""]
+        msc_csc_name = [name for name in self.master_source_cone[key_1] if name != ""]
+        
+        xmmXchandra_xmm_index = []
+        for name in msc_xmm_name:
+            if name in self.nearby_sources_table["Xmm_IAUNAME"]:
+                index_in_table = list(self.nearby_sources_table["Xmm_IAUNAME"]).index(name)
+                xmmXchandra_xmm_index.append(index_in_table)
+                
+        xmmXchandra_csc_index = []
+        for name in msc_csc_name:
+            if name in self.nearby_sources_table["Chandra_IAUNAME"]:
+                index_in_table = list(self.nearby_sources_table["Chandra_IAUNAME"]).index(name)
+                xmmXchandra_csc_index.append(index_in_table)
+        
+        var_index_in_nearby_sources_table = sorted(set(xmmXchandra_xmm_index + xmmXchandra_csc_index))
+
+        return var_index_in_nearby_sources_table
+   
 # -------------------------------------------- #
