@@ -142,6 +142,19 @@ dictionary_catalog = {
                "hr_track_marker": "d"},
     }
 
+dictionary_coord = {
+    "XMM": {"right_ascension": "SC_RA",
+            "declination": "SC_DEC"},
+    "Chandra": {"right_ascension": "RA",
+                "declination": "DEC"},
+    "CS_Chandra": {"right_ascension": "ra",
+                   "declination": "dec"},
+    "Swift": {"right_ascension": "RA",
+              "declination": "DEC"},
+    "eRosita": {"right_ascension": "RA",
+                "declination": "DEC"}
+}
+
 band_edges = {}
 for cat in catalogs:
     band_edges[cat] = [center-width for (center, width) in zip(dictionary_catalog[cat]["energy_band_center"], dictionary_catalog[cat]["energy_band_half_width"])]

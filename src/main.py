@@ -117,13 +117,18 @@ object_data = {"object_name": object_name,
 # get the active workflow path
 active_workflow = os.getcwd()
 active_workflow = active_workflow.replace("\\","/")
+data_path = os.path.join(active_workflow, "data").replace("\\", "/")
 
 # catalog_data_path
-catalog_datapath = os.path.join(active_workflow, "catalog_data").replace("\\", "/")
+catalog_datapath = os.path.join(data_path, "catalog_data").replace("\\", "/")
 
 # path of stilts and topcat software 
-stilts_software_path = os.path.join(active_workflow, 'softwares/stilts.jar').replace("\\", "/")
-topcat_software_path = os.path.join(active_workflow, 'softwares/topcat-extra.jar').replace("\\", "/")
+stilts_software_path = os.path.join(data_path, 'softwares/stilts.jar').replace("\\", "/")
+topcat_software_path = os.path.join(data_path, 'softwares/topcat-extra.jar').replace("\\", "/")
+
+result_path = os.path.join(active_workflow, "modeling_result")
+if not os.path.exists(result_path):
+    os.mkdir(result_path)
 
 # creation of modeling file 
 name = object_data['object_name'].replace(" ", "_")
@@ -159,9 +164,13 @@ else:
 
 print('-'*50)
 print(f"{colored('Load NICER parameters : ', 'magenta')}")
-nicer_parameters_path = f.get_valid_file_path("NICER_data/NICER_PSF.dat")
-nicer_data_arf = f.get_valid_file_path("NICER_data/nixtiaveonaxis20170601v005.arf")
-nicer_data_rmf = f.get_valid_file_path("NICER_data/nixtiref20170601v003.rmf")
+nicer_data_path = os.path.join(data_path, "NICER_data")
+PSF_data = os.path.join(nicer_data_path, "NICER_PSF.dat")
+ARF_data = os.path.join(nicer_data_path, "nixtiaveonaxis20170601v005.arf")
+RMF_data = os.path.join(nicer_data_path, "nixtiref20170601v003.rmf")
+nicer_parameters_path = f.get_valid_file_path(PSF_data)
+nicer_data_arf = f.get_valid_file_path(ARF_data)
+nicer_data_rmf = f.get_valid_file_path(RMF_data)
 EffArea, OffAxisAngle = np.loadtxt(nicer_parameters_path, unpack=True, usecols=(0, 1))
 print('-'*50, '\n')
 
@@ -201,15 +210,19 @@ if args.catalog == "Xmm_DR13":
         os.mkdir(xmm_closest_catalog)
     
     os_dictionary = {"active_workflow": active_workflow,
+                     "catalog_datapath": catalog_datapath,
                      "modeling_file_path": modeling_file_path,
                      "plot_var_sources_path": plot_var_sources_path,
                      "catalog_directory" : xmm_directory,
                      "cloesest_dataset_path": xmm_closest_catalog,
-                     "img": xmm_img}
+                     "img": xmm_img,
+                     "stilts_software_path": stilts_software_path,
+                     "topcat_software_path": topcat_software_path}
     
     simulation_data["os_dictionary"] = os_dictionary
     
-    xmm = XmmCatalog(catalog_path=catalog_path, radius=radius, dictionary=object_data, user_table=add_source_table, os_dictionary=os_dictionary)
+    # call XmmCatalog Class to make modeling
+    xmm = XmmCatalog(catalog_path=catalog_path, radius=radius, simulation_data=simulation_data, user_table=add_source_table)
     nearby_sources_table, nearby_sources_position = xmm.nearby_sources_table,  xmm.nearby_sources_position
     model_dictionary = xmm.model_dictionary
     
@@ -239,12 +252,15 @@ elif args.catalog == "CSC_2.0":
                      "plot_var_sources_path": plot_var_sources_path,
                      "catalog_directory": chandra_directory,
                      "cloesest_dataset_path": chandra_closest_catalog,
-                     "img": chandra_img}
+                     "img": chandra_img,
+                     "stilts_software_path": stilts_software_path,
+                     "topcat_software_path": topcat_software_path}
     
     simulation_data["os_dictionary"] = os_dictionary
     
                     # cs = cone search (Harvard features)
-    csc = Chandra(catalog_path=catalog_path, radius=radius, dictionary=object_data, user_table=add_source_table, os_dictionary=os_dictionary)
+    # call Chandra Class to make modeling
+    csc = Chandra(catalog_path=catalog_path, radius=radius, simulation_data=simulation_data, user_table=add_source_table)
     table_1, sources_1 = csc.nearby_sources_table, csc.nearby_sources_position
     table_2, sources_2 = csc.cone_search_catalog, csc.cs_nearby_sources_position
     
@@ -279,6 +295,7 @@ elif args.catalog == "CSC_2.0":
 elif args.catalog == "Swift":
     # Find the optimal pointing point with the Swift catalog
     
+    # creation of Swift directory
     swi_directory = os.path.join(modeling_file_path, 'Swift'.replace("\\", "/"))
     swi_img = os.path.join(swi_directory, 'img'.replace("\\", "/"))
     swi_closest_catalog = os.path.join(swi_directory, "closest_catalog")
@@ -292,10 +309,13 @@ elif args.catalog == "Swift":
                      "plot_var_sources_path": plot_var_sources_path,
                      "catalog_directory" : swi_directory,
                      "cloesest_dataset_path": swi_closest_catalog,
-                     "img": swi_img}
+                     "img": swi_img,
+                     "stilts_software_path": stilts_software_path,
+                     "topcat_software_path": topcat_software_path}
     
     simulation_data["os_dictionary"] = os_dictionary
     
+    # call Swift Class to make modeling
     swi = Swift(catalog_path=catalog_path, radius=radius, simulation_data=simulation_data, user_table=add_source_table)
     nearby_sources_table, nearby_sources_position = swi.nearby_sources_table, swi.nearby_sources_position
     model_dictionary = swi.model_dictionary
@@ -312,6 +332,7 @@ elif args.catalog == "Swift":
 elif args.catalog == "eRosita":
     # Find the optimal pointing with the eRosita catalog
     
+    # creation of eRosita directory
     eRo_directory = os.path.join(modeling_file_path, 'eRosita'.replace("\\", "/"))
     eRo_img = os.path.join(eRo_directory, 'img'.replace("\\", "/"))
     eRo_closest_catalog = os.path.join(eRo_directory, "closest_catalog")
@@ -319,7 +340,17 @@ elif args.catalog == "eRosita":
         os.mkdir(eRo_directory)
         os.mkdir(eRo_img)
         os.mkdir(eRo_closest_catalog)
+        
+    os_dictionary = {"active_workflow": active_workflow,
+                     "modeling_file_path": modeling_file_path,
+                     "plot_var_sources_path": plot_var_sources_path,
+                     "catalog_directory" : eRo_directory,
+                     "cloesest_dataset_path": eRo_closest_catalog,
+                     "img": eRo_img,
+                     "stilts_software_path": stilts_software_path,
+                     "topcat_software_path": topcat_software_path}
     
+    # call eRosita Class to make modeling
     eRo = eRosita(catalog_path=catalog_path, radius=radius, simulation_data=simulation_data, user_table=add_source_table)
     nearby_sources_table, nearby_sources_position = eRo.nearby_sources_table, eRo.nearby_sources_position
     model_dictionary = eRo.model_dictionary
@@ -336,6 +367,7 @@ elif args.catalog == "eRosita":
 elif args.catalog == "compare_catalog":
     # Find the optimal pointing point with two catalogs to compare data
     
+    # creation of compare_catalog directory
     compare_catalog_directory = os.path.join(modeling_file_path, 'Compare_catalog'.replace("\\", "/"))
     compare_catalog_img = os.path.join(compare_catalog_directory, 'img'.replace("\\", "/"))
     compare_catalog_closest_catalog = os.path.join(compare_catalog_directory, "closest_catalog")
@@ -345,6 +377,7 @@ elif args.catalog == "compare_catalog":
         os.mkdir(compare_catalog_closest_catalog)
     
     os_dictionary = {"active_workflow": active_workflow,
+                     "data_path": data_path,
                      "modeling_file_path": modeling_file_path,
                      "catalog_datapath": catalog_datapath,
                      "output_name": output_name,
@@ -356,11 +389,14 @@ elif args.catalog == "compare_catalog":
     
     simulation_data["os_dictionary"] = os_dictionary
     
+    # call CompareCatalog Class to make calculation
     compare_class = CompareCatalog(catalog_path=catalog_path, radius=radius, simulation_data=simulation_data, exp_time=args.exp_time)
     sys.exit()
     
 elif args.catalog == "match":
+    # Find optimal pointing point with using two catalog Xmm and Chandra
     
+    # creation of match directory
     mixed_directory = os.path.join(modeling_file_path, 'xmmXchandra'.replace("\\", "/"))
     mixed_img = os.path.join(mixed_directory, 'img'.replace("\\", "/"))
     mixed_closest_catalog = os.path.join(mixed_directory, "closest_catalog")
@@ -370,6 +406,7 @@ elif args.catalog == "match":
         os.mkdir(mixed_closest_catalog)
     
     os_dictionary = {"active_workflow": active_workflow,
+                     "data_path": data_path,
                      "plot_var_sources_path": plot_var_sources_path,
                      "catalog_datapath": catalog_datapath,
                      "stilts_software_path": stilts_software_path,
@@ -382,6 +419,8 @@ elif args.catalog == "match":
     
     simulation_data["os_dictionary"] = os_dictionary
     os_dictionary["catalog_key"] = "xmmXchandra"
+    
+    # call CatalogMatch Class to make modeling
     mixed_catalog = CatalogMatch(catalog_name=("Xmm_DR13", "Chandra"), radius=radius, simulation_data=simulation_data)
     nearby_sources_table = mixed_catalog.nearby_sources_table
     var_index = mixed_catalog.var_index
@@ -416,7 +455,7 @@ else:
     
 # --------------- count_rates --------------- #
 
-excel_data_path = os.path.join(active_workflow, 'excel_data').replace("\\", "/")
+excel_data_path = os.path.join(data_path, 'excel_data').replace("\\", "/")
 if not os.path.exists(excel_data_path):
     os.mkdir(excel_data_path)
     
@@ -474,6 +513,7 @@ f.write_fits_file(nearby_sources_table=nearby_sources_table, simulation_data=sim
 # --------------- software --------------- # 
 
 master_source_path = os.path.join(catalog_datapath, 'Master_source.fits').replace("\\", "/")
+
 
 def select_master_sources_around_region(ra, dec, radius, output_name):
     """Radius is in arcminutes"""

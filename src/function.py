@@ -82,38 +82,41 @@ def choose_catalog(args_catalog) -> Tuple[str, str]:
     Raises:
         argparse.ArgumentError: If an invalid catalog keyword is provided.
     """
+    active_workflow = os.getcwd().replace("\\", "/")
+    catalog_datapath = os.path.join(active_workflow, "data/catalog_data").replace("\\", "/")
     while True:
         try:
             if args_catalog == 'Xmm_DR13':
                 print("\n")
                 print(f"{colored(args_catalog, 'yellow')} catalog is loading")
-                catalog_path = "catalog_data/4XMM_slim_DR13cat_v1.0.fits"
+                xmm_path = os.path.join(catalog_datapath, "4XMM_slim_DR13cat_v1.0.fits").replace("\\", "/")
                 print("-"*50)
-                valid_path = get_valid_file_path(catalog_path)
+                valid_path = get_valid_file_path(xmm_path)
                 print("-"*50, "\n")
                 return valid_path, args_catalog
             elif args_catalog == 'CSC_2.0':
                 print("\n")
                 print(f"{colored(args_catalog, 'yellow')} catalog is loading")
                 print("-"*50)
-                valid_path = get_valid_file_path("catalog_data/Chandra.fits")
+                chandra_path = os.path.join(catalog_datapath, "Chandra.fits").replace("\\", "/")
+                valid_path = get_valid_file_path(chandra_path)
                 print((f"The file at {colored(valid_path, 'yellow')} is {colored('valid', 'green')}."))
                 print("-"*50, "\n")
                 return valid_path, args_catalog
             elif args_catalog == 'Swift':
                 print("\n")
                 print(f"{colored(args_catalog, 'yellow')} catalog is loading")
-                catalog_path = "catalog_data/Swift.fits"
+                swift_path = os.path.join(catalog_datapath, "Swift.fits").replace("\\", "/")
                 print("-"*50)
-                valid_path = get_valid_file_path(catalog_path)
+                valid_path = get_valid_file_path(swift_path)
                 print("-"*50, "\n")
                 return valid_path, args_catalog
             elif args_catalog == 'eRosita':
                 print("\n")
                 print(f"{colored(args_catalog, 'yellow')} catalog is loading")
-                catalog_path = "catalog_data/eRosita.fits"
+                eRosita_path = os.path.join(catalog_datapath, "eRosita.fits").replace("\\", "/")
                 print("-"*50)
-                valid_path = get_valid_file_path(catalog_path)
+                valid_path = get_valid_file_path(eRosita_path)
                 print("-"*50, "\n")
                 return valid_path, args_catalog
             elif args_catalog == "compare_catalog":
@@ -122,16 +125,16 @@ def choose_catalog(args_catalog) -> Tuple[str, str]:
                 catalog_1 = str(input("First catalog : "))
                 while True:
                     if catalog_1 == "Xmm_DR13":
-                        catalog_1_path = "catalog_data/4XMM_slim_DR13cat_v1.0.fits"
+                        catalog_1_path = os.path.join(catalog_datapath, "4XMM_slim_DR13cat_v1.0.fits").replace("\\", "/")
                         break
                     elif catalog_1 == "CSC_2.0":
-                        catalog_1_path = "catalog_data/Chandra.fits"
+                        catalog_1_path = os.path.join(catalog_datapath, "Chandra.fits").replace("\\", "/")
                         break
                     elif catalog_1 == "Swift":
-                        catalog_1_path = "catalog_data/Swift.fits"
+                        catalog_1_path = os.path.join(catalog_datapath, "Swift.fits").replace("\\", "/")
                         break
                     elif catalog_1 == "eRosita":
-                        catalog_1_path = "catalog_data/eRosita.fits"
+                        catalog_1_path = os.path.join(catalog_datapath, "eRosita.fits").replace("\\", "/")
                         break
                     else:
                         catalog_1 = str(input("Keyword unnaccepted, retry : "))
@@ -140,16 +143,16 @@ def choose_catalog(args_catalog) -> Tuple[str, str]:
                 catalog_2 = str(input("Second catalog : "))
                 while True:
                     if catalog_2 == "Xmm_DR13":
-                        catalog_2_path = "catalog_data/4XMM_slim_DR13cat_v1.0.fits"
+                        catalog_2_path = os.path.join(catalog_datapath, "4XMM_slim_DR13cat_v1.0.fits").replace("\\", "/")
                         break
                     elif catalog_2 == "CSC_2.0":
-                        catalog_2_path = "catalog_data/Chandra.fits"
+                        catalog_2_path = os.path.join(catalog_datapath, "Chandra.fits").replace("\\", "/")
                         break
                     elif catalog_2 == "Swift":
-                        catalog_2_path = "catalog_data/Swift.fits"
+                        catalog_2_path = os.path.join(catalog_datapath, "Swift.fits").replace("\\", "/")
                         break
                     elif catalog_2 == "eRosita":
-                        catalog_2_path = "catalog_data/eRosita.fits"
+                        catalog_2_path = os.path.join(catalog_datapath, "eRosita.fits").replace("\\", "/")
                         break
                     else:
                         catalog_2 = str(input("Keyword unnaccepted, retry : "))
@@ -243,6 +246,22 @@ def define_sources_list() -> Table:
 
 
 def add_source_list(active_workflow) -> Table:
+    """
+    Prompt the user to add sources to a calculation and load a FITS file as a source list.
+
+    Args:
+        active_workflow (str): The path to the active workflow directory.
+
+    Returns:
+        Table: A table containing the source list data loaded from the FITS file.
+
+    This function prompts the user to add sources to a calculation and allows them to load a FITS file as a source list.
+    If the user chooses to add sources, they will be prompted to enter the file path of the FITS file.
+    The function then opens the FITS file, reads the data, and returns it as a Table object.
+
+    If the user chooses not to add sources, an empty Table is returned.
+    """
+    
     print(f"You can add a {colored('.fits', 'blue')} file to your modeling ! ")
     while True:
         try:
@@ -358,6 +377,26 @@ def nominal_pointing_info(simulation_data, NearbySRCposition) -> None:
 
 
 def calculate_opti_point(simulation_data, nearby_src_position) -> Tuple[int, float, float, dict]:
+    """
+    Calculate the optimal pointing position for a telescope to maximize the signal-to-noise ratio (SNR).
+
+    Args:
+        simulation_data (dict): A dictionary containing simulation data including telescope data and object data.
+        nearby_src_position (numpy.ndarray): An array containing the positions of nearby sources.
+
+    Returns:
+        Tuple[int, float, float, dict]: A tuple containing:
+            - OptimalPointingIdx (int): Index of the optimal pointing position.
+            - SRCoptimalSEPAR (float): Angular separation of nearby sources from the optimal pointing position (in arcminutes).
+            - SRCoptimalRATES (float): Scaled count rates of nearby sources at the optimal pointing position.
+            - vector_dictionary (dict): A dictionary containing various vectors and results, including:
+                - 'SampleRA': Array of right ascensions for sample pointing positions (in degrees).
+                - 'SampleDEC': Array of declinations for sample pointing positions (in degrees).
+                - 'PSRrates': Array of scaled count rates for the target object at sample pointing positions.
+                - 'SRCrates': Array of total scaled count rates for nearby sources at sample pointing positions.
+                - 'SNR': Array of signal-to-noise ratios at sample pointing positions.
+    """
+    
     min_value, max_value, step = -7.0, 7.1, 0.05
     DeltaRA = Angle(np.arange(min_value, max_value, step), unit=u.deg)/60
     DeltaDEC = Angle(np.arange(min_value, max_value, step), unit=u.deg)/60
@@ -445,6 +484,7 @@ def data_map(simulation_data, vector_dictionary, OptimalPointingIdx, NearbySRCpo
 
     Returns:
     None
+    
     """
     os_dictionary = simulation_data["os_dictionary"]
     object_data = simulation_data['object_data']
@@ -479,23 +519,23 @@ def data_map(simulation_data, vector_dictionary, OptimalPointingIdx, NearbySRCpo
 
 def count_rates(nearby_src_table, model_dictionary, telescop_data) -> Tuple[List[float], Table]:
     """
-        Calculate X-ray count rates for nearby sources using PIMMS modeling.
+    Calculate X-ray count rates for nearby sources using PIMMS modeling.
 
-        This function calculates X-ray count rates for a set of nearby sources based on their model information and associated parameters.
-        It uses PIMMS (Portable, Interactive Multi-Mission Simulator) to perform the modeling and computes the count rates.
+    This function calculates X-ray count rates for a set of nearby sources based on their model information and associated parameters.
+    It uses PIMMS (Portable, Interactive Multi-Mission Simulator) to perform the modeling and computes the count rates.
 
-        Parameters:
-            nearby_src_table (Table): A table containing data on nearby sources, including model information, X-ray flux, and column density.
-            model_dictionary (dict): A dictionary mapping sources (e.g., "src_0") to model and parameter information.
+    Parameters:
+        nearby_src_table (Table): A table containing data on nearby sources, including model information, X-ray flux, and column density.
+        model_dictionary (dict): A dictionary mapping sources (e.g., "src_0") to model and parameter information.
 
-        Returns:
-            tuple: A tuple containing two elements:
-                - A NumPy array of X-ray count rates for each nearby source.
-                - An updated 'nearby_src_table' with the added 'Count Rates' column.
+    Returns:
+        tuple: A tuple containing two elements:
+            - A NumPy array of X-ray count rates for each nearby source.
+            - An updated 'nearby_src_table' with the added 'Count Rates' column.
 
-        Note:
-        - PIMMS modeling commands are generated for each source based on the model, model value, X-ray flux, and column density.
-        - The 'Count Rates' column is added to the 'nearby_src_table' with the calculated count rates.
+    Note:
+    - PIMMS modeling commands are generated for each source based on the model, model value, X-ray flux, and column density.
+    - The 'Count Rates' column is added to the 'nearby_src_table' with the calculated count rates.
     """
     number_source = len(model_dictionary)
     count_rates = np.array([], dtype=float)
@@ -528,6 +568,15 @@ def count_rates(nearby_src_table, model_dictionary, telescop_data) -> Tuple[List
 # --------------- multiple sources catalog to unique sources catalog --------------- #
 
 def unique_dict(name_list: List) -> Dict:
+    """
+    Create a dictionary that associates names with their indices in a list.
+
+    Args:
+        name_list (List): A list of names.
+
+    Returns:
+        Dict: A dictionary where keys are names and values are lists of corresponding indices.
+    """
     index_dict = {}
     duplicate_dict = {}
     
@@ -543,6 +592,17 @@ def unique_dict(name_list: List) -> Dict:
 
 
 def insert_row(unique_sources_dict: Dict, new_row: List[Tuple]) -> Dict:
+    """
+    Insert a new row into a dictionary and maintain sorted order based on values.
+
+    Args:
+        unique_sources_dict (Dict): A dictionary with names as keys and lists of indices as values.
+        new_row (List[Tuple]): A list of tuples containing (name, index) to be inserted.
+
+    Returns:
+        Dict: Updated dictionary with the new row inserted.
+    """
+    
     new_row.sort(key=lambda x: x[1])
     
     for key, value in new_row:
@@ -563,6 +623,17 @@ def insert_row(unique_sources_dict: Dict, new_row: List[Tuple]) -> Dict:
 
 
 def replace_nan_value(key: str, unique_table: Table) -> Table:
+    """
+    Replace NaN values in a table's specified columns with their minimum non-NaN values.
+
+    Args:
+        key (str): The catalog key to determine which columns to process.
+        unique_table (Table): A table containing data with NaN values.
+
+    Returns:
+        Table: Updated table with NaN values replaced.
+    """
+    
     flux_obs = dict_cat.dictionary_catalog[key]["flux_obs"]
     flux_obs_err = dict_cat.dictionary_catalog[key]["flux_obs_err"]
     band_flux_obs = dict_cat.dictionary_catalog[key]["band_flux_obs"]
@@ -596,6 +667,17 @@ def replace_nan_value(key: str, unique_table: Table) -> Table:
 
 
 def create_unique_sources_catalog(nearby_sources_table: Table, column_name: List) -> Table:
+    """
+    Create a unique sources catalog based on a nearby sources table and catalog-specific column names.
+
+    Args:
+        nearby_sources_table (Table): A table containing nearby sources data.
+        column_name (List): A list of column names used for catalog-specific data.
+
+    Returns:
+        Table: A table representing the unique sources catalog.
+    """
+    
     key = column_name["catalog_name"]
 
     dict_flux_name = {"flux_obs": dict_cat.dictionary_catalog[key]["flux_obs"],
@@ -684,6 +766,20 @@ def create_unique_sources_catalog(nearby_sources_table: Table, column_name: List
 
 
 def vignetting_factor(OptimalPointingIdx, vector_dictionary, simulation_data, data, nearby_sources_table) -> Tuple[List[float], Table]:
+    """
+    Calculate the vignetting factors for nearby sources and the target object based on their distances.
+
+    Args:
+        OptimalPointingIdx (int): Index of the optimal pointing position.
+        vector_dictionary (dict): A dictionary containing vectors for RA and DEC.
+        simulation_data (dict): A dictionary containing simulation data including object data, telescope data, etc.
+        data (tuple): A tuple containing RA, DEC, and name data.
+        nearby_sources_table (Table): A table containing information about nearby sources.
+
+    Returns:
+        Tuple[List[float], Table]: A tuple containing the calculated vignetting factors and an updated nearby sources table.
+    """
+    
     ra, dec, name = data
     
     object_data = simulation_data["object_data"]
@@ -723,6 +819,17 @@ def vignetting_factor(OptimalPointingIdx, vector_dictionary, simulation_data, da
 
 
 def write_fits_file(nearby_sources_table, simulation_data) -> None:
+    """
+    Write the nearby sources table to a FITS file and open it with TOPCAT.
+
+    Args:
+        nearby_sources_table (Table): A table containing information about nearby sources.
+        simulation_data (dict): A dictionary containing simulation data and file path information.
+
+    Returns:
+        None
+    """
+    
     try:
         os_dictionary = simulation_data["os_dictionary"]
         key = os_dictionary["catalog_key"]
@@ -731,7 +838,7 @@ def write_fits_file(nearby_sources_table, simulation_data) -> None:
         nearby_sources_table.write(nearby_sources_table_path, format='fits', overwrite=True)
         print(f"Nearby sources table was created in : {colored(nearby_sources_table_path, 'magenta')}")
         
-        topcat_path = os.path.join(os_dictionary["active_workflow"], 'softwares/topcat-extra.jar').replace("\\", "/")
+        topcat_path = os_dictionary["topcat_software_path"]
         command = f"java -jar {topcat_path} {nearby_sources_table_path}"
         subprocess.run(command)
         
@@ -740,6 +847,18 @@ def write_fits_file(nearby_sources_table, simulation_data) -> None:
     
     
 def modeling(vignetting_factor: List, simulation_data: Dict, column_dictionary: Dict, catalog_name: str) -> None:
+    """
+    Perform modeling of nearby sources using a power-law model and create a plot.
+
+    Args:
+        vignetting_factor (List): List of calculated vignetting factors for nearby sources.
+        simulation_data (Dict): A dictionary containing simulation data and object information.
+        column_dictionary (Dict): A dictionary containing column names for flux and energy band.
+        catalog_name (str): Name of the catalog used for modeling.
+
+    Returns:
+        None
+    """
     
     object_data = simulation_data["object_data"]
     os_dictionary = simulation_data["os_dictionary"]
@@ -818,6 +937,24 @@ def modeling(vignetting_factor: List, simulation_data: Dict, column_dictionary: 
 
 
 def py_to_xlsx(excel_data_path: str, count_rates: List, object_data: Dict, args: Tuple[str, str], radius: float) -> None:
+    """
+    Converts and saves Python data into an Excel file.
+
+    Args:
+    excel_data_path (str): The path to the directory where the Excel file will be saved.
+    count_rates (List): A list of count rates to be saved.
+    object_data (Dict): A dictionary containing data about the observed object.
+    args (Tuple[str, str]): A tuple containing additional arguments, typically catalog identifiers.
+    radius (float): The radius parameter related to the data.
+
+    This function creates an Excel workbook and writes the provided count rates into it. The file is named based on 
+    the provided arguments and object data, and is saved in the specified directory.
+
+    Note:
+    - The file naming convention is derived from the catalog type and object information.
+    - The function currently supports different catalogs (e.g., Xmm_DR13, CSC_2.0, Swift, eRosita, match).
+    """
+
     
     if args[0] == "Xmm_DR13":
         cat = "xmm"
@@ -841,6 +978,27 @@ def py_to_xlsx(excel_data_path: str, count_rates: List, object_data: Dict, args:
 
 
 def xlsx_to_py(excel_data_path: str, nearby_sources_table: Table, object_data: Dict, args: Tuple[str, str], radius: float) -> Tuple[List[float], Table]:
+    """
+    Reads count rate data from an Excel file and integrates it into a Python table.
+
+    Args:
+    excel_data_path (str): The path to the directory containing the Excel file.
+    nearby_sources_table (Table): The table into which the count rates will be integrated.
+    object_data (Dict): A dictionary containing data about the observed object.
+    args (Tuple[str, str]): A tuple containing additional arguments, typically catalog identifiers.
+    radius (float): The radius parameter related to the data.
+
+    The function opens the specified Excel workbook, reads count rate data from it, and adds these count rates to the 
+    provided table under a new column 'count_rate'.
+
+    Returns:
+    Tuple[List[float], Table]: A tuple containing the list of count rates and the updated nearby sources table.
+
+    Note:
+    - The file to be read is named based on the catalog type and object information.
+    - The function supports different catalogs (e.g., Xmm_DR13, CSC_2.0, Swift, eRosita, match).
+    """
+
     
     if args[0] == "Xmm_DR13":
         cat = "xmm"
@@ -870,6 +1028,25 @@ def xlsx_to_py(excel_data_path: str, nearby_sources_table: Table, object_data: D
 
 
 def load_relevant_sources(cat: str, file_to_load: str) -> Dict:
+    """
+    Loads and processes source data from a specified catalog and returns it in a structured format.
+
+    Args:
+    cat (str): Name of the catalog to load (e.g., "Swift", "XMM").
+    file_to_load (str): Path to the FITS file containing the raw catalog data.
+
+    The function loads data from a FITS file, processes it by sorting and extracting unique sources, 
+    and computes additional parameters like time steps, observation IDs, and flux data.
+
+    Returns:
+    Dict: A dictionary of processed source data, with keys being the names of the sources and values being 
+          the corresponding data structured in a pre-defined format.
+
+    Note:
+    - The function handles different catalogs with specific processing needs, particularly for time-based data.
+    - An error in data loading is handled and reported.
+    """
+    
     print(f"Loading {cat}...")
     try:
         with fits.open(file_to_load, memmap=True) as raw_data:
@@ -951,6 +1128,24 @@ def load_relevant_sources(cat: str, file_to_load: str) -> Dict:
 
 
 def load_master_sources(file_to_load: str) -> Dict:
+    """
+    Loads multi-instrument source data from a master source file, integrating data from various catalogs.
+
+    Args:
+    file_to_load (str): Directory path where the master source file and related catalog files are located.
+
+    The function reads a master source cone FITS file and integrates it with relevant catalog data. 
+    It combines data from multiple catalogs to create a comprehensive view of each master source.
+
+    Returns:
+    Dict: A dictionary of master sources, where each key is a master source ID and its value is an object 
+          representing the combined data from various catalogs.
+
+    Note:
+    - The function assumes the existence of catalog-specific FITS files in the same directory as the master source file.
+    - Any errors during data loading are handled and reported.
+    """
+    
     """Loads the multi-instruments sources in a dictionary"""
     print(f"Loading Master Sources...")
     path_file_to_load = os.path.join(file_to_load, 'Master_source_cone.fits').replace("\\", "/")
@@ -988,6 +1183,22 @@ def load_master_sources(file_to_load: str) -> Dict:
 
 
 def master_source_plot(master_sources: Dict, simulation_data: Dict, number_graph: int) -> None:
+    """
+    Generates and saves plots for multi-instrument sources based on catalog data.
+
+    Args:
+    master_sources (Dict): A dictionary of multi-instrument sources to be plotted.
+    simulation_data (Dict): A dictionary containing simulation data including object positions.
+    number_graph (int): The number of graphs to generate from the master sources.
+
+    The function iterates over a specified number of master sources and generates a plot for each. 
+    It combines data from different catalogs and plots energy bands and fluxes.
+
+    Note:
+    - The function is designed to handle various catalogs and adjusts the plot according to the specific data available for each source.
+    - The plots are saved in a specified directory, and their names are indexed.
+    """
+
     object_data = simulation_data["object_data"]
     plot_var_sources_path = simulation_data["os_dictionary"]["plot_var_sources_path"]
     
@@ -1036,7 +1247,26 @@ def master_source_plot(master_sources: Dict, simulation_data: Dict, number_graph
 # --------------- modeling spectra with jaxspec --------------- # 
 
 
-def cross_catalog_index(output_name :str, key: str, iauname: str, nearby_sources_table: Table) -> List:
+def cross_catalog_index(output_name: str, key: str, iauname: str, nearby_sources_table: Table) -> List:
+    """
+    Determines the indices in a nearby sources table that correspond to sources found in a master source cone file.
+
+    Args:
+    output_name (str): Directory path where the master source cone file is located.
+    key (str): Key representing the catalog (e.g., "CS_Chandra" or "Chandra").
+    iauname (str): Column name in the nearby sources table representing the IAU name of sources.
+    nearby_sources_table (Table): A table containing data about nearby sources.
+
+    The function reads the master source cone FITS file to extract source names. It then matches these 
+    names with those in the nearby sources table to find corresponding indices.
+
+    Returns:
+    List: A list of indices from the nearby sources table that match with the master source cone.
+
+    Note:
+    - This function is specific to astronomical data analysis where cross-catalog matching is required.
+    """
+    
     master_source_cone_path = os.path.join(output_name, "Master_source_cone.fits").replace("\\", "/")
     with fits.open(master_source_cone_path) as data:
         master_source_cone = Table(data[1].data)
@@ -1055,6 +1285,26 @@ def cross_catalog_index(output_name :str, key: str, iauname: str, nearby_sources
 
 
 def modeling_source_spectra(nearby_sources_table: Table, instrument, model, var_index) -> List:
+    """
+    Generates model spectra for sources in a nearby sources table using specified instrument and model parameters.
+
+    Args:
+    nearby_sources_table (Table): A table containing data of nearby sources.
+    instrument: Instrument object with parameters for generating spectra.
+    model: Spectral model to be applied for the spectra generation.
+    var_index (List): List of indices indicating variable sources in the nearby sources table.
+
+    The function iterates through the nearby sources table, applying the spectral model to each source. 
+    It accounts for vignetting factors and adjusts parameters like 'N_H' and 'alpha' based on source data.
+
+    Returns:
+    List: A tuple of two lists - the total spectra and total variable spectra for all sources.
+
+    Note:
+    - The function assumes 'vignetting_factor', 'Nh', and 'Photon Index' columns in the nearby sources table.
+    - 'fakeit_for_multiple_parameters' function is used for generating fake spectra based on the given model and instrument.
+    """
+    
     print(f"\n{colored('Modeling spectra...', 'yellow', attrs=['underline'])}")
     total_spectra = []
     total_var_spectra = []
@@ -1081,6 +1331,32 @@ def modeling_source_spectra(nearby_sources_table: Table, instrument, model, var_
 
 
 def total_plot_spectra(total_spectra: List, total_var_spectra: List, instrument, simulation_data: Dict, catalog_name: str) -> Dict:
+    """
+    Generates and saves a plot of spectral modeling data from a specified catalog and returns spectral data.
+
+    Args:
+    total_spectra (List): A list containing spectra from nearby sources.
+    total_var_spectra (List): A list containing variability spectra data.
+    instrument: An object containing instrument-specific data such as output energies.
+    simulation_data (Dict): A dictionary containing simulation parameters and paths.
+    catalog_name (str): Name of the catalog used for spectral modeling.
+
+    The function creates three subplots:
+    1. Spectra from Nearby Sources: Plots the median spectra for each source.
+    2. Sum of Spectra: Shows the sum of all spectra.
+    3. Spectrum Summed with Variability Sources Error: Includes error bars representing variability.
+
+    The plot includes logarithmic scaling on both axes, and the x-axis represents energy in keV. 
+    The y-axis represents counts. The plot is saved as a PNG file in a directory specified in `simulation_data`.
+
+    Returns:
+    Dict: A dictionary containing energy, counts, and their upper and lower limits.
+
+    Note:
+    - The saved plot is named based on the catalog name and the object of interest from the simulation data.
+    - The function assumes `instrument` has an attribute `out_energies` for energy values.
+    """
+    
     object_data = simulation_data["object_data"]
     os_dictionary = simulation_data["os_dictionary"]
     graph_data = {"min_lim_x": 0.2,
@@ -1148,6 +1424,22 @@ def total_plot_spectra(total_spectra: List, total_var_spectra: List, instrument,
 
 
 def write_txt_file(simulation_data: Dict, data: Dict) -> None:
+    """
+    Writes the spectral modeling data into a formatted text file.
+
+    Args:
+    simulation_data (Dict): A dictionary containing simulation parameters and paths.
+    data (Dict): A dictionary with spectral data including energy, counts, and their upper and lower limits.
+
+    The function creates a text file in the specified directory within the simulation data dictionary. 
+    The file includes a header and rows of data, each containing energy values, count rates, and their upper 
+    and lower limits. The data is formatted for readability and analysis purposes.
+
+    Note:
+    - The output text file is named based on the 'catalog_key' value in the simulation data dictionary.
+    - The function expects 'data' to have keys corresponding to 'Energy', 'Counts', 'Upper limit', 
+      and 'Lower limit' and their associated values.
+    """
     
     catalog_directory = simulation_data['os_dictionary']["catalog_directory"]
     key = simulation_data["os_dictionary"]["catalog_key"]

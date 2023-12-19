@@ -37,133 +37,147 @@ import shlex
 
 class XmmCatalog:
     """
-    A class to manage and analyze data from the XMM-Newton X-ray observatory.
+    Class for managing XMM source catalogs.
 
-    This class provides functionality to load, analyze, and visualize data from XMM catalogs. 
-    It finds nearby sources in the catalog based on a specified radius and performs analysis 
-    on photon indices, variability, and neighborhood of objects.
+    This class is designed for loading and processing XMM (X-ray Multi-Mirror Mission) source catalogs.
+    It includes functionalities for finding nearby sources to a given position, analyzing their variability, 
+    and visualizing the corresponding data.
 
     Attributes:
-        xmm_catalog (Table): The loaded XMM catalog data.
-        nearby_sources_table (Table): A table of sources found within the specified radius.
-        nearby_sources_position (List[Tuple]): List of positions of the nearby sources.
-        xmm_dr11_catalog (Table): The loaded XMM DR11 catalog data.
-        x2a_catalog (Table): The loaded XMM to Athena catalog data.
-        index_table (Table): A table containing information related to photon indices.
-        variability_table (Table): A table containing information related to source variability.
-        model_dictionary (Dict): A dictionary containing model-related information.
+        key (str): Key identifying the XMM catalog.
+        xmm_catalog (Table): Table of the opened XMM catalog.
+        nearby_sources_table (Table): Table of nearby sources.
+        nearby_sources_position (SkyCoord): Coordinates of the nearby sources.
+        xmm_dr11_catalog (Table): Table of the XMM DR11 catalog.
+        x2a_catalog (Table): Table of the Xmm2Athena catalog.
+        index_table (Table): Table indexing sources in different catalogs.
+        variability_table (Table): Table of sources with their variability.
+        model_dictionary (dict): Dictionary of models associated with the sources.
+
+    Args:
+        catalog_path (str): Path to the XMM catalog file.
+        radius (Quantity): Search radius around the object.
+        simulation_data (Dict): Simulation data used for analysis.
+        user_table (Table): User data table to use in the analysis.
 
     Methods:
-        open_catalog(catalog_path: str) -> Table:
-            Loads and returns the data from a given catalog file path.
-        
-        find_nearby_sources(radius: float, dictionary: Dict, user_table: Table) -> Tuple[Table, List[Tuple]]:
-            Finds and returns nearby sources within the specified radius and the positions of those sources.
+        open_catalog: Opens an XMM catalog from a given path.
+        find_nearby_sources: Finds sources close to a given object.
+        optimization_phoindex: Optimizes the photon index for a given source.
+        visualization_interp: Visualizes the interpolation of the photon index.
+        empty_row: Creates an empty row for a catalog table.
+        get_phoindex_nh: Retrieves the photon index and column density for nearby sources.
+        variability_table: Constructs a table of nearby sources with their variability.
+        neighbourhood_of_object: Displays the neighborhood of a given object.
+        dictionary_model: Creates a dictionary of models for the sources.
 
-        optimization_phoindex(number: int):
-            Optimizes the photon index for a given number of sources.
-
-        visualization_interp(optimization_parameters: List[float], photon_index: float):
-            Visualizes the interpolated photon indices based on optimization parameters.
-
-        get_phoindex_nh() -> Tuple[Table, Table]:
-            Gets and returns the photon index and hydrogen column density (nh) from the catalog data.
-
-        variability_table(dictionary: Dict) -> Table:
-            Generates and returns a table containing variability information of sources.
-
-        neighbourhood_of_object(radius: float, dictionary: Dict):
-            Analyzes and displays information about the neighbourhood of a given object within the specified radius.
-
-        dictionary_model() -> Dict:
-            Generates and returns a dictionary containing model-related information.
     """
 
-
-    def __init__(self, catalog_path: str, radius: Quantity, dictionary: dict, user_table: Table, os_dictionary: dict) -> None:
+    def __init__(self, catalog_path: str, radius: Quantity, simulation_data:Dict, user_table: Table) -> None:
         """
-        Initializes the XmmCatalog instance.
+        Initializes the XmmCatalog class.
 
-        This constructor initializes an XmmCatalog object by loading catalog data from the specified path,
-        finding nearby sources within the given radius, analyzing photon indices, variability, and neighborhood 
-        of objects, and generating a model dictionary.
+        This constructor sets up the catalog by loading data from specified paths, finding nearby sources,
+        and preparing various tables and models for analysis.
 
-        Parameters:
-            catalog_path (str): The file path to the XMM catalog to be loaded.
-            radius (float): The radius within which to search for nearby sources.
-            dictionary (Dict): A dictionary containing user-defined parameters for analysis.
-            user_table (Table): A user-defined table for additional data and analysis.
+        Args:
+            catalog_path (str): Path to the primary XMM catalog file. This file is used to initialize the xmm_catalog attribute.
+            radius (Quantity): The search radius for finding nearby sources. This is used in conjunction with object_data from simulation_data to determine the area of interest.
+            simulation_data (Dict): A dictionary containing simulation data. This includes 'object_data' used in find_nearby_sources and 'os_dictionary' for additional catalog paths.
+            user_table (Table): An optional user-provided table to include in the analysis. This is used in the find_nearby_sources method to add user-specific data.
 
-        Attributes:
-            xmm_catalog (Table): The loaded XMM catalog data.
-            nearby_sources_table (Table): A table of sources found within the specified radius.
-            nearby_sources_position (List[Tuple]): List of positions of the nearby sources.
-            xmm_dr11_catalog (Table): The loaded XMM DR11 catalog data.
-            x2a_catalog (Table): The loaded XMM to Athena catalog data.
-            index_table (Table): A table containing information related to photon indices.
-            variability_table (Table): A table containing information related to source variability.
-            model_dictionary (Dict): A dictionary containing model-related information.
+        The constructor performs several key operations:
+        - It initializes the xmm_catalog attribute by opening the catalog from the given path.
+        - It finds nearby sources using the find_nearby_sources method and stores the results in nearby_sources_table and nearby_sources_position.
+        - It loads additional XMM catalogs (DR11 and Xmm2Athena) from paths specified in the simulation_data and initializes xmm_dr11_catalog and x2a_catalog.
+        - It calculates photon indices and column densities for nearby sources using the get_phoindex_nh method.
+        - It builds a variability table for the nearby sources and visualizes the neighborhood of the object of interest.
+
+        Attributes Initialized:
+            key (str): A key for identifying the catalog type, set to "XMM".
+            ra (str) : right ascension name in XMM catalog.
+            dec (str) : declination name in XMM catalog.
+            xmm_catalog (Table): The main catalog data loaded from catalog_path.
+            nearby_sources_table (Table): A table of sources found near the object of interest.
+            nearby_sources_position (SkyCoord): The positions of nearby sources.
+            xmm_dr11_catalog (Table): The XMM DR11 catalog data.
+            x2a_catalog (Table): The Xmm2Athena catalog data.
+            index_table (Table): An indexing table for sources across different catalogs.
+            variability_table (Table): A table capturing the variability of sources.
+            model_dictionary (Dict): A dictionary of models derived from the analysis.
         """
-        self.xmm_catalog = self.open_catalog(catalog_path=catalog_path)
-        self.nearby_sources_table, self.nearby_sources_position = self.find_nearby_sources(radius=radius, dictionary=dictionary, user_table=user_table)
-        self.os_dictionary = os_dictionary
+        self.key = "XMM"
+        # ---------- coord ---------- #
+        self.ra = dict_cat.dictionary_coord[self.key]["right_ascension"]
+        self.dec = dict_cat.dictionary_coord[self.key]["declination"]
+        # -------------------------- #
         
-        test_dr11_path = "catalog_data/4XMM_DR11cat_v1.0.fits"
-        test_x2a_path = "catalog_data/xmm2athena_D6.1_V3.fits"
+        self.xmm_catalog = self.open_catalog(catalog_path=catalog_path)
+        self.nearby_sources_table, self.nearby_sources_position = self.find_nearby_sources(radius=radius, object_data=simulation_data["object_data"], user_table=user_table)
+        
+        test_dr11_path = os.path.join(simulation_data["os_dictionary"]["catalog_datapath"], "4XMM_DR11cat_v1.0.fits").replace("\\", "/")
+        test_x2a_path = os.path.join(simulation_data["os_dictionary"]["catalog_datapath"], "xmm2athena_D6.1_V3.fits").replace("\\", "/")
         xmm_dr11_path = f.get_valid_file_path(test_dr11_path)
         x2a_path = f.get_valid_file_path(test_x2a_path)
         
         self.xmm_dr11_catalog = self.open_catalog(catalog_path=xmm_dr11_path)
         self.x2a_catalog = self.open_catalog(catalog_path=x2a_path)
         self.nearby_sources_table, self.index_table = self.get_phoindex_nh()
-        self.variability_table = self.variability_table(dictionary)
-        self.neighbourhood_of_object(radius=radius, dictionary=dictionary, os_dictionary=os_dictionary)
+        self.variability_table = self.variability_table(object_data=simulation_data["object_data"])
+        self.neighbourhood_of_object(radius=radius, simulation_data=simulation_data)
         self.model_dictionary = self.dictionary_model()
         
     
     def open_catalog(self, catalog_path: str) -> Table:
         """
-        Opens and reads the catalog data from the specified file path.
+        Opens an XMM catalog from a specified file path and returns it as an Astropy Table.
 
-        This method opens a FITS file from the given path, reads the data from the first HDU extension,
-        converts it into an Astropy Table, and returns the resulting table.
+        This method is designed to open FITS files which contain astronomical data, typically used in X-ray astronomy. 
+        It utilizes the 'fits' module to read the file and convert the data into a format that is easily manageable 
+        and usable for further analysis.
 
-        Parameters:
-            catalog_path (str): The file path to the catalog to be opened and read.
+        Args:
+            catalog_path (str): The file path to the XMM catalog FITS file. This file is expected to be in a 
+                                format compatible with the FITS standard, commonly used in astrophysics and astronomy.
 
         Returns:
-            result_table (astropy.table.Table): The catalog data converted into an Astropy Table.
+            Table: An Astropy Table object containing the data from the FITS file. The table structure allows for 
+                easy manipulation and analysis of the catalog data, leveraging the capabilities of the Astropy package.
+
         """
         with fits.open(catalog_path, memmap=True) as data:
-            result_table = Table(data[1].data)
-            data.close()
-            return result_table
+            return Table(data[1].data)
         
     
-    def find_nearby_sources(self, radius: Quantity, dictionary: dict, user_table: Table) -> Tuple[Table, SkyCoord]:
+    def find_nearby_sources(self, radius: Quantity, object_data: dict, user_table: Table) -> Tuple[Table, SkyCoord]:
         """
-        Searches and returns nearby sources from the XMM catalog based on a specified radius and position.
+        Searches for sources within a specified radius around a given astronomical object and returns a table of these sources along with their coordinates.
 
-        This method searches the XMM catalog for sources within a specified radius from a given object position.
-        It first filters the catalog based on RA (Right Ascension) and DEC (Declination) within a pointing area,
-        and then refines the search based on angular separation. It also allows for additional sources from a user-defined
-        table to be included in the search. The results, if found, are returned as tables of nearby sources and their positions.
+        This method filters the XMM catalog to find sources that are within a certain radius of the specified object's position. 
+        It can incorporate additional user-provided data for a more tailored search.
 
-        Parameters:
-            radius (float or astropy.units.Quantity): The search radius around the object position.
-            dictionary (Dict): A dictionary containing parameters such as 'object_position' (SkyCoord) and 'object_name' (str).
-            user_table (astropy.table.Table): An additional table of user-defined sources.
+        Args:
+            radius (Quantity): The search radius around the object of interest. This radius is used to define a circular region in the sky within which the sources will be searched for.
+            object_data (dict): A dictionary containing data about the object of interest. It should include keys 'object_position' (SkyCoord) and 'object_name' (str), representing the astronomical coordinates and the name of the object, respectively.
+            user_table (Table): An optional Astropy Table containing user-defined data. If provided, this table is used in addition to the XMM catalog for finding nearby sources.
 
         Returns:
-            nearby_src_table (astropy.table.Table): A table of sources found within the specified radius.
-            nearby_src_position (astropy.coordinates.SkyCoord): Sky coordinates of the nearby sources.
+            Tuple[Table, SkyCoord]: A tuple containing two elements:
+                - An Astropy Table of sources found within the specified radius. The table includes various details of these sources as defined in the XMM catalog.
+                - A SkyCoord object representing the coordinates of the found sources.
 
-        Raises:
-            Exception: An exception is raised and the program exits if no sources are found or if an error occurs.
-        """   
+        The method involves the following steps:
+        - Calculating the minimum and maximum right ascension (RA) and declination (Dec) based on the object's position and the specified radius.
+        - Filtering the XMM catalog to create a smaller table of sources within this RA and Dec range.
+        - Further filtering these sources based on the angular separation from the object's position to ensure they are within the specified radius.
+        - Handling user-provided data if available, to include additional sources in the search.
+        - Returning the final list of nearby sources and their positions.
+        
+        """
+        object_position = object_data['object_position']
+        object_name = object_data['object_name']
+        
         pointing_area = radius + 5*u.arcmin
-        name = dictionary["object_name"]
-        object_position = dictionary['object_position']
         min_ra, max_ra = object_position.ra - pointing_area, object_position.ra + pointing_area
         min_dec, max_dec = object_position.dec - pointing_area, object_position.dec + pointing_area
         
@@ -174,34 +188,34 @@ class XmmCatalog:
         
         print(fr"{colored('Reducing XMM catalog...', 'yellow')} to fov of {radius.value + 5 } arcmin")
         for number in tqdm(range(len(self.xmm_catalog))):
-            if min_ra/u.deg < self.xmm_catalog['SC_RA'][number] < max_ra/u.deg and min_dec/u.deg < self.xmm_catalog['SC_DEC'][number] < max_dec/u.deg:
+            if min_ra/u.deg < self.xmm_catalog[self.ra][number] < max_ra/u.deg and min_dec/u.deg < self.xmm_catalog[self.dec][number] < max_dec/u.deg:
                 small_table.add_row(self.xmm_catalog[number])
                 
         if len(user_table) == 0:
-            src_position = SkyCoord(ra=small_table['SC_RA'], dec=small_table['SC_DEC'], unit=u.deg)
-            print(f"{colored(f'Find sources close to {name} with XMM catalog', 'blue')}")
+            src_position = SkyCoord(ra=small_table[self.ra], dec=small_table[self.dec], unit=u.deg)
+            print(f"{colored(f'Find sources close to {object_name} with XMM catalog', 'blue')}")
             for number in tqdm(range(len(small_table))):
                 if f.ang_separation(object_position, src_position[number]) < radius:
                     nearby_src_table.add_row(small_table[number])
-            nearby_src_position = SkyCoord(ra=nearby_src_table['SC_RA'], dec=nearby_src_table['SC_DEC'], unit=u.deg)
+            nearby_src_position = SkyCoord(ra=nearby_src_table[self.ra], dec=nearby_src_table[self.dec], unit=u.deg)
 
         else:
             for number in range(len(user_table)):
                 small_table.add_row(user_table[number])
                 
-            src_position = SkyCoord(ra=small_table['SC_RA'], dec=small_table['SC_DEC'], unit=u.deg)
-            print(f"{colored(f'Find sources close to {name} with XMM catalog', 'blue')}")
+            src_position = SkyCoord(ra=small_table[self.ra], dec=small_table[self.dec], unit=u.deg)
+            print(f"{colored(f'Find sources close to {object_name} with XMM catalog', 'blue')}")
             for number in tqdm(range(len(small_table))):
                 if f.ang_separation(object_position, src_position[number]) < radius:
                     nearby_src_table.add_row(small_table[number])
-            nearby_src_position = SkyCoord(ra=nearby_src_table['SC_RA'], dec=nearby_src_table['SC_DEC'], unit=u.deg)
+            nearby_src_position = SkyCoord(ra=nearby_src_table[self.ra], dec=nearby_src_table[self.dec], unit=u.deg)
                 
         try:
             if len(nearby_src_table) != 0:
-                print((f"We have detected {len(nearby_src_table)} sources close to {dictionary['object_name']}.\n"))
+                print((f"We have detected {len(nearby_src_table)} sources close to {object_name}.\n"))
                 return nearby_src_table, nearby_src_position
             else:
-                print(f"No sources detected close to {dictionary['object_name']}.")
+                print(f"No sources detected close to {object_name}.")
                 sys.exit()
         except Exception as error:
             print(f"An error occured : {error}")
@@ -209,33 +223,42 @@ class XmmCatalog:
        
     def optimization_phoindex(self, number: int) -> Tuple[Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray], Tuple[float, float]]:
         """
-        Optimizes and returns the parameters of both power-law and absorbed power-law models.
+        Optimizes the photon index for a specific source in the catalog using an absorbed power law model.
 
-        This method fits the observed flux data to both power-law and absorbed power-law models using
-        a non-linear least-squares minimization. The optimized parameters for both models along with
-        the photon indices are returned.
+        This method applies curve fitting to observed flux data to determine the best-fit parameters of an absorbed power law model. 
+        It is primarily used to analyze the energy distribution of a source and estimate its photon index, a key parameter in astrophysical analysis.
 
-        Parameters:
-            number (int): The index of the source in the nearby_sources_table.
+        Args:
+            number (int): The index of the source in the nearby_sources_table for which the photon index is to be optimized.
 
         Returns:
-            optimization_parameters (tuple): A tuple containing energy bands, observed flux,
-                                            observed flux errors, and predicted fluxes for both models.
-            photon_index (tuple): A tuple containing photon indices for both models.
+            Tuple[Tuple[np.ndarray, ...], Tuple[float, float]]: A tuple containing two elements:
+                - A tuple of numpy arrays representing the energy band, observed flux (y_array), flux error (yerr_array), 
+                and the fitted power law values for the given energy band.
+                - A tuple containing the optimized constant and photon index values from the power law fit.
+
+        The method involves:
+        - Retrieving the observed flux and its error for the given source based on predefined band names.
+        - Normalizing the flux values based on the energy band width.
+        - Using the `curve_fit` function from `scipy.optimize` to fit the absorbed power law model to the observed data.
+        - Returning the optimized parameters along with the energy band and normalized flux values.
+
+        Note:
+            The method assumes specific keys in 'dict_cat.dictionary_catalog' for retrieving energy band and flux information.
+            The absorbed power law model is defined internally within the method.
         """    
         
         def absorbed_power_law(x, constant, gamma):
             sigma = np.array([1e-20, 5e-21, 1e-22, 1e-23, 1e-24], dtype=float)
             return (constant * x ** (-gamma)) * (np.exp(-sigma * 3e20))
         
-        
-        key = 'XMM'
-        energy_band = dict_cat.dictionary_catalog[key]["energy_band_center"]
-        energy_band_half_width = dict_cat.dictionary_catalog[key]["energy_band_half_width"]
+
+        energy_band = dict_cat.dictionary_catalog[self.key]["energy_band_center"]
+        energy_band_half_width = dict_cat.dictionary_catalog[self.key]["energy_band_half_width"]
         tab_width = 2 * energy_band_half_width
         
-        band_flux_obs_name = dict_cat.dictionary_catalog[key]["band_flux_obs"]
-        band_flux_obs_err_name = dict_cat.dictionary_catalog[key]["band_flux_obs_err"]
+        band_flux_obs_name = dict_cat.dictionary_catalog[self.key]["band_flux_obs"]
+        band_flux_obs_err_name = dict_cat.dictionary_catalog[self.key]["band_flux_obs_err"]
         
         flux_obs = [self.nearby_sources_table[name][number] for name in band_flux_obs_name]
         flux_err = [[self.nearby_sources_table[err_0][number] for err_0 in band_flux_obs_err_name[0]],
@@ -256,18 +279,26 @@ class XmmCatalog:
 
     def visualization_interp(self, optimization_parameters, photon_index) -> None:
         """
-        Visualizes the interpolation of photon index for the sources.
+        Visualizes the results of the photon index interpolation for each source.
 
-        This method plots the observed flux along with the predicted flux from both power-law
-        and absorbed power-law models. It creates a grid of subplots showing each source's data.
+        This method creates a plot for each source showing the observed flux versus the energy band, along with the fitted power law model. 
+        It's useful for visually assessing the quality of the fit and understanding the energy distribution of the sources.
 
-        Parameters:
-            optimization_parameters (list of tuples): A list containing tuples of energy bands,
-                                                    observed flux, observed flux errors, and
-                                                    predicted fluxes for both models for each source.
-            photon_index (list of tuples): A list containing tuples of photon indices for both models
-                                        for each source.
+        Args:
+            optimization_parameters (tuple): A tuple containing the energy band, observed flux, flux error, and the fitted power law values for each source. These parameters are obtained from the optimization_phoindex method.
+            photon_index (array): An array of photon index values for each source. These are the optimized photon index values obtained from the absorbed power law fit.
+
+        The method performs the following steps:
+        - For each set of optimization parameters, it plots the observed flux (with errors) against the energy band.
+        - It also plots the corresponding absorbed power law model, using the optimized photon index for each source.
+        - The plots are annotated with the photon index value for each source.
+        - The plot uses a logarithmic scale for both axes for better visualization of the power law behavior.
+
+        Note:
+            - The method assumes that the energy band data is provided in keV and the flux in erg.cm^-2.s^-1.keV^-1.
+            - This method does not return any value but displays the plots directly using matplotlib.
         """
+        
         energy_band = dict_cat.dictionary_catalog["XMM"]["energy_band_center"]
         
         fig, axes = plt.subplots(1, 1, figsize=(15, 8))
@@ -283,7 +314,6 @@ class XmmCatalog:
             
             axes.errorbar(energy_band, flux_obs, flux_obs_err, fmt='*', color='red', ecolor='black')
             axes.plot(energy_band, absorbed_power_law, label=f"$\Gamma$ = {absorb_pho_index:.8f}")
-            # axes.step(energy_band, flux_obs, where='pre', label=f"$\Gamma$ = {absorb_pho_index:.8f}")
     
         axes.legend(loc="upper left", ncol=4, fontsize=6)
         axes.loglog()
@@ -309,17 +339,29 @@ class XmmCatalog:
 
     def get_phoindex_nh(self) -> Tuple[Table, Table]:
         """
-        Computes and visualizes the photon index and hydrogen column density (Nh) for each source.
+        Retrieves and calculates the photon index and hydrogen column density (Nh) for each source in the nearby_sources_table.
 
-        This method searches for each source in the xmm_dr11_catalog and x2a_catalog, computes the
-        hydrogen column density (Nh), and optimizes the photon index using the optimization_phoindex method.
-        The results are then visualized using the visualization_interp method and added to the nearby_sources_table.
+        This method performs a series of operations to determine the photon index and Nh values for sources 
+        based on data from the XMM DR11 and Xmm2Athena catalogs. It also involves optimizing the photon index 
+        for sources not found in the Xmm2Athena catalog using an absorbed power law model.
 
         Returns:
-            nearby_sources_table (astropy.table.Table): The updated nearby sources table with added columns
-                                                        for Photon Index and Nh.
-            index_table (astropy.table.Table): A table containing indices of sources in the various catalogs.
-        """    
+            Tuple[Table, Table]: A tuple of two Astropy Tables:
+                - The first table is the nearby_sources_table, updated with new columns for Photon Index and Nh.
+                - The second table is an index table that maps each source to its corresponding index in the xmm_dr11 and x2a catalogs.
+
+        The method includes the following steps:
+        - Compiling an index table that correlates the sources in the nearby_sources_table with their respective indices in the xmm_dr11 and x2a catalogs.
+        - Calculating the Nh value for each source. If the source is found in the x2a catalog, the Nh value is taken from there; otherwise, a default value is used.
+        - Optimizing the photon index for each source using the optimization_phoindex method. For sources in the x2a catalog, the photon index is taken from there.
+        - Updating the nearby_sources_table with the calculated Photon Index and Nh values.
+        - Visualizing the photon index interpolation results for sources not found in the x2a catalog.
+
+        Note:
+            - The method assumes specific keys and structures in the xmm_dr11 and x2a catalogs for data extraction.
+            - It prints messages to the console regarding missing data in the xmm_dr11 catalog and visualizes the interpolation results.
+        """
+    
         number_source = len(self.nearby_sources_table)
         name_list = self.nearby_sources_table["IAUNAME"]
         xmm_dr_11_table = Table(names=self.xmm_dr11_catalog.colnames,
@@ -375,23 +417,33 @@ class XmmCatalog:
         return self.nearby_sources_table, index_table
     
     
-    def variability_table(self, dictionary: dict) -> Table:
+    def variability_table(self, object_data: dict) -> Table:
         """
-        Generates a table containing information about the variability of nearby sources.
+        Creates a table summarizing the variability of sources near a specified astronomical object.
 
-        Parameters:
-        - dictionary (dict): A dictionary containing object information.
-            - "object_name" (str): Name of the object of interest.
+        This method assesses the variability of each source in the nearby_sources_table using data from the xmm_dr11_catalog. 
+        It compiles a new table that includes details about the variability of these sources, along with their inclusion in the Xmm2Athena catalog.
+
+        Args:
+            object_data (dict): A dictionary containing data about the object of interest, including its name.
 
         Returns:
-        - variability_table (astropy.table.Table): A table containing information about the nearby sources,
-        such as index, name (IAUNAME), right ascension (SC_RA), declination (SC_DEC), fractional variability (SC_FVAR),
-        and a boolean indicating whether the source is present in Xmm2Athena catalog (IN_X2A).
+            Table: An Astropy Table containing information on the variability of each source. The table includes the source's index, 
+                IAU name, coordinates (RA and Dec), variability factor (SC_FVAR), and a boolean indicating if the source is included 
+                in the Xmm2Athena catalog.
 
-        The function also prints the number of variable sources detected close to the object and the number
-        of those sources that are present in Xmm2Athena catalog.
+        The method performs the following operations:
+        - Iterates through the nearby_sources_table to check for each source's variability factor from the xmm_dr11_catalog.
+        - Constructs a new table with relevant information for sources that have a defined variability factor.
+        - The table is populated with indexes, names, coordinates, variability factors, and Xmm2Athena catalog inclusion status.
+        - Prints a summary message to the console about the number of variable sources and their distribution in the Xmm2Athena catalog.
+
+        Note:
+            - The method assumes the presence of specific keys in 'dict_cat.dictionary_coord' for coordinate comparison and in 'object_data' for the object's name.
+            - It prints summary messages to the console for informative purposes.
         """
-        name = dictionary["object_name"]
+    
+        object_name = object_data["object_name"]
 
         index_array, iauname_array, sc_ra_array = np.array([], dtype=int), np.array([], dtype=str), np.array([], dtype=float)
         sc_dec_array, sc_fvar_array, in_x2a_array = np.array([], dtype=float), np.array([], dtype=float), np.array([], dtype=bool)
@@ -401,8 +453,8 @@ class XmmCatalog:
 
                 index_array = np.append(index_array, self.index_table["Index in nearby_sources_table"][number])
                 iauname_array = np.append(iauname_array, self.nearby_sources_table["IAUNAME"][number])
-                sc_ra_array = np.append(sc_ra_array, self.nearby_sources_table["SC_RA"][number])
-                sc_dec_array = np.append(sc_dec_array, self.nearby_sources_table["SC_DEC"][number])
+                sc_ra_array = np.append(sc_ra_array, self.nearby_sources_table[self.ra][number])
+                sc_dec_array = np.append(sc_dec_array, self.nearby_sources_table[self.dec][number])
                 sc_fvar_array = np.append(sc_fvar_array, self.nearby_sources_table["SC_FVAR"][number])
 
                 if self.index_table["Index in x2a"][number] != "No data found":
@@ -410,14 +462,14 @@ class XmmCatalog:
                 else:
                     in_x2a_array = np.append(in_x2a_array, False)
 
-        column_names = ["INDEX", "IAUNAME", "SC_RA", "SC_DEC", "SC_FVAR", "IN_X2A"]
+        column_names = ["INDEX", "IAUNAME", self.ra, self.dec, "SC_FVAR", "IN_X2A"]
         data_array = [index_array, iauname_array, sc_ra_array, sc_dec_array, sc_fvar_array, in_x2a_array]
         variability_table = Table()
 
         for data, name in zip(data_array, column_names):
             variability_table[name] = data
 
-        message_xmm = f"Among {len(self.nearby_sources_table)} sources detected close to {name}, {len(index_array)} of them are variable. Using DR13 Catalog."
+        message_xmm = f"Among {len(self.nearby_sources_table)} sources detected close to {object_name}, {len(index_array)} of them are variable. Using DR13 Catalog."
         print(message_xmm)
         message_xmm2ath = f"Among {len(index_array)} variable sources, {list(variability_table['IN_X2A']).count(True)} are in Xmm2Athena and {list(variability_table['IN_X2A']).count(False)} are not in Xmm2Athena. "    
         print(message_xmm2ath)
@@ -425,28 +477,37 @@ class XmmCatalog:
         return variability_table
     
     
-    def neighbourhood_of_object(self, radius: Quantity, dictionary: dict, os_dictionary: dict) -> None:
+    def neighbourhood_of_object(self, radius: Quantity, simulation_data: dict) -> None:
         """
-        Visualizes the neighborhood of the given object.
+        Visualizes the neighborhood of a specified astronomical object, highlighting the variable and invariable sources around it.
 
-        Parameters:
-        - radius (float): The radius within which to search for neighboring sources.
-        - dictionary (dict): A dictionary containing object information.
-            - "object_name" (str): Name of the object of interest.
-            - "object_position" (SkyCoord): The sky coordinates of the object.
+        This method creates a visual representation of sources around the given object. It differentiates between sources that are variable 
+        and those that are not, based on their presence in the Xmm2Athena catalog, and plots their positions relative to the object.
 
-        Returns:
-        None. The function generates plots depicting the neighboring sources and their variability.
+        Args:
+            radius (Quantity): The radius around the object within which to search for neighboring sources.
+            simulation_data (dict): A dictionary containing simulation data, including 'object_data' with the target object's information and 'os_dictionary' for saving the plot.
 
-        The function queries catalogs to get sources in the vicinity of the input object and then
-        plots two graphs: one showing all sources close to the object and another differentiating 
-        between variable and invariable sources.
+        The method performs the following operations:
+        - Queries the ESASky catalog for XMM-EPIC observations of the object and retrieves corresponding images if available.
+        - Identifies variable and invariable sources from the nearby_sources_table and the variability_table.
+        - Creates two plots: 
+            - The first plot shows all sources around the object.
+            - The second plot differentiates between variable sources found in Xmm2Athena and those not found.
+        - Both plots include the position of the target object and are saved as images.
+
+        Note:
+            - This method attempts to query ESASky for relevant data and handles any exceptions that may occur during this process.
+            - It assumes the availability of right ascension (RA) and declination (Dec) keys in 'dict_cat.dictionary_coord'.
+            - The plots are saved to the directory specified in 'os_dictionary' within 'simulation_data'.
         """
+
         print("\n")
-        name = dictionary['object_name']
-        obj_ra, obj_dec = dictionary['object_position'].ra, dictionary['object_position'].dec
+        object_data = simulation_data["object_data"]
+        object_name = object_data['object_name']
+        obj_ra, obj_dec = object_data['object_position'].ra, object_data['object_position'].dec
         try:
-            result = ESASky.query_object_catalogs(position=name, catalogs="XMM-EPIC")
+            result = ESASky.query_object_catalogs(position=object_name, catalogs="XMM-EPIC")
             xmm_epic = Table(result[0])
             xmm_obs_id = list(xmm_epic["observation_id"])
             result_fits_images = ESASky.get_images(observation_ids=xmm_obs_id[0], radius=radius, missions="XMM")
@@ -455,15 +516,15 @@ class XmmCatalog:
             result_fits_images = {}
             
         
-        ra_in_x2a = [ra for index, ra in enumerate(self.variability_table['SC_RA']) if self.variability_table['IN_X2A'][index] == True]
-        dec_in_x2a = [dec for index, dec in enumerate(self.variability_table['SC_DEC']) if self.variability_table['IN_X2A'][index] == True]
-        ra_in_dr11 = [ra for index, ra in enumerate(self.variability_table['SC_RA']) if self.variability_table['IN_X2A'][index] == False]
-        dec_in_dr11 = [dec for index, dec in enumerate(self.variability_table['SC_DEC']) if self.variability_table['IN_X2A'][index] == False]
-        invar_ra = [ra for ra in self.nearby_sources_table["SC_RA"] if ra not in self.variability_table["SC_RA"]]
-        invar_dec = [dec for dec in self.nearby_sources_table["SC_DEC"] if dec not in self.variability_table["SC_DEC"]]
+        ra_in_x2a = [ra_value for index, ra_value in enumerate(self.variability_table[self.ra]) if self.variability_table['IN_X2A'][index] == True]
+        dec_in_x2a = [dec_value for index, dec_value in enumerate(self.variability_table[self.dec]) if self.variability_table['IN_X2A'][index] == True]
+        ra_in_dr11 = [ra_value for index, ra_value in enumerate(self.variability_table[self.ra]) if self.variability_table['IN_X2A'][index] == False]
+        dec_in_dr11 = [dec_value for index, dec_value in enumerate(self.variability_table[self.dec]) if self.variability_table['IN_X2A'][index] == False]
+        invar_ra = [ra_value for ra_value in self.nearby_sources_table[self.ra] if ra_value not in self.variability_table[self.ra]]
+        invar_dec = [dec_value for dec_value in self.nearby_sources_table[self.dec] if dec_value not in self.variability_table[self.dec]]
     
         figure = plt.figure(figsize=(17, 8))
-        figure.suptitle(f"Neighbourhood of {name}", fontsize=20)
+        figure.suptitle(f"Neighbourhood of {object_name}", fontsize=20)
         
         if result_fits_images == {}:
             figure.text(0.5, 0.04, 'Right Ascension [deg]', ha='center', va='center')
@@ -471,19 +532,19 @@ class XmmCatalog:
             
             axes_0 = figure.add_subplot(121)
             axes_0.invert_xaxis()
-            axes_0.scatter(list(self.nearby_sources_table['SC_RA']), list(self.nearby_sources_table['SC_DEC']), s=20, color='darkorange', label=f"Sources : {len(self.nearby_sources_table)}")
-            axes_0.scatter(obj_ra, obj_dec, s=100, color='red', marker="*", label=f"{name}")
+            axes_0.scatter(list(self.nearby_sources_table[self.ra]), list(self.nearby_sources_table[self.dec]), s=20, color='darkorange', label=f"Sources : {len(self.nearby_sources_table)}")
+            axes_0.scatter(obj_ra, obj_dec, s=100, color='red', marker="*", label=f"{object_name}")
             axes_0.legend(loc='upper right', ncol=2, fontsize=7)
-            axes_0.set_title(f"Sources close to {name}")
+            axes_0.set_title(f"Sources close to {object_name}")
             
             axes_1 = figure.add_subplot(122)
             axes_1.invert_xaxis()
             axes_1.scatter(invar_ra, invar_dec, color='black', s=20, label=f"Invariant sources, {len(invar_ra)}")
-            axes_1.scatter(obj_ra, obj_dec, color='red', marker='x', s=100, label=f"Position of {name}")
+            axes_1.scatter(obj_ra, obj_dec, color='red', marker='x', s=100, label=f"Position of {object_name}")
             axes_1.scatter(ra_in_x2a, dec_in_x2a, color='darkorange', marker="*", label=f"Variable sources in X2A, {len(ra_in_x2a)}")
             axes_1.scatter(ra_in_dr11, dec_in_dr11, color='royalblue', marker="*", label=f"Variable sources not in X2A, {len(ra_in_dr11)}")
             axes_1.legend(loc="lower right", ncol=2)
-            axes_1.set_title(f"Variable and invariable sources close to {name} ")
+            axes_1.set_title(f"Variable and invariable sources close to {object_name} ")
             
         else:
             image = result_fits_images["XMM"][0][0].data[0, :, :]
@@ -499,8 +560,8 @@ class XmmCatalog:
             axes_0.coords[0].set_format_unit(u.hourangle)
             axes_0.coords[1].set_format_unit(u.deg)  
             axes_0.imshow(image, cmap='gray', origin='lower', norm=norm, interpolation='nearest', aspect='equal')
-            axes_0.scatter(list(self.nearby_sources_table["SC_RA"]), list(self.nearby_sources_table["SC_DEC"]), s=30, transform=axes_0.get_transform('fk5'), facecolors='none', edgecolors='orange', label=f"Sources : {len(self.nearby_sources_table)}")
-            axes_0.scatter(obj_ra, obj_dec, s=100, color='red', marker="*", transform=axes_0.get_transform('fk5'), facecolors='none', edgecolors='red', label=f"{name}")
+            axes_0.scatter(list(self.nearby_sources_table[self.ra]), list(self.nearby_sources_table[self.dec]), s=30, transform=axes_0.get_transform('fk5'), facecolors='none', edgecolors='orange', label=f"Sources : {len(self.nearby_sources_table)}")
+            axes_0.scatter(obj_ra, obj_dec, s=100, color='red', marker="*", transform=axes_0.get_transform('fk5'), facecolors='none', edgecolors='red', label=f"{object_name}")
             axes_0.legend(loc='upper right', ncol=2, fontsize=7)
             xlim, ylim = plt.xlim(), plt.ylim()
             value_x, value_y = 180, 180
@@ -508,44 +569,59 @@ class XmmCatalog:
             axes_0.set_ylim(ymin=ylim[0]+value_y, ymax=ylim[1]-value_y)
             axes_0.set_xlabel(" ")
             axes_0.set_ylabel(" ")
-            axes_0.set_title(f"Sources close to {name}")
+            axes_0.set_title(f"Sources close to {object_name}")
             
             axes_1 = figure.add_subplot(122, projection=_wcs_, sharex=axes_0, sharey=axes_0)
             axes_1.imshow(image, cmap='gray', origin='lower', norm=norm, interpolation='nearest', aspect='equal')
             axes_1.scatter(invar_ra, invar_dec, s=30, transform=axes_1.get_transform('fk5'), facecolors='none', edgecolors='orange', label=f"Invar src : {len(invar_ra)}")
             axes_1.scatter(ra_in_dr11, dec_in_dr11, s=30, transform=axes_1.get_transform('fk5'), facecolors='none', edgecolors='blue', label=f"Var src not in x2a : {len(ra_in_dr11)} sources")
             axes_1.scatter(ra_in_x2a, dec_in_x2a, s=30, transform=axes_1.get_transform('fk5'), facecolors='none', edgecolors='hotpink', label=f"Var src in x2a : {len(ra_in_x2a)} sources")
-            axes_1.scatter(obj_ra, obj_dec, s=100, marker="*", transform=axes_1.get_transform('fk5'), facecolors='none', edgecolors='red', label=f"{name}")
+            axes_1.scatter(obj_ra, obj_dec, s=100, marker="*", transform=axes_1.get_transform('fk5'), facecolors='none', edgecolors='red', label=f"{object_name}")
             axes_1.legend(loc='upper right', ncol=2, fontsize=7)
             axes_1.set_xlabel(" ")
             axes_1.set_ylabel(" ")
-            axes_1.set_title(f"Variable and invariable sources close to {name} ")
+            axes_1.set_title(f"Variable and invariable sources close to {object_name} ")
             
-        plt.savefig(os.path.join(os_dictionary["img"], f"neighbourhood_of_{name}.png".replace(" ", "_")))
+        os_dictionary = simulation_data["os_dictionary"]
+        plt.savefig(os.path.join(os_dictionary["img"], f"neighbourhood_of_{object_name}.png".replace(" ", "_")))
         plt.show()
         print("\n")
 
 
     def dictionary_model(self) -> Dict[str, Dict[str, Union[str, float]]]:
         """
-        Generates a dictionary containing model information for each source in the nearby_sources_table.
+        Creates a dictionary of models for each source in the nearby_sources_table, detailing the model type, its parameters, and source flux.
+
+        This method compiles a dictionary where each entry corresponds to a source in the nearby_sources_table. 
+        It includes details like the model used for analysis, the model's parameters, the observed flux, and the hydrogen column density (Nh).
 
         Returns:
-        - model_dictionary (dict): A dictionary containing model information for each source. Each entry has the following format:
-            - "src_i" (dict): Where i is the index of the source in the nearby_sources_table.
-                - "model" (str): The model used (e.g., 'power', 'black_body', 'temp').
-                - "model_value" (float): The value associated with the model (e.g., Photon Index).
-                - "flux" (float): The flux of the source in the XMM-EPIC band.
-                - "column_density" (float): The column density (Nh) of the source.
+            Dict[str, Dict[str, Union[str, float]]]: A dictionary with keys as source identifiers (e.g., 'src_0', 'src_1', etc.). 
+            Each value is another dictionary containing the following keys:
+                - 'model': The name of the model used for the source (e.g., 'power').
+                - 'model_value': The value of a key parameter in the model (e.g., photon index for a power-law model).
+                - 'flux': The observed flux of the source.
+                - 'column_density': The hydrogen column density (Nh) associated with the source.
 
-        The function currently supports only the 'power' model.
+        The method performs the following operations:
+        - Iterates through each source in the nearby_sources_table.
+        - Determines the appropriate model and its parameters based on predefined criteria.
+        - Compiles this information into a dictionary, alongside the source's observed flux and Nh value.
+
+        Note:
+            - Currently, the method only implements the 'power' model, with the photon index as the model value.
+            - Future extensions may include additional models like 'black_body' or 'temp'.
+            - The method assumes that flux and Nh values are available in the nearby_sources_table.
         """
+        
         model_dictionary = {}
         number_source = len(self.nearby_sources_table)
 
+        flux_obs = dict_cat.dictionary_catalog[self.key]["flux_obs"]
+        
         model = np.array([], dtype=str)
         model_value = np.array([], dtype=float)
-        xmm_flux = np.array([self.nearby_sources_table["SC_EP_8_FLUX"][item] for item in range(number_source)], dtype=float)
+        xmm_flux = np.array([self.nearby_sources_table[flux_obs][item] for item in range(number_source)], dtype=float)
         nh_value = np.array([self.nearby_sources_table["Nh"][item] for item in range(number_source)], dtype=float)
         
         # Pour le moment seulement 'power' indiquant le modèle a utiliser pour la commande pimms
@@ -576,170 +652,169 @@ class XmmCatalog:
 
 class Chandra:
     """
-    A class to perform various analyses and visualizations using the Chandra X-ray Observatory data.
+    A class for handling and analyzing data from the Chandra X-ray Observatory and associated cone search catalogs.
 
-    Attributes
-    ----------
-    chandra_catalog : astropy.table.Table
-        The catalog of Chandra data loaded from the specified path.
-    nearby_sources_table : astropy.table.Table
-        Table of sources detected close to a given object.
-    nearby_sources_position : astropy.coordinates.SkyCoord
-        Sky coordinates of the nearby sources.
-    cone_search_catalog : astropy.table.Table
-        Catalog obtained by performing a cone search.
-    cs_nearby_sources_position : astropy.coordinates.SkyCoord
-        Sky coordinates of the sources obtained from cone search.
-    cs_nearby_sources_table : astropy.table.Table
-        Table of sources obtained from the cone search catalog.
-    neighbourhood_of_object : method
-        Performs and visualizes the neighborhood analysis of an object.
-    photon_index : ndarray
-        Array containing the photon index of the sources.
-    model_dictionary : dict
-        Dictionary containing models and parameters for each source.
+    This class is designed to work with Chandra X-ray data and perform various analyses including finding nearby sources, 
+    assessing source variability, calculating photon indices, and generating models for each source.
 
-    Methods
-    -------
-    open_catalog(catalog_path: str) -> astropy.table.Table
-        Load and return the Chandra catalog from the given path.
-    load_cs_catalog(radius: float, dictionary: dict) -> astropy.table.Table
-        Load and return the cone search catalog for a given radius and dictionary.
-    find_nearby_sources(radius: float, dictionary: dict, user_table: bool) -> Tuple[astropy.table.Table, astropy.coordinates.SkyCoord]
-        Find and return nearby sources and their positions for the given radius and dictionary.
-    cone_catalog() -> astropy.table.Table
-        Generate and return a table of sources from the cone search catalog.
-    neighbourhood_of_object(radius: float, dictionary: dict) -> None
-        Visualize the neighborhood of an object using the provided radius and dictionary.
-    get_pho_index(number: int) -> float
-        Retrieve and return the photon index of a source given its number in the catalog.
-    visualization_interp(optimization_parameters: list, photon_index: float) -> None
-        Visualize interpolations based on the optimization parameters and photon index.
-    power_law_pho_index() -> ndarray
-        Calculate and return the photon index based on a power-law model.
-    dictionary_model() -> dict
-        Generate and return a dictionary containing models and parameters for each source.
+    Attributes:
+        ra (str): The key for right ascension in the Chandra dictionary.
+        dec (str): The key for declination in the Chandra dictionary.
+        ra_cs (str): The key for right ascension in the cone search Chandra dictionary.
+        dec_cs (str): The key for declination in the cone search Chandra dictionary.
+        chandra_catalog (Table): The catalog of Chandra data loaded from the specified path.
+        cone_search_catalog (Table): The catalog of data loaded from a cone search based on the Chandra data.
+        cs_nearby_sources_position (SkyCoord): The coordinates of sources found in the cone search catalog.
+        nearby_sources_table (Table): A table of nearby sources found in the Chandra catalog.
+        nearby_sources_position (SkyCoord): The coordinates of nearby sources found in the Chandra catalog.
+        cs_photon_index (array): Photon index values for sources in the cone search catalog.
+        photon_index (array): Photon index values for sources in the Chandra catalog.
+        cs_model_dictionary (dict): A dictionary of models for sources in the cone search catalog.
+        model_dictionary (dict): A dictionary of models for sources in the Chandra catalog.
+
+    The class includes methods for opening and loading catalogs, finding nearby sources, analyzing source variability, 
+    calculating photon indices, visualizing data, and generating source models.
+
+    Args:
+        catalog_path (str): Path to the primary Chandra catalog file.
+        radius (Quantity): The search radius for finding nearby sources.
+        simulation_data (Dict): A dictionary containing simulation data, including object data and OS dictionary for saving plots.
+        user_table (Table): An optional user-provided table to include in the analysis.
     """
-
-
-    def __init__(self, catalog_path: str, radius: Quantity, dictionary: dict, user_table: Table, os_dictionary: dict) -> None:
+    
+    def __init__(self, catalog_path: str, radius: Quantity, simulation_data: Dict, user_table: Table) -> None:
         """
-        Initialize the Chandra class by loading catalogs, finding nearby sources, 
-        and performing various analyses and visualizations.
+        Initializes the Chandra class, setting up the necessary attributes for data analysis.
 
-        Parameters
-        ----------
-        catalog_path : str
-            The path to the Chandra catalog file.
-        radius : float
-            The radius to use for searches and analyses.
-        dictionary : dict
-            A dictionary containing parameters or configurations for searches and analyses.
-        user_table : bool
-            A flag indicating whether to use a user-defined table in searches and analyses.
+        This constructor loads the Chandra catalog from the given path and performs various initializations, including loading a cone search catalog,
+        finding nearby sources, and preparing data for further analysis such as variability assessment, photon index calculation, and model generation.
 
-        Attributes
-        ----------
-        chandra_catalog : astropy.table.Table
-            The catalog of Chandra data loaded from the specified path.
-        nearby_sources_table : astropy.table.Table
-            Table of sources detected close to a given object.
-        nearby_sources_position : astropy.coordinates.SkyCoord
-            Sky coordinates of the nearby sources.
-        cone_search_catalog : astropy.table.Table
-            Catalog obtained by performing a cone search.
-        cs_nearby_sources_position : astropy.coordinates.SkyCoord
-            Sky coordinates of the sources obtained from cone search.
-        cs_nearby_sources_table : astropy.table.Table
-            Table of sources obtained from the cone search catalog.
-        photon_index : ndarray
-            Array containing the photon index of the sources.
-        model_dictionary : dict
-            Dictionary containing models and parameters for each source.
-        """
+        Args:
+            catalog_path (str): Path to the primary Chandra catalog file. This file is used to initialize the Chandra catalog.
+            radius (Quantity): The search radius for finding nearby sources. This radius is utilized for cone searches and finding nearby sources.
+            simulation_data (Dict): A dictionary containing simulation data. This includes 'object_data' for object-specific information and 'os_dictionary' for operating system-specific information.
+            user_table (Table): An optional Astropy Table provided by the user to include in the analysis.
+
+        The constructor performs several key operations:
+        - Initializes coordinate keys for Chandra and cone search catalogs from a global dictionary.
+        - Loads the Chandra catalog from the specified path.
+        - Loads a cone search catalog based on the provided radius and object data.
+        - Finds nearby sources based on the Chandra catalog and additional user-provided data.
+        - Prepares the data for further analysis, including calculating photon indices and generating source models.
+
+        Attributes:
+            ra (str): Right ascension key for the Chandra catalog.
+            dec (str): Declination key for the Chandra catalog.
+            ra_cs (str): Right ascension key for the cone search Chandra catalog.
+            dec_cs (str): Declination key for the cone search Chandra catalog.
+            chandra_catalog (Table): Catalog data loaded from the Chandra catalog file.
+            cone_search_catalog (Table): Catalog data loaded from the cone search.
+            cs_nearby_sources_position (SkyCoord): Positions of sources found in the cone search catalog.
+            nearby_sources_table (Table): Table of nearby sources found in the Chandra catalog.
+            nearby_sources_position (SkyCoord): Positions of nearby sources found in the Chandra catalog.
+            cs_photon_index (list): List of photon index values for sources in the cone search catalog.
+            photon_index (list): List of photon index values for sources in the Chandra catalog.
+            cs_model_dictionary (dict): Dictionary of models for sources in the cone search catalog.
+            model_dictionary (dict): Dictionary of models for sources in the Chandra catalog.
+        """    
+        
+        # ---------- coord ---------- #
+        self.ra = dict_cat.dictionary_coord["Chandra"]["right_ascension"]
+        self.dec = dict_cat.dictionary_coord["Chandra"]["declination"]
+        
+        self.ra_cs = dict_cat.dictionary_coord["CS_Chandra"]["right_ascension"]
+        self.dec_cs = dict_cat.dictionary_coord["CS_Chandra"]["declination"]
+        # --------------------------- #
+        
+        
         self.chandra_catalog = self.open_catalog(catalog_path=catalog_path)
-        self.cone_search_catalog = self.load_cs_catalog(radius=radius, dictionary=dictionary)
-        self.cs_nearby_sources_position = SkyCoord(ra=list(self.cone_search_catalog['ra']), dec=list(self.cone_search_catalog['dec']), unit=u.deg)
+        self.cone_search_catalog = self.load_cs_catalog(radius=radius, object_data=simulation_data["object_data"])
+        self.cs_nearby_sources_position = SkyCoord(ra=list(self.cone_search_catalog[self.ra_cs]), dec=list(self.cone_search_catalog[self.dec_cs]), unit=u.deg)
         self.cone_search_catalog = self.variability_column()
         self.cone_search_catalog = self.threshold(self.cone_search_catalog)
         
-        self.nearby_sources_table, self.nearby_sources_position = self.find_nearby_sources(radius=radius, dictionary=dictionary, user_table=user_table)
-        # self.corrected_mean_flux()
-        self.neighbourhood_of_object(radius=radius, dictionary=dictionary, os_dictionary=os_dictionary)
+        self.nearby_sources_table, self.nearby_sources_position = self.find_nearby_sources(radius=radius, object_data=simulation_data["object_data"], user_table=user_table)
+        self.neighbourhood_of_object(radius=radius, simulation_data=simulation_data)
         self.cs_photon_index, self.photon_index = self.get_phoindex_nh()
         self.cs_model_dictionary, self.model_dictionary = self.dictionary_model()
         
 
     def open_catalog(self, catalog_path: str) -> Table:
         """
-        Open and read the Chandra catalog file from the given path.
+        Opens a FITS file from the specified path and converts it into an Astropy Table.
 
-        Parameters
-        ----------
-        catalog_path : str
-            The path to the Chandra catalog file.
+        This method is designed to load a catalog from a FITS file, which is a common file format used in astronomy for storing data tables and images. 
+        The method utilizes the 'fits' module from Astropy to read the file and loads the data into a table format for easier manipulation and analysis.
 
-        Returns
-        -------
-        result_table : astropy.table.Table
-            The table containing data read from the catalog file.
+        Args:
+            catalog_path (str): The file path to the FITS file containing the catalog data. This file should conform to the FITS standard and typically contains astronomical data.
+
+        Returns:
+            Table: An Astropy Table object containing the data from the FITS file. The table format facilitates various operations like data filtering, sorting, and visualization.
         """
+        
         with fits.open(catalog_path, memmap=True) as data:
-            result_table = Table(data[1].data)
-            data.close()
-            return result_table
+            return Table(data[1].data)
         
         
-    def load_cs_catalog(self, radius: Quantity, dictionary: dict) -> Table:
+    def load_cs_catalog(self, radius: Quantity, object_data: dict) -> Table:
         """
-        Load the cone search catalog for a given object and search radius.
+        Conducts a cone search in the Chandra Source Catalog using VO SCS protocol.
 
-        Parameters
-        ----------
-        radius : float
-            The search radius in degrees.
-        dictionary : dict
-            Dictionary containing parameters, including 'object_name' to search for.
+        This method performs a cone search in the Chandra Source Catalog by initiating a VO SCS (Simple Cone Search) 
+        service request. The search is centered on the coordinates of a celestial object, which are determined using the 
+        object's name provided in `object_data`. The search radius is specified by the `radius` parameter.
 
-        Returns
-        -------
-        cone_search_catalog : astropy.table.Table
-            The cone search catalog containing data for the specified object.
+        Parameters:
+        radius (Quantity): The radius of the cone search. Should be an astropy Quantity object, specifying both the value 
+                        and the unit (e.g., in degrees or arcminutes).
+        object_data (dict): A dictionary containing information about the celestial object. This must include a key 
+                            'object_name' with the object's name as its value, which is used to determine the object's sky 
+                            coordinates for the search.
+
+        Returns:
+        Table: An astropy Table containing the results of the cone search. This table includes various details about the 
+            astronomical sources found within the specified search radius.
+
         """
+        
         cone = vo.dal.SCSService('http://cda.cfa.harvard.edu/csc2scs/coneSearch') 
-        name = SkyCoord.from_name(dictionary['object_name'])
+        name = SkyCoord.from_name(object_data['object_name'])
         cone_search_catalog = cone.search(pos=name, radius=radius, verbosity=3)
         return cone_search_catalog
 
 
-    def find_nearby_sources(self, radius: Quantity, dictionary: dict, user_table: Table) -> Tuple[Table, SkyCoord]:
+    def find_nearby_sources(self, radius: Quantity, object_data: dict, user_table: Table) -> Tuple[Table, SkyCoord]:
         """
-        Find and return sources close to a given object from the Chandra catalog.
+        Searches for astronomical sources near a specified object within the Chandra Source Catalog.
 
-        Parameters
-        ----------
-        radius : float
-            The search radius in degrees.
-        dictionary : dict
-            Dictionary containing parameters, including 'object_position' for the search.
-        user_table : bool
-            A flag indicating whether to use a user-defined table.
+        This method identifies sources in the Chandra Source Catalog that are located within a specified radius of a given 
+        celestial object. It uses the object's position and a defined field of view to filter sources from the catalog. 
+        The method returns a table of nearby sources along with their sky coordinates.
 
-        Returns
-        -------
-        nearby_src_table : astropy.table.Table
-            Table of sources detected close to the given object.
-        nearby_src_position : astropy.coordinates.SkyCoord
-            Sky coordinates of the nearby sources.
+        Parameters:
+        radius (Quantity): The radius within which to search for sources, as an astropy Quantity object (value and unit).
+        object_data (dict): A dictionary containing the object's information. It must have keys 'object_name' and 
+                            'object_position', where 'object_position' should be a SkyCoord object.
+        user_table (Table): An astropy Table object representing the user's data. This table is not used in the current 
+                            implementation of the function.
 
-        Raises
-        ------
-        Exception
-            Raises an exception if an error occurs during the process.
+        Returns:
+        Tuple[Table, SkyCoord]: A tuple containing two elements. The first element is an astropy Table with the catalog of 
+                                nearby sources. The second element is a SkyCoord object containing the positions of these 
+                                sources.
+
+        Notes:
+        - The search radius is internally expanded by 5 arcminutes to define a field of view.
+        - The function prints various messages during execution, including progress updates and results summary.
+        - If no sources are found, the function exits the program.
+        - In case of an error, the error message is printed.
+
         """
+    
         field_of_view = radius + 5*u.arcmin
-        name = dictionary["object_name"]
-        object_position = dictionary['object_position']
+        object_name = object_data["object_name"]
+        object_position = object_data['object_position']
 
         min_ra, max_ra = object_position.ra - field_of_view, object_position.ra + field_of_view
         min_dec, max_dec = object_position.dec - field_of_view, object_position.dec + field_of_view
@@ -752,19 +827,19 @@ class Chandra:
         
         print(fr"{colored('Reducing Chandra catalog...', 'yellow')} to fov of {radius.value + 5 } arcmin")
         for number in tqdm(range(len(self.chandra_catalog))):
-            if min_ra/u.deg < self.chandra_catalog["RA"][number] < max_ra/u.deg and min_dec/u.deg < self.chandra_catalog["DEC"][number] < max_dec/u.deg:
+            if min_ra/u.deg < self.chandra_catalog[self.ra][number] < max_ra/u.deg and min_dec/u.deg < self.chandra_catalog[self.dec][number] < max_dec/u.deg:
                 small_table.add_row(self.chandra_catalog[number])
                 
-        src_position = SkyCoord(ra=small_table['RA'], dec=small_table['DEC'], unit=u.deg)
+        sources_position = SkyCoord(ra=small_table[self.ra], dec=small_table[self.dec], unit=u.deg)
 
-        print(f"{colored(f'Find sources close to {name} with Chandra catalog', 'blue')}")
+        print(f"{colored(f'Find sources close to {object_name} with Chandra catalog', 'blue')}")
         for number in tqdm(range(len(small_table))):
-            if f.ang_separation(object_position, src_position[number]) < radius:
+            if f.ang_separation(object_position, sources_position[number]) < radius:
                 nearby_sources_table.add_row(small_table[number])
                 
         column_name = {"source_name": "Chandra_IAUNAME", 
-                       "right_ascension": "RA",
-                       "declination": "DEC",
+                       "right_ascension": self.ra,
+                       "declination": self.dec,
                        "catalog_name": "Chandra"}
             
         if len(nearby_sources_table) != 0:
@@ -773,27 +848,39 @@ class Chandra:
             print("Nearby sources table from Chandra catalog is empty.")
             sys.exit()
             
-        nearby_src_position = SkyCoord(ra=unique_table['RA'], dec=unique_table['DEC'], unit=u.deg)
+        nearby_sources_position = SkyCoord(ra=unique_table[self.ra], dec=unique_table[self.dec], unit=u.deg)
                 
         try :
             if len(unique_table) != 0:
-                print((f"We have detected {len(unique_table)} sources close to {dictionary['object_name']}"))
-                return unique_table, nearby_src_position
+                print((f"We have detected {len(unique_table)} sources close to {object_name}"))
+                return unique_table, nearby_sources_position
             else:
-                print(f"No sources detected close to {dictionary['object_name']}.")
+                print(f"No sources detected close to {object_name}.")
         except Exception as error:
             print(f"An error occured : {error}")
             
     
     def variability_column(self) -> Table:
         """
-        Create a catalog table by combining and processing data from a cone search catalog.
+        Adds a 'Variability' column to the Chandra Source Catalog table based on intra and inter variability probabilities.
 
-        Returns
-        -------
-        self.cs_catalog : astropy.table.Table
-            Table containing 'IAUNAME', 'RA', 'DEC', and 'VAR' columns derived from the cone search catalog.
+        This method calculates a variability score for each source in the Chandra Source Catalog. It uses the 
+        'var_inter_prob_b' and 'var_intra_prob_b' columns from the catalog to compute this score. If both intra and inter 
+        variability probabilities are available for a source, their mean is used as the variability score. If only one of 
+        them is available, that value is used. If both are missing, the variability score is set to 0.0.
+
+        Returns:
+        Table: The modified astropy Table of the Chandra Source Catalog, now including the 'Variability' column. This column 
+            contains the computed variability scores for each source.
+
+        Notes:
+        - The method assumes that the catalog has already been converted to an astropy Table and is accessible via 
+        `self.cone_search_catalog`.
+        - Variability probabilities that are masked (not available) are handled as described above.
+        - The method appends the 'Variability' column to the existing table and returns the updated table.
+
         """
+        
         cone_catalog = self.cone_search_catalog.to_table()        
 
         inter, intra = cone_catalog['var_inter_prob_b'], cone_catalog['var_intra_prob_b']
@@ -812,77 +899,105 @@ class Chandra:
                 var_column = np.append(var_column, mean_value)
                 
         cone_catalog["Variability"] = var_column
-                
-        # data_list = [cone_catalog['name'], cone_catalog['ra'], cone_catalog['dec'], var_column]
-
-        # self.cs_catalog = Table(names=['IAUNAME', 'RA', 'DEC', 'VAR'],
-        #                         data=data_list)
         
         return cone_catalog
     
     
-    def neighbourhood_of_object(self, radius: Quantity, dictionary: dict, os_dictionary: dict) -> None:
+    def neighbourhood_of_object(self, radius: Quantity, simulation_data: Dict) -> None:
         """
-        Plot a visualization of the neighborhood of a given astronomical object based on data from the Chandra and cone search catalogs.
+        Visualizes the neighborhood of a specified astronomical object within a given radius.
 
-        Parameters
-        ----------
-        radius : float
-            The search radius in degrees.
-        dictionary : dict
-            Dictionary containing parameters, including 'object_name' and 'object_position' for the search.
+        This method creates a set of plots to visually represent the neighborhood of a celestial object. It uses data from 
+        the Chandra Source Catalog and a simulation data dictionary. The plots include the positions of nearby sources, 
+        differentiating between variable and invariant sources. The plots are saved as a PNG file and also displayed.
 
-        Returns
-        -------
-        None
-            This function plots a graph and does not return any value.
+        Parameters:
+        radius (Quantity): The search radius around the celestial object, specified as an astropy Quantity.
+        simulation_data (Dict): A dictionary containing various simulation parameters and data. This must include keys 
+                                'os_dictionary' for output settings and 'object_data' for the celestial object's data. 
+                                'object_data' itself must be a dictionary containing the 'object_name' and 'object_position'.
+
+        Notes:
+        - The method creates and displays four scatter plots in a 2x2 grid. Each plot shows different aspects of the 
+        neighborhood, such as sources from different catalogs and variability information.
+        - The object's position is marked distinctly in each plot.
+        - The generated plots are saved to a file in the directory specified in 'os_dictionary' within 'simulation_data'.
+        - The method does not return any value.
+
         """
-        name = dictionary["object_name"]
-        cs_csc_ra = np.array(list(self.cone_search_catalog['ra']), dtype=float)
-        cs_csc_dec = np.array(list(self.cone_search_catalog['dec']), dtype=float)
         
-        csc_ra = np.array(self.nearby_sources_table['RA'], dtype=float)
-        csc_dec = np.array(self.nearby_sources_table['DEC'], dtype=float)
+        os_dictionary = simulation_data["os_dictionary"]
+        object_data = simulation_data["object_data"]
+        object_name = object_data["object_name"]
+        
+        cs_csc_ra = np.array(list(self.cone_search_catalog[self.ra_cs]), dtype=float)
+        cs_csc_dec = np.array(list(self.cone_search_catalog[self.dec_cs]), dtype=float)
+        
+        csc_ra = np.array(self.nearby_sources_table[self.ra], dtype=float)
+        csc_dec = np.array(self.nearby_sources_table[self.dec], dtype=float)
         csc_ra = list(set(csc_ra))
         csc_dec = list(set(csc_dec))
         
         figure_1, axes = plt.subplots(2, 2, figsize=(15, 8), sharex=True, sharey=True)
-        figure_1.suptitle(f"Neighbourhood of {dictionary['object_name']}, radius = {radius}", fontsize=20)
+        figure_1.suptitle(f"Neighbourhood of {object_name}, radius = {radius}", fontsize=20)
         figure_1.text(0.5, 0.04, 'Right Ascension [deg]', ha='center', va='center', fontsize=16)
         figure_1.text(0.04, 0.5, 'Declination [deg]', ha='center', va='center', rotation='vertical', fontsize=16)
 
         
         ax00 = axes[0][0]
-        ax00.scatter(csc_ra, csc_dec, s=10, c='black', marker="*", label=f"Sources close to {dictionary['object_name']} : {len(csc_ra)}")
-        ax00.scatter(dictionary['object_position'].ra, dictionary['object_position'].dec, marker='x', c='red', label=f"{dictionary['object_name']}")
+        ax00.scatter(csc_ra, csc_dec, s=10, c='black', marker="*", label=f"Sources close to {object_name} : {len(csc_ra)}")
+        ax00.scatter(object_data['object_position'].ra, object_data['object_position'].dec, marker='x', c='red', label=f"{object_name}")
         ax00.legend(loc='upper right')
         ax00.set_title("With chandra.fits")
         
         ax01 = axes[0][1]
-        ax01.scatter(cs_csc_ra, cs_csc_dec, s=10, c='black', marker="*", label=f"Sources close to {dictionary['object_name']} : {len(cs_csc_ra)}")
-        ax01.scatter(dictionary['object_position'].ra, dictionary['object_position'].dec, marker='x', c='red', label=f"{dictionary['object_name']}")
+        ax01.scatter(cs_csc_ra, cs_csc_dec, s=10, c='black', marker="*", label=f"Sources close to {object_name} : {len(cs_csc_ra)}")
+        ax01.scatter(object_data['object_position'].ra, object_data['object_position'].dec, marker='x', c='red', label=f"{object_name}")
         ax01.legend(loc='upper right')
         ax01.set_title("With cone search")
         
         ax10 = axes[1][0]
 
-        cs_ra_var = [ra for index, ra in enumerate(list(self.cone_search_catalog['ra'])) if self.cone_search_catalog['Variability'][index] != 0.0]
-        cs_ra_invar = [ra for index, ra in enumerate(list(self.cone_search_catalog['ra'])) if self.cone_search_catalog['Variability'][index] == 0.0]
+        cs_ra_var = [ra for index, ra in enumerate(list(self.cone_search_catalog[self.ra_cs])) if self.cone_search_catalog['Variability'][index] != 0.0]
+        cs_ra_invar = [ra for index, ra in enumerate(list(self.cone_search_catalog[self.ra_cs])) if self.cone_search_catalog['Variability'][index] == 0.0]
 
-        cs_dec_var = [dec for index, dec in enumerate(list(self.cone_search_catalog['dec'])) if self.cone_search_catalog['Variability'][index] != 0.0]
-        cs_dec_invar = [dec for index, dec in enumerate(list(self.cone_search_catalog['dec'])) if self.cone_search_catalog['Variability'][index] == 0.0]
+        cs_dec_var = [dec for index, dec in enumerate(list(self.cone_search_catalog[self.dec_cs])) if self.cone_search_catalog['Variability'][index] != 0.0]
+        cs_dec_invar = [dec for index, dec in enumerate(list(self.cone_search_catalog[self.dec_cs])) if self.cone_search_catalog['Variability'][index] == 0.0]
 
         ax11 = axes[1][1]
         ax11.scatter(cs_ra_var, cs_dec_var, s=10, c='darkorange', marker='*', label=f"Var src : {len(cs_ra_var)} sources")
         ax11.scatter(cs_ra_invar, cs_dec_invar, s=10, c='blue', marker='*', label=f"Invar src : {len(cs_ra_invar)} sources")
-        ax11.scatter(dictionary['object_position'].ra, dictionary['object_position'].dec, marker='+', s=50, c='red', label=f"{dictionary['object_name']}")
+        ax11.scatter(object_data['object_position'].ra, object_data['object_position'].dec, marker='+', s=50, c='red', label=f"{object_name}")
         ax11.legend(loc="upper right", ncol=2)
         
-        plt.savefig(os.path.join(os_dictionary["img"], f"neighbourhood_of_{name}.png".replace(" ", "_")))
+        plt.savefig(os.path.join(os_dictionary["img"], f"neighbourhood_of_{object_name}.png".replace(" ", "_")))
         plt.show()
 
 
     def threshold(self, cone_search_catalog):
+        """
+        Corrects flux values in the Chandra Source Catalog by replacing missing or invalid data with minimum valid values.
+
+        This method processes the Chandra Source Catalog to handle missing or invalid flux values. It iterates over various 
+        flux-related columns in the catalog, replacing masked or NaN values with the minimum numerical value found in each 
+        respective column. The method corrects both observed flux values and their errors, across different bands.
+
+        Parameters:
+        cone_search_catalog : The Chandra Source Catalog, typically an astropy Table, which contains the flux data to be 
+                            corrected.
+
+        Returns:
+        The modified Chandra Source Catalog, with corrected flux values.
+
+        Notes:
+        - The method relies on the 'dict_cat.dictionary_catalog' for definitions of the flux columns to be processed.
+        - The flux columns include observed fluxes, their errors, and band-specific fluxes.
+        - The method iterates through each source in the catalog, checking for masked constants or NaN values in these 
+        columns and replacing them with the minimum valid value found in the same column.
+        - This correction is applied to ensure more accurate and meaningful analysis of the flux data.
+
+        """
+        
         source_number = len(cone_search_catalog)
         key = "CS_Chandra"
 
@@ -951,20 +1066,27 @@ class Chandra:
 
     def visualization_interp(self, optimization_parameters, photon_index, key) -> None:
         """
-        Visualize the interpolation of photon indices.
+        Creates a logarithmic plot visualizing the interpolation of photon index values across different energy bands.
 
-        Parameters
-        ----------
-        optimization_parameters : List[Tuple[np.ndarray]]
-            List of tuples containing arrays of energy bands, observed fluxes, non-absorbed power law values, and absorbed power law values.
-        photon_index : List[Tuple[float, float]]
-            List of tuples containing the non-absorbed and absorbed photon indices respectively.
+        This method generates a plot that visualizes the relationship between energy bands and fluxes, considering the 
+        photon index values. It uses optimization parameters and photon index values for each energy band and displays the 
+        results as an errorbar plot, with power-law models for absorption.
 
-        Returns
-        -------
-        None
-            This function plots a graph and does not return any value.
+        Parameters:
+        optimization_parameters (list): A list of tuples, each containing optimization parameters. Each tuple typically 
+                                        includes flux observations, flux errors, and absorbed power-law values.
+        photon_index (list): A list of photon index values corresponding to the optimization parameters.
+        key (str): A key to access the energy band center values from 'dict_cat.dictionary_catalog'.
+
+        Notes:
+        - The method retrieves energy band center values from 'dict_cat.dictionary_catalog' using the provided key.
+        - The plot is logarithmic, displaying energy in keV and flux in erg/cm^2/s/keV.
+        - Each set of flux observations is plotted with error bars, and absorbed power-law models are plotted for each 
+        photon index.
+        - The plot is titled "Interpolation Photon Index plot" and includes appropriate axis labels.
+
         """
+        
         energy_band = dict_cat.dictionary_catalog[key]["energy_band_center"]
         
         fig, axes = plt.subplots(1, 1, figsize=(15, 8))
@@ -980,7 +1102,6 @@ class Chandra:
             
             axes.errorbar(energy_band, flux_obs, flux_obs_err, fmt='*', color='red', ecolor='black')
             axes.plot(energy_band, absorbed_power_law, label=f"$\Gamma$ = {absorb_pho_index:.8f}")
-            # axes.step(energy_band, flux_obs, where='pre', label=f"$\Gamma$ = {absorb_pho_index:.8f}")
     
         axes.legend(loc="upper left", ncol=4, fontsize=6)
         axes.loglog()
@@ -989,6 +1110,31 @@ class Chandra:
 
 
     def get_photon_index(self, key, table, index):
+        """
+        Calculates the photon index for a given source using absorbed power-law fitting.
+
+        This method computes the photon index for an astronomical source based on its flux observations across different 
+        energy bands. It uses an absorbed power-law model for the fit. The method selects the appropriate data based on the 
+        provided catalog key and then performs the fitting process to determine the photon index and other optimization 
+        parameters.
+
+        Parameters:
+        key (str): The key to identify the catalog and retrieve the relevant data from 'dict_cat.dictionary_catalog'.
+        table (Table): An astropy Table containing flux data for the source in various energy bands.
+        index (int): The index of the source in the table for which the photon index is to be calculated.
+
+        Returns:
+        Tuple[float, Tuple]: A tuple containing the photon index and a tuple of optimization parameters. The optimization 
+                            parameters include energy band centers, observed fluxes, flux errors, and absorbed power-law 
+                            values.
+
+        Notes:
+        - The method supports different keys for different catalogs (e.g., 'Chandra', 'CS_Chandra').
+        - The absorbed power-law fitting is done using the curve_fit function from scipy.optimize.
+        - If the fitting process fails, a default photon index value of 1.7 is returned.
+        - The optimization parameters are used for plotting in the 'visualization_interp' method.
+
+        """
         
         if key == "Chandra":
             interp_data = {"band_flux_obs": dict_cat.dictionary_catalog[key]["band_flux_obs"],
@@ -1030,6 +1176,30 @@ class Chandra:
         
 
     def get_phoindex_nh(self):
+        """
+        Computes and assigns photon index and hydrogen column density (Nh) values for sources in the Chandra Source Catalog and nearby sources.
+
+        This method calculates the photon index for each source in the Chandra Source Catalog and a table of nearby sources. 
+        It uses the 'powlaw_gamma' and 'nh_gal' columns from the catalog, along with additional computation for sources 
+        lacking this data. The method updates the tables with new columns for photon index and Nh values and visualizes 
+        the interpolation of photon indices.
+
+        Returns:
+        Tuple[List[float], List[float]]: A tuple containing two lists. The first list contains photon index values for 
+                                        sources in the Chandra Source Catalog. The second list contains photon index 
+                                        values for nearby sources.
+
+        Notes:
+        - The method iterates through the Chandra Source Catalog and the nearby sources table, computing photon indices 
+        where necessary using the 'get_photon_index' method.
+        - Nh values are calculated based on 'nh_gal' data, with a default value assigned where this data is missing.
+        - The computed photon indices and Nh values are added to the respective tables as new columns.
+        - The method visualizes the photon indices using the 'visualization_interp' method for both the Chandra Source 
+        Catalog and nearby sources.
+        - Default photon index and Nh values are used for cases with missing or invalid data.
+
+        """
+        
         key = "Chandra"
         cs_key = "CS_Chandra"
         
@@ -1082,13 +1252,30 @@ class Chandra:
   
     def dictionary_model(self) -> Dict[str, Dict[str, Union[str, float]]]:
         """
-        Create a dictionary of models and their parameters for each source in the cone search catalog.
+        Constructs dictionaries with model parameters for sources in the Chandra Source Catalog and nearby sources.
 
-        Returns
-        -------
-        model_dictionary : Dict[str, Dict[str, Union[str, float]]]
-            Dictionary where each key is a source identifier and the corresponding value is another dictionary containing model details.
+        This method creates two dictionaries, one for the Chandra Source Catalog and another for nearby sources. Each 
+        dictionary contains entries for individual sources, detailing their astrophysical model type (e.g., 'power'), 
+        model values (e.g., photon index), flux values, and column density.
+
+        Returns:
+        Dict[str, Dict[str, Union[str, float]]]: A tuple of two dictionaries. The first dictionary corresponds to the 
+                                                Chandra Source Catalog, and the second to the nearby sources. Each entry 
+                                                in these dictionaries represents a source, keyed by a unique identifier 
+                                                (e.g., 'src_0'), and contains information about the source's model, 
+                                                model value, flux, and column density.
+
+        Notes:
+        - The method assumes that the 'Photon Index' and 'Nh' values have already been calculated and added to the 
+        respective tables.
+        - Currently, the method only handles the 'power' model type. Placeholder code exists for other model types 
+        ('black_body', 'temp'), but these are not yet implemented.
+        - Each source is assigned a unique key in the dictionary (e.g., 'src_0', 'src_1', etc.).
+        - The method utilizes 'dict_cat.dictionary_catalog' to access flux observation column names for the respective 
+        catalogs.
+
         """
+        
         model_dictionary, cs_model_dictionary = {}, {}
         cs_number_source, number_source = len(self.cone_search_catalog), len(self.nearby_sources_table)
 
@@ -1140,47 +1327,69 @@ class Chandra:
             model_dictionary[f"src_{item}"] = dictionary
 
         return cs_model_dictionary, model_dictionary
-    
-
-    def corrected_mean_flux(self):
-        key = "Chandra"
-        flux_obs = dict_cat.dictionary_catalog[key]["flux_obs"]
-
-        data = []
-        for item in range(len(self.nearby_sources_table)):
-            if not isinstance(self.nearby_sources_table[flux_obs][item], np.nan):
-                data.append(self.nearby_sources_table[flux_obs][item])
-        min_value = np.min(data)
-        flux = list(self.nearby_sources_table[flux])
-        corrected_flux = np.nan_to_num(flux, nan=min_value)
-
-        self.nearby_sources_table[flux_obs] = corrected_flux
 
 
 class Swift:
     """
-    This class represents a catalog of astronomical sources observed by the Swift satellite. It provides methods to find
-    nearby sources, visualize the neighborhood of a target object, and construct a dictionary model.
+    A class for analyzing astronomical data from the Swift catalog.
+
+    This class provides methods for opening and analyzing data from the Swift catalog. It includes functionalities 
+    for finding nearby sources, visualizing the neighborhood of a specific object, calculating photon indices, 
+    and building a dictionary model for the sources.
 
     Attributes:
-    - swi_catalog (Table): The catalog of Swift sources.
-    - nearby_sources_table (Table): A table of sources located nearby the target object.
-    - nearby_sources_position (SkyCoord): Sky coordinates of the nearby sources.
-    - model_dictionary (dict): A dictionary model containing information about the sources.
-    """
+        ra (str): Right ascension column name in the Swift catalog.
+        dec (str): Declination column name in the Swift catalog.
+        swi_catalog (Table): The Swift catalog data as an astropy Table.
+        nearby_sources_table (Table): Table of nearby sources.
+        nearby_sources_position (SkyCoord): Sky coordinates of nearby sources.
+        photon_index (List[float]): List of photon index values for sources.
+        model_dictionary (Dict[str, Dict[str, Union[str, float]]]): Dictionary of source models.
 
+    Parameters:
+        catalog_path (str): Path to the Swift catalog file.
+        radius (Quantity): Radius for searching nearby sources.
+        simulation_data (dict): Dictionary containing simulation data.
+        user_table (Table): User-provided astropy Table.
+
+    Methods:
+        open_catalog(catalog_path): Opens the Swift catalog file and returns it as an astropy Table.
+        find_nearby_sources(radius, object_data): Finds and returns nearby sources and their positions.
+        neighbourhood_of_object(radius, simulation_data): Visualizes the neighborhood of a specified object.
+        visualization_inter(optimization_parameters, photon_index, key): Visualizes the interpolation of photon index values.
+        get_photon_index(table, key, index): Calculates the photon index for a given source.
+        get_phoindex_nh(): Computes and assigns photon index and Nh values for sources.
+        dictionary_model(): Constructs a dictionary with model parameters for sources.
+    """
 
     def __init__(self, catalog_path: str, radius: Quantity, simulation_data: dict, user_table: Table) -> None:
         """
-        Initializes the Swift class with a catalog path, search radius, dictionary of target object information, 
-        and a user-defined table.
+        Initializes the Swift class with specific catalog data, search radius, and simulation parameters.
+
+        This constructor loads the Swift astronomical catalog from a given path, searches for nearby sources within a 
+        specified radius around a provided celestial object, and initiates several analyses including neighborhood 
+        visualization, photon index calculation, and model dictionary creation.
 
         Parameters:
-        - catalog_path (str): Path to the Swift catalog file.
-        - radius (float): Search radius (in degrees) for finding nearby sources.
-        - dictionary (dict): A dictionary containing information about the target object.
-        - user_table (Table): A user-defined table of sources.
-        """
+            catalog_path (str): The file path to the Swift catalog.
+            radius (Quantity): The radius within which to search for nearby sources, specified as an astropy Quantity.
+            simulation_data (dict): A dictionary containing simulation data, including details about the celestial object.
+            user_table (Table): An astropy Table provided by the user, not used in the current implementation.
+
+        Attributes created:
+            ra (str): Right ascension column name as specified in dict_cat.dictionary_coord for Swift.
+            dec (str): Declination column name as specified in dict_cat.dictionary_coord for Swift.
+            swi_catalog (Table): The Swift catalog data as an astropy Table, loaded from the specified catalog_path.
+            nearby_sources_table (Table): Table of sources found near the specified celestial object.
+            nearby_sources_position (SkyCoord): Sky coordinates of the sources found near the specified celestial object.
+            photon_index (List[float]): List of photon index values for sources.
+            model_dictionary (Dict[str, Dict[str, Union[str, float]]]): Dictionary of model parameters for each source.
+        """    
+        # ---------- coord ---------- #
+        self.ra = dict_cat.dictionary_coord["Swift"]["right_ascension"]
+        self.dec = dict_cat.dictionary_coord["Swift"]["declination"]
+        # --------------------------- #
+
         self.swi_catalog = self.open_catalog(catalog_path)
         self.nearby_sources_table, self.nearby_sources_position = self.find_nearby_sources(radius=radius, object_data=simulation_data["object_data"])
         
@@ -1191,31 +1400,30 @@ class Swift:
 
     def open_catalog(self, catalog_path: str)-> Table:
         """
-        Opens and reads a FITS catalog file and returns it as an Astropy Table.
+        Opens a FITS file containing the Swift catalog and returns it as an astropy Table.
 
         Parameters:
-        - catalog_path (str): Path to the Swift catalog file.
+        catalog_path (str): The file path to the Swift catalog.
 
         Returns:
-        - Table: The catalog of Swift sources.
+        Table: An astropy Table containing the data from the Swift catalog.
         """
         with fits.open(catalog_path, memmap=True) as data:
-            result_table = Table(data[1].data)
-            data.close()
-            return result_table
-        
-        
+            return Table(data[1].data)
+
+            
     def find_nearby_sources(self, radius: Quantity, object_data: dict) -> Tuple[Table, SkyCoord]:
         """
-        Finds sources in the Swift catalog that are within a certain radius from the target object.
+        Finds sources in the Swift catalog that are near a specified celestial object.
 
         Parameters:
-        - radius (float): Search radius (in degrees) for finding nearby sources.
-        - dictionary (dict): A dictionary containing information about the target object.
+        radius (Quantity): The search radius around the object, specified as an astropy Quantity.
+        object_data (dict): A dictionary containing information about the celestial object.
 
         Returns:
-        - Tuple[Table, SkyCoord]: A table of nearby sources and their sky coordinates.
+        Tuple[Table, SkyCoord]: A tuple containing an astropy Table of nearby sources and their SkyCoord positions.
         """
+    
         field_of_view = radius + 5*u.arcmin
         name = object_data["object_name"]
         object_position = object_data['object_position']
@@ -1231,10 +1439,10 @@ class Swift:
 
         print(fr"{colored('Reducing Swift catalog...', 'yellow')} to fov of {radius.value + 5 } arcmin")
         for number in tqdm(range(len(self.swi_catalog))):
-            if min_ra/u.deg < self.swi_catalog["RA"][number] < max_ra/u.deg and min_dec/u.deg < self.swi_catalog["DEC"][number] < max_dec/u.deg:
+            if min_ra/u.deg < self.swi_catalog[self.ra][number] < max_ra/u.deg and min_dec/u.deg < self.swi_catalog[self.dec][number] < max_dec/u.deg:
                 small_table.add_row(self.swi_catalog[number])
                 
-        src_position = SkyCoord(ra=small_table['RA'], dec=small_table['DEC'], unit=u.deg)
+        src_position = SkyCoord(ra=small_table[self.ra], dec=small_table[self.dec], unit=u.deg)
                 
         print(f"{colored(f'Find sources close to {name} with Swift catalog', 'blue')}")
         for number in tqdm(range(len(small_table))):
@@ -1242,8 +1450,8 @@ class Swift:
                 nearby_sources_table.add_row(small_table[number])
 
         column_name = {"source_name": "Swift_IAUNAME", 
-                       "right_ascension": "RA",
-                       "declination": "DEC",
+                       "right_ascension": self.ra,
+                       "declination": self.dec,
                        "catalog_name": "Swift"}
         
         if len(nearby_sources_table) != 0:
@@ -1255,7 +1463,7 @@ class Swift:
             print("Nearby sources table from Swift catalog is empty.")
             sys.exit()
             
-        nearby_src_position = SkyCoord(ra=unique_table['RA'], dec=unique_table['DEC'], unit=u.deg)
+        nearby_src_position = SkyCoord(ra=unique_table[self.ra], dec=unique_table[self.dec], unit=u.deg)
                 
         try :
             if len(unique_table) != 0:
@@ -1270,18 +1478,30 @@ class Swift:
 
     def neighbourhood_of_object(self, radius: Quantity, simulation_data: dict) -> None:
         """
-        Visualizes the neighborhood of the target object and nearby sources.
+        Visualizes the neighborhood of a specified celestial object in the Swift catalog.
+
+        This method creates a scatter plot showing the positions of sources found near the specified celestial object. 
+        It highlights both the nearby sources and the object itself, helping to understand their spatial distribution.
 
         Parameters:
-        - radius (float): Search radius (in degrees) for finding nearby sources.
-        - dictionary (dict): A dictionary containing information about the target object.
+        radius (Quantity): The search radius around the celestial object, specified as an astropy Quantity.
+        simulation_data (dict): A dictionary containing simulation data. This should include 'object_data' with the 
+                                target object's information and 'os_dictionary' for output settings.
+
+        The method plots the right ascension and declination of the nearby sources and the target object. It saves the 
+        plot to a specified location and also displays it.
+
+        Note:
+        'object_data' within simulation_data should contain 'object_name' for the title of the plot and 
+        'object_position' for the object's coordinates. 'os_dictionary' should contain the 'img' key with the path 
+        to save the plot.
         """
         object_data = simulation_data["object_data"]
         object_position = object_data['object_position']
         os_dictionary = simulation_data["os_dictionary"]
     
-        swi_ra = self.nearby_sources_table['RA']
-        swi_dec = self.nearby_sources_table['DEC']
+        swi_ra = self.nearby_sources_table[self.ra]
+        swi_dec = self.nearby_sources_table[self.dec]
         
         corrected_swi_ra = list(set(swi_ra))
         corrected_swi_dec = list(set(swi_dec))
@@ -1291,8 +1511,8 @@ class Swift:
         
         axes.scatter(corrected_swi_ra, corrected_swi_dec, s=30, facecolors='none', edgecolors='black', label=f"Sources : {len(self.nearby_sources_table)}")
         axes.scatter(object_position.ra, object_position.dec, c='red', s=100, marker='*', label=f"{object_data['object_name']}")
-        axes.set_xlabel('Right Ascension')
-        axes.set_ylabel('Declination')
+        axes.set_xlabel('Right Ascension [deg]', fontsize=16)
+        axes.set_ylabel('Declination [deg]', fontsize=16)
         axes.legend(loc='upper right')
         
         img = os_dictionary["img"]
@@ -1301,7 +1521,24 @@ class Swift:
         plt.show()
     
     
-    def visualization_inter(self, optimization_parameters, photon_index, key):
+    def visualization_inter(self, optimization_parameters, photon_index, key) -> None:
+        """
+        Visualizes the interpolation of photon index values across different energy bands.
+
+        This method creates a plot that illustrates the relationship between photon index values and energy bands. 
+        It uses error bars to depict observed fluxes and plots absorbed power-law models for each energy band based 
+        on the photon index values.
+
+        Parameters:
+        optimization_parameters: A list of tuples containing optimization parameters for each source. Each tuple should 
+                                include observed fluxes, flux errors, and absorbed power-law values.
+        photon_index (list): A list of photon index values corresponding to each set of optimization parameters.
+        key (str): The key used to access energy band center values from 'dict_cat.dictionary_catalog'.
+
+        The plot displays energy in keV and flux in erg/cm^2/s/keV. Each source's data is plotted with its photon index, 
+        providing a visual representation of the spectral characteristics of the sources.
+        """
+        
         energy_band = dict_cat.dictionary_catalog[key]["energy_band_center"]
             
         fig, axes = plt.subplots(1, 1, figsize=(15, 8))
@@ -1317,7 +1554,6 @@ class Swift:
             
             axes.errorbar(energy_band, flux_obs, flux_obs_err, fmt='*', color='red', ecolor='black')
             axes.plot(energy_band, absorbed_power_law, label=f"$\Gamma$ = {absorb_pho_index:.8f}")
-            # axes.step(energy_band, flux_obs, where='pre', label=f"$\Gamma$ = {absorb_pho_index:.8f}")
 
         axes.legend(loc="upper left", ncol=4, fontsize=6)
         axes.loglog()
@@ -1325,7 +1561,28 @@ class Swift:
         plt.show()
         
 
-    def get_photon_index(self, table, key, index):
+    def get_photon_index(self, table, key, index) -> Tuple[List, Tuple]:
+        """
+        Calculates the photon index for a specified source in the Swift catalog using absorbed power-law fitting.
+
+        This method computes the photon index of a source by fitting its flux observations across different energy bands 
+        to an absorbed power-law model. The method takes into account the flux errors and the energy band properties 
+        while performing the fit.
+
+        Parameters:
+        table (Table): An astropy Table containing the catalog data.
+        key (str): The key to access the required data from 'dict_cat.dictionary_catalog'.
+        index (int): The index of the source in the table for which the photon index is to be calculated.
+
+        Returns:
+        Tuple[float, Tuple]: A tuple containing the photon index and a tuple of optimization parameters. The optimization 
+                            parameters include energy band centers, observed fluxes, flux errors, and absorbed power-law 
+                            values.
+
+        The method uses the curve_fit function from scipy.optimize to perform the fitting. If the fitting fails, a 
+        default photon index value is returned.
+        """
+        
         interp_data = {"band_flux_obs": dict_cat.dictionary_catalog[key]["band_flux_obs"],
                        "band_flux_obs_err": dict_cat.dictionary_catalog[key]["band_flux_obs_err"],
                        "energy_band_center": dict_cat.dictionary_catalog[key]["energy_band_center"],
@@ -1358,7 +1615,20 @@ class Swift:
         return photon_index, optimization_parameters 
 
 
-    def get_phoindex_nh(self):
+    def get_phoindex_nh(self) -> List:
+        """
+        Computes photon index and hydrogen column density (Nh) for sources in the Swift catalog's nearby sources table.
+
+        This method calculates the photon index for each source in the nearby sources table using the absorbed power-law 
+        model. It also assigns a default hydrogen column density (Nh) value to each source. The method then visualizes 
+        the photon indices using a plot and updates the nearby sources table with the calculated photon indices and Nh values.
+
+        Returns:
+        List[float]: A list containing the photon index values for each source in the nearby sources table.
+
+        The method assumes a default Nh value of 3e20. If the calculated photon index is negative or zero, a default 
+        value of 1.7 is used. The visualization of photon indices is handled by the 'visualization_inter' method.
+        """
         key = "Swift"
         photon_index_list, parameters_list, nh_list = [], [], []
 
@@ -1377,6 +1647,22 @@ class Swift:
     
     
     def dictionary_model(self) -> Dict[str, Dict[str, Union[str, float]]]:
+        """
+        Creates a dictionary containing model parameters for each source in the nearby sources table.
+
+        This method iterates over the nearby sources table and compiles a dictionary where each entry corresponds 
+        to a source. The dictionary for each source includes its model type, model value (such as the photon index), 
+        observed flux, and column density.
+
+        Returns:
+        Dict[str, Dict[str, Union[str, float]]]: A dictionary where each key represents a source (formatted as 'src_{index}')
+        and the value is another dictionary containing the source's modeling parameters.
+
+        The current implementation only handles the 'power' model type, with placeholders for 'black_body' and 'temp' 
+        types for future expansion. The method assumes that the 'Photon Index' and 'Nh' values are already computed 
+        and available in the nearby sources table.
+        """
+        
         model_dictionary = {}
         number_source = len(self.nearby_sources_table)
 
@@ -1415,28 +1701,66 @@ class Swift:
 
 class eRosita:
     """
-    This class represents a catalog of astronomical sources observed by the eRosita satellite. It provides methods to 
-    find nearby sources, visualize the neighborhood of a target object, and construct a dictionary model.
+    A class for analyzing astronomical data from the eRosita catalog.
+
+    This class provides methods for opening and analyzing data from the eRosita catalog. It includes functionalities 
+    for finding nearby sources, visualizing the neighborhood of a specific object, calculating photon indices, 
+    and building a dictionary model for the sources.
 
     Attributes:
-    - eRo_catalog (Table): The catalog of eRosita sources.
-    - nearby_sources_table (Table): A table of sources located nearby the target object.
-    - nearby_sources_position (SkyCoord): Sky coordinates of the nearby sources.
-    - model_dictionary (dict): A dictionary model containing information about the sources.
-    """
+    ra (str): Right ascension column name in the eRosita catalog.
+    dec (str): Declination column name in the eRosita catalog.
+    eRo_catalog (Table): The eRosita catalog data as an astropy Table.
+    nearby_sources_table (Table): Table of nearby sources.
+    nearby_sources_position (SkyCoord): Sky coordinates of nearby sources.
+    photon_index (List[float]): List of photon index values for sources.
+    model_dictionary (Dict[str, Dict[str, Union[str, float]]]): Dictionary of source models.
 
+    Parameters:
+    catalog_path (str): Path to the eRosita catalog file.
+    radius (Quantity): Radius for searching nearby sources.
+    simulation_data (dict): Dictionary containing simulation data.
+    user_table (Table): User-provided astropy Table.
+
+    Methods:
+    open_catalog(catalog_path): Opens the eRosita catalog file and returns it as an astropy Table.
+    find_nearby_sources(radius, simulation_data): Finds and returns nearby sources and their positions.
+    neighbourhood_of_object(dictionary, radius): Visualizes the neighborhood of a specified object.
+    visualization_inter(optimization_parameters, photon_index, key): Visualizes the interpolation of photon index values.
+    get_photon_index(table, key, index): Calculates the photon index for a given source.
+    get_phoindex_nh(): Computes and assigns photon index and Nh values for sources.
+    dictionary_model(): Constructs a dictionary with model parameters for sources.
+
+    """
 
     def __init__(self, catalog_path: str, radius: Quantity, simulation_data: dict, user_table: Table) -> None:
         """
-        Initializes the eRosita class with a catalog path, search radius, dictionary of target object information,
-        and a user-defined table.
+        Initializes the eRosita class with the specified catalog, search radius, simulation data, and user table.
+
+        This constructor loads the eRosita astronomical catalog from the given path, searches for nearby sources within a 
+        specified radius around a provided celestial object, and performs various analyses such as neighborhood 
+        visualization, photon index calculation, and model dictionary creation.
 
         Parameters:
-        - catalog_path (str): Path to the eRosita catalog file.
-        - radius (float): Search radius (in degrees) for finding nearby sources.
-        - dictionary (dict): A dictionary containing information about the target object.
-        - user_table (Table): A user-defined table of sources.
-        """
+            catalog_path (str): The file path to the eRosita catalog.
+            radius (Quantity): The radius within which to search for nearby sources, specified as an astropy Quantity.
+            simulation_data (dict): A dictionary containing simulation data, including details about the celestial object.
+            user_table (Table): An astropy Table provided by the user, not used in the current implementation.
+
+        Attributes created:
+            ra (str): Right ascension column name as specified in dict_cat.dictionary_coord for eRosita.
+            dec (str): Declination column name as specified in dict_cat.dictionary_coord for eRosita.
+            eRo_catalog (Table): The eRosita catalog data as an astropy Table, loaded from the specified catalog_path.
+            nearby_sources_table (Table): Table of sources found near the specified celestial object.
+            nearby_sources_position (SkyCoord): Sky coordinates of the sources found near the specified celestial object.
+            photon_index (List[float]): List of photon index values for sources.
+            model_dictionary (Dict[str, Dict[str, Union[str, float]]]): Dictionary of model parameters for each source.
+        """    
+        # ---------- coord ---------- #
+        self.ra = dict_cat.dictionary_coord["eRosita"]["right_ascension"]
+        self.dec = dict_cat.dictionary_coord["eRosita"]["declination"]
+        # --------------------------- #
+
         self.eRo_catalog = self.open_catalog(catalog_path)
         self.nearby_sources_table, self.nearby_sources_position = self.find_nearby_sources(radius=radius, simulation_data=simulation_data)
         
@@ -1447,30 +1771,39 @@ class eRosita:
         
     def open_catalog(self, catalog_path: str) -> Table:
         """
-        Opens and reads a FITS catalog file and returns it as an Astropy Table.
+        Opens a FITS file containing the eRosita catalog and returns it as an astropy Table.
+
+        This method is responsible for loading the eRosita catalog data from a FITS file located at the specified path. 
+        It utilizes memory mapping for efficient handling of large files.
 
         Parameters:
-        - catalog_path (str): Path to the eRosita catalog file.
+        catalog_path (str): The file path to the eRosita catalog.
 
         Returns:
-        - Table: The catalog of eRosita sources.
+        Table: An astropy Table containing the data from the eRosita catalog.
         """
+
         with fits.open(catalog_path, memmap=True) as data:
-            result_table = Table(data[1].data)
-            data.close()
-            return result_table
-        
+            return Table(data[1].data)
+
         
     def find_nearby_sources(self, radius: Quantity, simulation_data: dict) -> Tuple[Table, SkyCoord]:
         """
-        Finds sources in the eRosita catalog that are within a certain radius from the target object.
+        Finds sources in the eRosita catalog that are near a specified celestial object.
+
+        This method identifies sources within a specified radius around a celestial object's position. It searches the 
+        eRosita catalog for sources within this field of view and compiles a list of nearby sources.
 
         Parameters:
-        - radius (float): Search radius (in degrees) for finding nearby sources.
-        - dictionary (dict): A dictionary containing information about the target object.
+        radius (Quantity): The search radius around the celestial object, specified as an astropy Quantity.
+        simulation_data (dict): A dictionary containing information about the celestial object including its name and position.
 
         Returns:
-        - Tuple[Table, SkyCoord]: A table of nearby sources and their sky coordinates.
+        Tuple[Table, SkyCoord]: A tuple containing an astropy Table of nearby sources and their SkyCoord positions.
+
+        The method calculates the field of view by adding an extra 5 arcminutes to the provided radius. It then filters 
+        the eRosita catalog to find sources within this field of view. If no sources are found, or in case of an error, 
+        the method provides appropriate feedback.
         """
         field_of_view = radius + 5*u.arcmin
         object_data = simulation_data["object_data"]
@@ -1488,10 +1821,10 @@ class eRosita:
 
         print(fr"{colored('Reducing Swift catalog...', 'yellow')} to fov of {radius.value + 5 } arcmin")
         for number in tqdm(range(len(self.eRo_catalog))):
-            if min_ra/u.deg < self.eRo_catalog["RA"][number] < max_ra/u.deg and min_dec/u.deg < self.eRo_catalog["DEC"][number] < max_dec/u.deg:
+            if min_ra/u.deg < self.eRo_catalog[self.ra][number] < max_ra/u.deg and min_dec/u.deg < self.eRo_catalog[self.dec][number] < max_dec/u.deg:
                 small_table.add_row(self.eRo_catalog[number])
                 
-        src_position = SkyCoord(ra=small_table['RA'], dec=small_table['DEC'], unit=u.deg)
+        src_position = SkyCoord(ra=small_table[self.ra], dec=small_table[self.dec], unit=u.deg)
                 
         print(f"{colored(f'Find sources close to {object_name} with eRosita catalog', 'blue')}")
         for number in tqdm(range(len(small_table))):
@@ -1499,8 +1832,8 @@ class eRosita:
                 nearby_sources_table.add_row(small_table[number])
         
         column_name = {"source_name": "eRosita_IAUNAME",
-                       "right_ascension": "RA",
-                       "declination": "DEC",
+                       "right_ascension": self.ra,
+                       "declination": self.dec,
                        "catalog_name": "eRosita"}
         
         if len(nearby_sources_table) != 0:
@@ -1513,12 +1846,12 @@ class eRosita:
             sys.exit()
         
            
-        nearby_src_position = SkyCoord(ra=unique_table['RA'], dec=unique_table['DEC'], unit=u.deg)
+        nearby_sources_position = SkyCoord(ra=unique_table[self.ra], dec=unique_table[self.dec], unit=u.deg)
                 
         try :
             if len(unique_table) != 0:
                 print((f"We have detected {len(unique_table)} sources close to {object_data['object_name']}"))
-                return unique_table, nearby_src_position
+                return unique_table, nearby_sources_position
             else:
                 print(f"No sources detected close to {object_data['object_name']}.")
                 sys.exit()
@@ -1528,30 +1861,58 @@ class eRosita:
     
     def neighbourhood_of_object(self, dictionary: dict, radius: Quantity) -> None:
         """
-        Visualizes the neighborhood of the target object and nearby sources.
+        Visualizes the neighborhood of a specified celestial object in the eRosita catalog.
+
+        This method creates a scatter plot showing the positions of sources found near the specified celestial object. 
+        It highlights both the nearby sources and the object itself, helping to understand their spatial distribution.
 
         Parameters:
-        - dictionary (dict): A dictionary containing information about the target object.
-        - radius (float): Search radius (in degrees) for finding nearby sources.
+        dictionary (dict): A dictionary containing information about the celestial object, including its name and position.
+        radius (Quantity): The search radius around the celestial object, specified as an astropy Quantity.
+
+        The method plots the right ascension and declination of the nearby sources and the target object. The celestial 
+        object's name and the number of nearby sources found are displayed as part of the plot's legend.
+
+        The plot visually represents the distribution of sources within the specified radius from the celestial object, 
+        helping to analyze the object's local astronomical neighborhood.
         """
+        
         object_position = dictionary['object_position']
     
-        ero_ra = self.nearby_sources_table['RA']
-        ero_dec = self.nearby_sources_table['DEC']
+        ero_ra = self.nearby_sources_table[self.ra]
+        ero_dec = self.nearby_sources_table[self.dec]
         
         figure_1, axes = plt.subplots(1, 1, figsize=(12, 8))
         figure_1.suptitle(f"Neighbourhood of {dictionary['object_name']}, radius = {radius}", fontsize=20)
         
         axes.scatter(ero_ra, ero_dec, c='black', s=1, marker='*', label=f"Sources close to {dictionary['object_name']}, nbr_src : {len(ero_ra)}")
         axes.scatter(object_position.ra, object_position.dec, c='red', s=100, marker='+', label=f"{dictionary['object_name']}")
-        axes.set_xlabel('Right Ascension')
-        axes.set_ylabel('Declination')
+        axes.set_xlabel('Right Ascension [deg]', fontsize=16)
+        axes.set_ylabel('Declination [deg]', fontsize=16)
         axes.legend(loc='upper right')
         
         plt.show()
 
 
-    def visualization_inter(self, optimization_parameters, photon_index, key):
+    def visualization_inter(self, optimization_parameters, photon_index, key) -> None:
+        """
+        Visualizes the interpolation of photon index values across different energy bands for astronomical sources.
+
+        This method creates a plot illustrating the relationship between photon index values and energy bands for sources 
+        in the eRosita catalog. It uses error bars to represent observed fluxes and plots the absorbed power-law models 
+        for each energy band based on the photon index values.
+
+        Parameters:
+        optimization_parameters: A list of tuples, each containing optimization parameters for a source. These parameters 
+                                typically include observed fluxes, flux errors, and absorbed power-law values.
+        photon_index (list): A list of photon index values corresponding to each set of optimization parameters.
+        key (str): The key used to access energy band center values from 'dict_cat.dictionary_catalog'.
+
+        The plot displays energy in keV and flux in erg/cm^2/s/keV. It uses a logarithmic scale for both axes to 
+        effectively visualize the spectral data. Each source's data is plotted with its corresponding photon index, 
+        providing insights into the spectral characteristics of the sources in the catalog.
+        """
+        
         energy_band = dict_cat.dictionary_catalog[key]["energy_band_center"]
             
         fig, axes = plt.subplots(1, 1, figsize=(15, 8))
@@ -1567,7 +1928,6 @@ class eRosita:
             
             axes.errorbar(energy_band, flux_obs, flux_obs_err, fmt='*', color='red', ecolor='black')
             axes.plot(energy_band, absorbed_power_law, label=f"$\Gamma$ = {absorb_pho_index:.8f}")
-            # axes.step(energy_band, flux_obs, where='pre', label=f"$\Gamma$ = {absorb_pho_index:.8f}")
 
         axes.legend(loc="upper left", ncol=4, fontsize=6)
         axes.loglog()
@@ -1575,7 +1935,26 @@ class eRosita:
         plt.show()
         
 
-    def get_photon_index(self, table, key, index):
+    def get_photon_index(self, table, key, index) -> Tuple[List, Tuple]:
+        """
+        Calculates the photon index for a specified source in the eRosita catalog using an absorbed power-law fitting.
+
+        This method computes the photon index of a source by fitting its flux observations across different energy bands 
+        to an absorbed power-law model. It considers the flux errors and the energy band properties during the fitting.
+
+        Parameters:
+        table (Table): An astropy Table containing the catalog data.
+        key (str): The key to access the required data from 'dict_cat.dictionary_catalog'.
+        index (int): The index of the source in the table for which the photon index is to be calculated.
+
+        Returns:
+        Tuple[float, Tuple]: A tuple containing the photon index and a tuple of optimization parameters. The optimization 
+                            parameters include energy band centers, observed fluxes, flux errors, and absorbed power-law 
+                            values.
+
+        The method uses the curve_fit function from scipy.optimize to perform the fitting. If the fitting process 
+        encounters any error, a default photon index value is returned.
+        """
         interp_data = {"band_flux_obs": dict_cat.dictionary_catalog[key]["band_flux_obs"],
                        "band_flux_obs_err": dict_cat.dictionary_catalog[key]["band_flux_obs_err"],
                        "energy_band_center": dict_cat.dictionary_catalog[key]["energy_band_center"],
@@ -1608,7 +1987,20 @@ class eRosita:
         return photon_index, optimization_parameters 
 
 
-    def get_phoindex_nh(self):
+    def get_phoindex_nh(self) -> List:
+        """
+        Computes the photon index and hydrogen column density (Nh) for sources in the eRosita catalog's nearby sources table.
+
+        This method calculates the photon index for each source in the nearby sources table using an absorbed power-law model. 
+        It also assigns a default hydrogen column density (Nh) value to each source. The photon indices are visualized using a 
+        plot, and the nearby sources table is updated with these new 'Photon Index' and 'Nh' values.
+
+        Returns:
+        List[float]: A list containing the photon index values for each source in the nearby sources table.
+
+        The method uses a default Nh value of 3e20. If a calculated photon index is negative or zero, a default value of 1.7 is used. 
+        The visualization of photon indices is done using the 'visualization_inter' method.
+        """
         key = "eRosita"
         photon_index_list, parameters_list, nh_list = [], [], []
 
@@ -1627,6 +2019,21 @@ class eRosita:
     
     
     def dictionary_model(self) -> Dict[str, Dict[str, Union[str, float]]]:
+        """
+        Creates a dictionary containing the model parameters for each source in the eRosita catalog's nearby sources table.
+
+        This method compiles a dictionary where each entry corresponds to a source from the nearby sources table. The 
+        dictionary for each source includes its astrophysical model type (such as 'power'), model values (like the photon index), 
+        observed flux, and column density (Nh).
+
+        Returns:
+        Dict[str, Dict[str, Union[str, float]]]: A dictionary where each key represents a source and the value is a 
+        dictionary containing the source's modeling parameters.
+
+        The current implementation primarily handles the 'power' model type. Placeholders exist for 'black_body' and 'temp' types, 
+        indicating potential future expansion. The method assumes that 'Photon Index' and 'Nh' values are already computed and 
+        available in the nearby sources table.
+        """
         model_dictionary = {}
         number_source = len(self.nearby_sources_table)
 
@@ -1662,11 +2069,82 @@ class eRosita:
             
         return model_dictionary 
 
-
     
 class CompareCatalog:
-    
+    """
+    A class to compare and analyze astronomical catalogs, with a focus on calculating photon index and nh values for sources within these catalogs.
+
+    Attributes:
+        catalog_path (List[str]): Paths to the two catalogs being compared.
+        radius (float): The radius around the object position to consider for analysis.
+        simulation_data (dict): A dictionary containing simulation data, including object data, operating system information, and telescope data.
+        exp_time (int): The exposure time for the analysis.
+        nearby_sources_table_1 (Table): Table containing nearby sources from the first catalog.
+        nearby_sources_table_2 (Table): Table containing nearby sources from the second catalog.
+        nearby_sources_position_1 (SkyCoord): Sky coordinates of nearby sources from the first catalog.
+        nearby_sources_position_2 (SkyCoord): Sky coordinates of nearby sources from the second catalog.
+        index_table (List): List containing indices for variable sources in catalogs.
+        vignet_data_1 (List): List of vignetting-related data for the first catalog.
+        vignet_data_2 (List): List of vignetting-related data for the second catalog.
+        var_index_1 (List): List of indices for variable sources in the first catalog.
+        var_index_2 (List): List of indices for variable sources in the second catalog.
+        count_rates_1 (List): Count rates for the first catalog.
+        count_rates_2 (List): Count rates for the second catalog.
+        vector_dictionary_1 (Dict): Dictionary containing vector data for the first catalog.
+        vector_dictionary_2 (Dict): Dictionary containing vector data for the second catalog.
+        OptimalPointingIdx_1 (int): Optimal pointing index for the first catalog.
+        OptimalPointingIdx_2 (int): Optimal pointing index for the second catalog.
+        master_source_path (str): Path to the master source file.
+        total_spectra_1 (List): Total spectra information for the first catalog.
+        total_spectra_2 (List): Total spectra information for the second catalog.
+        total_var_spectra_1 (List): Total variable spectra information for the first catalog.
+        total_var_spectra_2 (List): Total variable spectra information for the second catalog.
+        instrument (Instrument): Instrument data for the analysis.
+
+    Methods:
+        open_catalog: Opens and processes catalogs based on provided keys and paths.
+        find_nearby_sources: Finds nearby sources based on object position, radius, and catalog data.
+        photon_index_nh_for_xmm: Calculates photon index and nh values for the XMM catalog.
+        photon_index_nh_for_csc: Calculates photon index and nh values for the Chandra catalog.
+        photon_index_nh_for_other_catalog: Calculates photon index and nh values for other catalogs like Swift and eRosita.
+        neighbourhood_of_object: Plots the neighborhood of an object based on catalog data.
+        dictionary_model: Creates a dictionary model for source analysis.
+        count_rate: Calculates count rates for sources in the catalogs.
+        xslx_to_py: Converts xlsx data to Python format for further processing.
+        calculate_opti_point: Calculates optimal pointing positions for telescopes.
+        variability_table: Creates and processes a variability table for sources.
+        variability_index: Identifies variable sources in the catalogs.
+        write_fits_table: Writes data to a FITS table for storage and further analysis.
+        modeling_source_spectra: Models source spectra based on catalog data.
+        total_spectra_plot: Plots total spectra for sources in the catalogs.
+        write_txt_file: Writes data to a text file for storage and documentation.
+    """
+   
     def __init__(self, catalog_path: List, radius, simulation_data: dict, exp_time: int) -> None:
+        """
+        Initializes the CompareCatalog class with necessary parameters for catalog comparison and analysis.
+
+        This method processes two astronomical catalogs, computes photon index and nh values, and prepares data for further analysis, including generating tables of nearby sources, calculating vignetting factors, and modeling source spectra.
+
+        Parameters:
+            catalog_path (List[str]): A list containing paths and keys for two catalogs to be compared. The list should contain four elements: path_1, path_2, key_1, and key_2, where path_x is the file path and key_x is the catalog key.
+            radius (float): The radius around the object position to consider for analysis, typically in arcminutes.
+            simulation_data (dict): A dictionary containing simulation data, including object data, operating system information, and telescope data.
+            exp_time (int): The exposure time used in the analysis.
+
+        The method performs several steps:
+        - Opens and processes the provided catalogs based on the keys and paths.
+        - Finds nearby sources from both catalogs within the specified radius.
+        - Calculates photon index and nh values for Xmm_DR13, CS_Chandra, Swift, and eRosita catalogs.
+        - Calculates the optimal pointing position for telescopic observations.
+        - Computes the vignetting factor for the sources in each catalog.
+        - Identifies variable sources in the catalogs and generates a master source path.
+        - Writes FITS tables and text files for the analyzed data.
+        - Models the source spectra and plots the total spectra for visualization.
+
+        The method also handles different operating systems for specific functionalities.
+        """
+        
         path_1, path_2 = catalog_path[0], catalog_path[1]
         key_1, key_2 = catalog_path[2], catalog_path[3]
 
@@ -1744,6 +2222,11 @@ class CompareCatalog:
         print(f"{colored(f'Find variable index for {key_2} catalog', 'blue')}")
         self.var_index_2 = self.variability_index(key=key_2, iauname=vignet_data_2[2], nearby_sources_table=self.nearby_sources_table_2)
         
+        # ---------- fits table ---------- #
+        self.write_fits_table(table=self.nearby_sources_table_1, key=key_1, os_dictionary=simulation_data["os_dictionary"])
+        self.write_fits_table(table=self.nearby_sources_table_2, key=key_2, os_dictionary=simulation_data["os_dictionary"])
+        # -------------------------------- #
+        
         self.total_spectra_1, self.total_spectra_2, self.total_var_spectra_1, self.total_var_spectra_2, self.instrument = self.modeling_source_spectra(simulation_data=simulation_data, exp_time=exp_time, key=(key_1, key_2))
         self.data_1, self.data_2 = self.total_spectra_plot(simulation_data=simulation_data, radius=radius.value, key=(key_1, key_2))
         
@@ -1751,6 +2234,29 @@ class CompareCatalog:
         
     
     def open_catalog(self, key: Tuple, path:Tuple, radius, object_data: Dict) -> Tuple[Table, Table]:
+        """
+        Opens and processes astronomical catalogs for further analysis.
+
+        This method is responsible for loading data from specified catalogs using given keys and paths. It handles different catalogs by checking the keys and applying appropriate procedures to load and convert the data into a usable format.
+
+        Parameters:
+            key (Tuple[str, str]): A tuple containing the keys for the catalogs to be opened. The keys are used to identify the specific catalogs and the corresponding procedures for loading the data.
+            path (Tuple[str, str]): A tuple containing the paths to the files of the catalogs to be opened.
+            radius (float): The radius around the object's position, used in catalog searching, typically in arcminutes.
+            object_data (Dict): A dictionary containing information about the object of interest, including its name.
+
+        Returns:
+            Tuple[Table, Table]: A tuple of two `Table` objects containing the data from the opened catalogs. 
+
+        The method performs the following operations:
+        - If one of the catalogs is "CSC_2.0", it uses the Chandra Source Catalog cone search service to find sources within the specified radius of the object's position.
+        - Opens FITS files for the specified paths to load data for other catalogs.
+        - Converts the loaded data into `Table` objects for further analysis.
+        - Prints a confirmation once the catalogs are loaded successfully.
+
+        This method simplifies the process of accessing astronomical data from various sources, making it easier to conduct comparative analyses between different catalogs.
+        """
+        
         if key[0] == "CSC_2.0":
             cone = vo.dal.SCSService('http://cda.cfa.harvard.edu/csc2scs/coneSearch') 
             name = SkyCoord.from_name(object_data['object_name'])
@@ -1786,6 +2292,28 @@ class CompareCatalog:
     
     
     def find_nearby_sources(self, table, radius, simulation_data, key: Tuple) -> Tuple[Table, Table, SkyCoord, SkyCoord]:
+        """
+        Identifies and processes nearby sources from astronomical catalogs based on a specified object's position.
+
+        Parameters:
+            table (Tuple[Table, Table]): A tuple containing two `Table` objects that hold the data from the catalogs to be processed.
+            radius (float): The radius around the object's position to consider for finding nearby sources, typically in arcminutes.
+            simulation_data (dict): A dictionary containing simulation data, including the object's position and other relevant information.
+            key (Tuple[str, str]): A tuple containing the keys identifying the specific catalogs to be processed.
+
+        Returns:
+            Tuple[Table, Table, SkyCoord, SkyCoord]: A tuple containing two `Table` objects with the nearby sources from each catalog and two `SkyCoord` objects representing the positions of these sources.
+
+        The method performs several steps:
+        - Determines the field of view based on the specified radius and the object's position.
+        - Filters the sources in each catalog within the field of view and closer than the specified radius to the object's position.
+        - Handles different combinations of catalogs (e.g., CSC_2.0, Xmm_DR13, Swift, eRosita) and applies specific procedures for each.
+        - Calculates sky coordinates for the nearby sources.
+        - Returns the processed tables and coordinates for further analysis.
+
+        This method is crucial for narrowing down the focus to sources in the vicinity of a specified object, enabling detailed analysis and comparison of these sources across different catalogs.
+        """
+        
         object_data = simulation_data["object_data"]
         object_position = object_data['object_position']
         object_name = object_data["object_name"]
@@ -2138,6 +2666,27 @@ class CompareCatalog:
                     
     
     def optimization(self, index: int, key: str, table: Table) -> Tuple[List, List]:
+        """
+        Optimizes the parameters of an absorbed power-law model based on the observed fluxes in different energy bands.
+
+        This method is used to fit the observed flux data from astronomical catalogs to an absorbed power-law model, which is commonly used in astrophysics to describe the spectral energy distribution of sources.
+
+        Parameters:
+            index (int): The index of the source in the catalog for which the optimization is being performed.
+            key (str): The key identifying the catalog (e.g., 'XMM', 'CS_Chandra', 'Swift', 'eRosita') from which the data is taken.
+            table (Table): The table containing the observed flux data and other relevant information for the sources.
+
+        Returns:
+            Tuple[List, List]: A tuple where the first element is a list containing the optimized parameters and the second element is the absorbed photon index.
+
+        The method performs the following steps:
+        - Retrieves the observed fluxes, their errors, energy band centers, and widths from the catalog data based on the given key.
+        - Defines an absorbed power-law function to model the source's spectrum.
+        - Uses the curve fitting technique to find the best-fit parameters for the absorbed power-law model based on the observed data.
+        - Returns the optimized parameters and the absorbed photon index for the specified source.
+
+        This optimization is crucial for understanding the physical processes in astronomical sources by analyzing their energy spectra.
+        """
         
         if key == "XMM":
             interp_data = {"band_flux_obs": dict_cat.dictionary_catalog[key]["band_flux_obs"],
@@ -2187,6 +2736,26 @@ class CompareCatalog:
     
     
     def visualization_interp(self, optimization_parameters, photon_index, key) -> None:
+        """
+        Visualizes the interpolation of photon indices using an absorbed power-law model.
+
+        This method plots the observed fluxes and the best-fit absorbed power-law model for sources in an astronomical catalog. It helps in understanding the spectral characteristics of these sources.
+
+        Parameters:
+            optimization_parameters (List): A list containing the optimization parameters obtained from fitting the absorbed power-law model. It includes energy band centers, observed fluxes, flux errors, and the model function.
+            photon_index (List): A list of photon indices corresponding to each source or observation in the catalog.
+            key (str): The key identifying the catalog (e.g., 'XMM', 'CS_Chandra', 'Swift', 'eRosita') from which the data is taken.
+
+        The method performs the following steps:
+        - Retrieves the energy band centers from the catalog data based on the given key.
+        - Creates a plot with energy on the x-axis and flux on the y-axis.
+        - Plots error bars for the observed fluxes and overlays the best-fit absorbed power-law model.
+        - Annotates the plot with the photon index for each source or observation.
+        - Displays the plot with logarithmic axes for better visualization of the spectral data.
+
+        This visualization is important for assessing the quality of the fit and for comparing the spectral properties across different sources or observations.
+        """
+        
         energy_band = dict_cat.dictionary_catalog[key]["energy_band_center"]
         
         fig, axes = plt.subplots(1, 1, figsize=(15, 8))
@@ -2202,7 +2771,6 @@ class CompareCatalog:
             
             axes.errorbar(energy_band, flux_obs, flux_obs_err, fmt='*', color='red', ecolor='black')
             axes.plot(energy_band, absorbed_power_law, label=f"$\Gamma$ = {absorb_pho_index:.8f}")
-            # axes.step(energy_band, flux_obs, where='pre', label=f"$\Gamma$ = {absorb_pho_index:.8f}")
     
         axes.legend(loc="upper left", ncol=4, fontsize=6)
         axes.loglog()
@@ -2211,6 +2779,27 @@ class CompareCatalog:
     
     
     def photon_index_nh_for_xmm(self, os_dictionary: Dict, xmm_index: int) -> Tuple[Table, List]:
+        """
+        Calculates the photon index and hydrogen column density (NH) for sources in the XMM-Newton catalog.
+
+        Parameters:
+            os_dictionary (Dict): A dictionary containing paths and other operating system-related information needed to access catalog data.
+            xmm_index (int): An index indicating which of the nearby sources tables (1 or 2) corresponds to the XMM-Newton catalog.
+
+        Returns:
+            Tuple[Table, List]: A tuple where the first element is the updated table with added 'Photon Index' and 'Nh' columns, and the second element is a table containing indexes mapping nearby sources to the XMM-Newton catalogs.
+
+        The method performs the following steps:
+        - Accesses the XMM-Newton DR11 and Athena catalogs using paths provided in the os_dictionary.
+        - Matches sources in the nearby sources table with those in the XMM catalogs based on identifiers like 'IAUNAME' and 'DETID'.
+        - For each source, calculates the photon index and NH either directly from the Athena catalog or through optimization if data is not found.
+        - Visualizes the absorbed power-law fit for the calculated photon indices.
+        - Adds the calculated photon indices and NH values to the nearby sources table.
+        - Returns the updated nearby sources table and a table mapping the indexes of these sources in the XMM catalogs.
+
+        This method is vital for extracting and computing key astrophysical parameters from the XMM-Newton catalog, aiding in the analysis of X-ray sources.
+        """
+        
         catalog_datapath = os_dictionary["catalog_datapath"]
         xmm_dr11_path = os.path.join(catalog_datapath, "4XMM_DR11cat_v1.0.fits").replace("\\", "/")
         xmm_2_athena_path = os.path.join(catalog_datapath, "xmm2athena_D6.1_V3.fits").replace("\\", "/")
@@ -2287,7 +2876,27 @@ class CompareCatalog:
         return nearby_sources_table, index_table
         
 
-    def threshold(self, cone_search_catalog) -> Table:
+    def threshold(self, cone_search_catalog: Table) -> Table:
+        """
+        Corrects and standardizes flux values in an astronomical catalog, handling missing or undefined data points.
+
+        This method is primarily used to process flux data from the Chandra Source Catalog (CSC), represented by the 'CS_Chandra' key, but can be adapted for similar catalogs.
+
+        Parameters:
+            cone_search_catalog (Table): The table containing flux data and other parameters from the CSC or a similar catalog.
+
+        Returns:
+            Table: The corrected and standardized table with flux values processed to replace undefined or missing data with meaningful numerical values.
+
+        The method performs the following steps:
+        - Iterates over each item in the catalog to check for undefined or missing flux values, represented as `np.ma.core.MaskedConstant`.
+        - Replaces missing values in observed flux (`flux_obs`) and flux error (`flux_obs_err`) fields with the minimum numerical value found in the respective field.
+        - Processes other flux-related fields (like `flux_powlaw_aper_b`, `flux_powlaw_aper__s/m/h`, and their error limits) in a similar manner.
+        - Ensures that all flux-related fields in the catalog have consistent and usable numerical values, facilitating further analysis.
+
+        This method is crucial for preparing astronomical data for analysis, ensuring that all flux-related fields are consistent and numerically valid, especially important in catalogs where missing or undefined values are common.
+        """
+        
         source_number = len(cone_search_catalog)
         key = "CS_Chandra"
 
@@ -2355,6 +2964,28 @@ class CompareCatalog:
 
 
     def photon_index_nh_for_csc(self, csc_index: int) -> Table:
+        """
+        Calculates and updates the photon index and hydrogen column density (NH) for sources in the Chandra Source Catalog (CSC).
+
+        Parameters:
+            csc_index (int): An index indicating which of the nearby sources tables (1 or 2) corresponds to the CSC catalog.
+
+        Returns:
+            Table: The updated nearby sources table with new columns for 'Photon Index' and 'Nh' added.
+
+        The method performs the following steps:
+        - Determines the appropriate nearby sources table based on the csc_index.
+        - Iterates through each source in the table. For each source:
+            - If a valid photon index is already present, it is used; otherwise, it's calculated using the `optimization` method.
+            - If a valid NH value is present, it is used; otherwise, a default value is assigned.
+        - Each source's photon index and NH value are added to the photon_index_list and nh_list, respectively.
+        - Calls the `visualization_interp` method to visualize the interpolated photon indices.
+        - The 'Photon Index' and 'Nh' columns are added or updated in the nearby sources table with the calculated values.
+        - Returns the updated nearby sources table.
+
+        This method is crucial for enhancing the CSC data by calculating key astrophysical parameters (photon index and NH) that are essential for analyzing the X-ray spectra of astronomical sources.
+        """
+        
         if csc_index == 0:
             nearby_sources_table = self.nearby_sources_table_1
         else:
@@ -2386,7 +3017,29 @@ class CompareCatalog:
         return nearby_sources_table
         
         
-    def photon_index_nh_for_other_catalog(self, key, table) -> Table:
+    def photon_index_nh_for_other_catalog(self, key: str, table: Table) -> Table:
+        """
+        Computes and updates photon index and hydrogen column density (NH) for sources in a given astronomical catalog other than XMM and CSC.
+
+        Parameters:
+            key (str): The key identifying the catalog (e.g., 'Swift', 'eRosita').
+            table (Table): The table containing the catalog data.
+
+        Returns:
+            Table: The updated table with 'Photon Index' and 'Nh' columns added.
+
+        Methodology:
+        - Iterates over each source in the table.
+        - For each source, calculates the photon index using the `optimization` method.
+        - Assigns a default NH value of 3e20.
+        - The calculated photon index and NH values are added to the photon_index_list and nh_list, respectively.
+        - Calls `visualization_interp` for visualizing the photon index interpolation.
+        - Updates the table with the new 'Photon Index' and 'Nh' columns.
+        - Returns the updated table.
+
+        This method is essential for spectral analysis in astrophysics, allowing for the enhancement of catalog data with key spectral parameters.
+        """
+        
         photon_index_list, nh_list, optimization_parameters = [], [], []
         
         number_source = len(table)
@@ -2409,6 +3062,29 @@ class CompareCatalog:
         
     
     def neighbourhood_of_object(self, key: Tuple[str, str], simulation_data: Dict, radius) -> None:
+        """
+        Visualizes the astronomical sources in the vicinity of a given object, using data from two different catalogs.
+
+        Parameters:
+            key (Tuple[str, str]): A tuple containing the keys of the two catalogs being compared.
+            simulation_data (Dict): A dictionary containing simulation data, including object information.
+            radius (float): The radius around the object within which sources are considered.
+
+        Returns:
+            None: This method does not return anything but produces a visualization plot.
+
+        Description:
+        - Retrieves object data, including name and celestial position.
+        - Based on the catalog keys, determines the right ascension (RA) and declination (DEC) column names for each catalog.
+        - Creates a plot with two subplots, each representing one of the catalogs.
+        - In each subplot:
+            - Plots the positions of the sources from the respective catalog.
+            - Highlights the position of the main object.
+        - Saves the plot image to a specified path.
+
+        This method is useful for astronomers to visually assess the distribution of sources around a particular object across different catalogs.
+        """
+        
         object_data = simulation_data["object_data"]
         object_name = object_data["object_name"]
         obj_ra, obj_dec = object_data["object_position"].ra, object_data["object_position"].dec
@@ -2437,7 +3113,7 @@ class CompareCatalog:
             
         figure_1, axes = plt.subplots(1, 2, figsize=(17, 9), sharey=True)
         figure_1.suptitle(f"Neighbourhood of {object_name}, radius = {radius}", fontsize=20)
-        figure_1.text(0.7, 0.04, 'Right Ascension [deg]', ha='center', va='center', fontsize=16)
+        figure_1.text(0.5, 0.04, 'Right Ascension [deg]', ha='center', va='center', fontsize=16)
         figure_1.text(0.04, 0.5, 'Declination [deg]', ha='center', va='center', rotation='vertical', fontsize=16)
         
         ax0, ax1 = axes[0], axes[1]
@@ -2462,6 +3138,25 @@ class CompareCatalog:
 
 
     def dictionary_model(self, key: Tuple[str, str]) -> Tuple[Dict, Dict]:
+        """
+        Creates dictionaries for each source in the nearby sources tables, specifying the astrophysical model parameters.
+
+        Parameters:
+            key (Tuple[str, str]): Tuple containing the keys identifying the two catalogs being compared.
+
+        Returns:
+            Tuple[Dict, Dict]: Two dictionaries, each containing the model parameters for the sources in the corresponding nearby sources table.
+
+        Description:
+        - Converts catalog keys to standard format if necessary.
+        - Iterates over each source in both nearby sources tables.
+        - For each source, creates a dictionary with model type ('power'), photon index, observed flux, and column density.
+        - The model parameters for each source are stored in separate dictionaries for each catalog.
+        - Returns a tuple containing these two dictionaries.
+
+        This method is crucial for preparing data for further spectral analysis, encapsulating key parameters in an accessible format.
+        """
+        
         model_dictionary_1, model_dictionary_2 = {}, {}
         
         key_0 = key[0]
@@ -2504,8 +3199,25 @@ class CompareCatalog:
             
         return model_dictionary_1, model_dictionary_2
         
-    #TODO test with Linux
+
     def count_rate(self) -> Tuple[List, List]:
+        """
+        Calculates the count rate for each source in both nearby sources tables using the PIMMS tool.
+
+        Returns:
+            Tuple[List, List]: Two lists containing the calculated count rates for each source in the corresponding nearby sources table.
+
+        Description:
+        - Iterates over each source in both nearby sources tables.
+        - For each source, extracts the astrophysical model parameters from the model dictionaries.
+        - Generates and runs PIMMS commands to calculate the count rate for each source based on its model parameters.
+        - The resulting count rates are stored in two separate lists.
+        - Updates the nearby sources tables with the calculated count rates.
+        - Returns a tuple containing these two lists of count rates.
+
+        This method enables the quantification of expected detector count rates based on the observed astrophysical parameters, which is essential for planning and analyzing astronomical observations.
+        """
+        
         number_source_1 = len(self.nearby_sources_table_1)
         number_source_2 = len(self.nearby_sources_table_2)
         
@@ -2551,10 +3263,24 @@ class CompareCatalog:
     
     
     def xslx_to_py(self, args, table, simulation_data, radius) -> Tuple[List, Table]:
+        """
+        Reads count rate data from an Excel file based on specified parameters and updates the provided table with these values.
+
+        Parameters:
+        args (str): Identifier for the catalog to be used (e.g., "Xmm_DR13", "CSC_2.0", "Swift", "eRosita", "match").
+        table (Table): The table to be updated with count rate data.
+        simulation_data (Dict): Dictionary containing simulation parameters and paths.
+        radius (float): The radius value used to define the file name for the Excel data.
+
+        Returns:
+        Tuple[List, Table]: A tuple where the first element is a list of count rates and the second element is the updated table with these rates.
+
+        This method constructs the path to the relevant Excel file based on the catalog and object name, reads the count rates, and updates the table's 'count_rate' column.
+        """
         
-        active_workflow = simulation_data["os_dictionary"]["active_workflow"]
+        data_path = simulation_data["os_dictionary"]["data_path"]
         object_data = simulation_data["object_data"]
-        excel_data_path = os.path.join(active_workflow, "excel_data").replace("\\", "/")
+        excel_data_path = os.path.join(data_path, "excel_data").replace("\\", "/")
 
         if args == "Xmm_DR13":
             cat = "xmm"
@@ -2581,6 +3307,19 @@ class CompareCatalog:
     
     
     def calculate_opti_point(self, simulation_data, key) -> Tuple[Dict, Dict, int, int]:
+        """
+        Calculates the optimal pointing coordinates for an astronomical object to maximize the signal-to-noise ratio (S/N) based on nearby sources.
+
+        Parameters:
+        simulation_data (Dict): Dictionary containing simulation parameters including telescope and object data.
+        key (Tuple[str, str]): A tuple of two catalog identifiers used for the analysis.
+
+        Returns:
+        Tuple[Dict, Dict, int, int]: A tuple containing two dictionaries for each catalog, and two integers representing the indices of optimal pointing coordinates.
+
+        This method creates a grid of potential pointing coordinates around the object, calculates the S/N ratio for each point, and identifies the optimal pointing location. It also generates and saves a visualization of the S/N map for each catalog.
+        """
+        
         min_value, max_value, step = -7.0, 7.1, 0.05
         DeltaRA = Angle(np.arange(min_value, max_value, step), unit=u.deg)/60
         DeltaDEC = Angle(np.arange(min_value, max_value, step), unit=u.deg)/60
@@ -2683,6 +3422,25 @@ class CompareCatalog:
     
     
     def variability_table(self, simulation_data: Dict, radius: int) -> str:
+        """
+        Creates a table of master sources around a specific astronomical object based on given radius and simulation data.
+
+        Parameters:
+        simulation_data (Dict): Dictionary containing various parameters and paths used in the simulation.
+        radius (int): Radius in arcminutes defining the area around the object of interest.
+
+        Returns:
+        str: Path to the created master source FITS file.
+
+        This method first extracts sources around the specified region (RA, Dec) within the given radius from the master source catalog. Then, it selects relevant catalog sources around this region. It uses STILTS (Software for the Treatment of Image Data from Large Telescopes) for data processing. Finally, it visualizes and saves the resulting master sources.
+
+        Exceptions:
+        Any exceptions during processing are caught and printed to the console.
+
+        Note:
+        This method relies on external software (STILTS) and assumes the existence of a master source catalog and additional catalogs defined in `simulation_data`.
+        """
+        
         os_dictionary = simulation_data["os_dictionary"]
         catalog_datapath = os_dictionary["catalog_datapath"]
         stilts_software_path = os_dictionary["stilts_software_path"]
@@ -2729,6 +3487,23 @@ class CompareCatalog:
     
     
     def variability_index(self, key: str, iauname: str, nearby_sources_table: Table) -> List:
+        """
+        Identifies and returns the indices of variable sources from a nearby sources table based on a master source catalog.
+
+        Parameters:
+        key (str): Key representing the catalog name (e.g., 'CSC_2.0', 'Xmm_DR13').
+        iauname (str): The column name in `nearby_sources_table` representing source names.
+        nearby_sources_table (Table): A table containing data of nearby sources.
+
+        Returns:
+        List: A list of indices in `nearby_sources_table` corresponding to variable sources found in the master source catalog.
+
+        This method opens the master source FITS file and filters out variable sources based on the catalog specified by `key`. It then matches these sources with those in the `nearby_sources_table` and compiles a list of indices representing these variable sources within the table.
+
+        Note:
+        This method assumes that the master source path is already set in the instance variable `self.master_source_path`.
+        """
+        
         with fits.open(self.master_source_path) as data:
             master_source_cone = Table(data[1].data)
         
@@ -2747,7 +3522,48 @@ class CompareCatalog:
         return var_index_in_nearby_sources_table
     
     
+    def write_fits_table(self, table: Table, key: str, os_dictionary: Dict) -> None:
+        """
+        Writes a given table to a FITS file, using a specific catalog key and directory paths from a dictionary.
+
+        Parameters:
+        table (Table): The table to be written to the FITS file.
+        key (str): Key representing the catalog name used for naming the FITS file.
+        os_dictionary (Dict): Dictionary containing various file paths used in the operation.
+
+        This method attempts to write the `table` to a FITS file in the directory specified in `os_dictionary["cloesest_dataset_path"]`. The file is named using the `key` parameter. If an error occurs during this process, it is caught and printed to the console.
+
+        Note:
+        The method overwrites any existing file with the same name.
+        """
+        
+        try:            
+            cloesest_dataset_path = os_dictionary["cloesest_dataset_path"]
+            nearby_sources_table_path = os.path.join(cloesest_dataset_path, f"{key}_nearby_sources_table.fits").replace("\\", "/")
+            table.write(nearby_sources_table_path, format='fits', overwrite=True)
+            print(f"Nearby sources table was created in : {colored(nearby_sources_table_path, 'magenta')}")
+        except Exception as error:
+            print(f"{colored('An error occured : ', 'red')} {error}")
+    
+    
     def modeling_source_spectra(self, simulation_data: Dict, exp_time: int, key: Tuple[str, str]) -> Tuple[List, List]:
+        """
+        Generates modeled spectra for sources in nearby sources tables for given catalogs.
+
+        Parameters:
+        simulation_data (Dict): A dictionary containing simulation data including telescope data.
+        exp_time (int): Exposure time used in the simulation.
+        key (Tuple[str, str]): A tuple containing the keys of the catalogs to be used.
+
+        Returns:
+        Tuple[List, List, List, List, Instrument]: A tuple containing lists of total spectra, total variable spectra for both catalogs, and the instrument used.
+
+        This method creates and models spectral data for each source in the nearby sources tables of the specified catalogs (key[0] and key[1]). It utilizes an X-ray spectrum model (Tbabs * Powerlaw) and simulates the spectra using the NICER instrument's ARF and RMF files. The method also accounts for the vignetting factor for each source. The result is a collection of spectra for all sources, as well as a separate collection for variable sources as identified by their indices.
+
+        Note:
+        This method assumes that the necessary data paths and instrumental information are provided in `simulation_data`.
+        """
+        
         model = Tbabs() * Powerlaw()
         telescop_data = simulation_data["telescop_data"]
         nicer_data_arf = telescop_data["nicer_data_arf"]
@@ -2800,6 +3616,19 @@ class CompareCatalog:
      
     
     def total_spectra_plot(self, simulation_data: Dict, radius: float, key: Tuple[str, str]):
+        """
+        Plots the modeled spectra for sources around a specific object from two different catalogs.
+
+        Parameters:
+        simulation_data (Dict): A dictionary containing simulation data including object data.
+        radius (float): The radius within which the sources are considered.
+        key (Tuple[str, str]): A tuple containing the keys of the catalogs to be used.
+
+        This method plots the modeled spectra for sources in the vicinity of a specified object, using data from two different catalogs. The plots include individual spectra for each catalog, as well as a combined plot showcasing the summed spectra and variability errors. The method also calculates the upper and lower limits for the spectra to provide an envelope for the variability. Each subplot is appropriately labeled and the overall figure title indicates the object around which the spectra are modeled.
+
+        Note:
+        This method uses the total and variable spectra lists generated by the `modeling_source_spectra` method and the instrumental data from `simulation_data`.
+        """
         
         object_name = simulation_data["object_data"]["object_name"]
         
@@ -2919,6 +3748,27 @@ class CompareCatalog:
     
     
     def write_txt_file(self, simulation_data: Dict, data_1: Dict, data_2: Dict, key: Tuple[str, str]) -> None:
+        """
+        Writes the spectral modeling data into text files for each of the specified catalogs.
+
+        Parameters:
+        simulation_data (Dict): A dictionary containing simulation data including directory paths.
+        data_1 (Dict): A dictionary containing the spectral data for the first catalog (key[0]).
+        data_2 (Dict): A dictionary containing the spectral data for the second catalog (key[1]).
+        key (Tuple[str, str]): A tuple containing the keys of the catalogs.
+
+        This method exports the spectral data for two different catalogs into separate text files. Each file contains data such as energy, counts, and upper and lower limits of the spectra. The data is formatted into columns for readability. The files are named according to the catalogs' keys and saved in the specified directory.
+
+        The method iterates through the provided spectral data, formats each row according to the given specifications, and writes the rows to the respective text files. The headers of the files include the names of the data columns.
+
+        Note:
+        The method assumes that the directory for saving the text files is provided in `simulation_data['os_dictionary']["catalog_directory"]`.
+
+        Example of Output File Format:
+        Energy        Counts        Upper Limit   Lower Limit
+        [value]       [value]       [value]       [value]
+        ...           ...           ...           ...
+        """
     
         catalog_directory = simulation_data['os_dictionary']["catalog_directory"]
         txt_path_1 = os.path.join(catalog_directory, f'{key[0]}_output_modeling_plot.txt').replace("\\", "/")
@@ -2960,24 +3810,78 @@ class CompareCatalog:
                 
         print(f"\n{colored(f'{key[1]}_output_modeling_plot.txt', 'yellow')} has been created in {colored(txt_path_2, 'blue')}")
     
-
+    
 # --------------- Software Class --------------- #
 
     # --------------- Refactoring --------------- #
 
 class BandFlux:
+    """
+    A class representing the observed flux and its error in a specific energy band.
+
+    Attributes:
+    flux (float): The observed flux value in the energy band.
+    flux_err (float): The error associated with the observed flux value.
+
+    The `BandFlux` class is designed to encapsulate the properties of an observed flux in a specific energy band of an astronomical object. It stores the flux value along with its corresponding error. This class can be used in scenarios where handling flux data and its uncertainty is required, such as in spectral analysis or photometric measurements.
+
+    Methods:
+    __init__: Initializes a new instance of the `BandFlux` class with the specified flux and error values.
+    """
     
     def __init__(self, flux, flux_err) -> None:
+        """
+        Initializes a new instance of the `BandFlux` class.
+
+        Parameters:
+        flux (float): The observed flux value in the energy band.
+        flux_err (float): The error associated with the observed flux value.
+
+        This constructor method creates an instance of `BandFlux` with the provided flux and its error. 
+        These values are expected to be numerical representations of the observed flux and its uncertainty.
+        """
+        
         self.flux = flux
         self.flux_err = flux_err
 
 
 class SwiftData:
+    """
+    A class to represent and store the stacked flux data, its associated errors, 
+    and observation times for astronomical observations, specifically from the Swift telescope.
+
+    This class is tailored for handling time-series data from the Swift telescope, 
+    commonly used in astrophysical studies. It stores stacked flux values, their corresponding 
+    errors, and the observation times, facilitating data analysis and manipulation in 
+    time-resolved studies.
+
+    Attributes:
+    stacked_flux (list of float): A list of stacked flux values observed by the Swift telescope.
+    stacked_flux_err (list of float): A list of errors associated with the stacked flux values.
+    stacked_times (list of float): A list of observation times corresponding to each flux value.
+
+    Methods:
+    __init__: Initializes a new instance of the `SwiftData` class with the specified data.
+    """
     
     def __init__(self, stacked_flux, stacked_flux_err, stacked_times):
+        """
+        Initializes a new instance of the `SwiftData` class.
+
+        Parameters:
+        stacked_flux (list of float): A list of stacked flux values observed by the Swift telescope.
+        stacked_flux_err (list of float): A list of errors associated with the stacked flux values.
+        stacked_times (list of float): A list of observation times corresponding to each flux value.
+
+        This constructor method creates an instance of `SwiftData` with the provided flux data, 
+        errors, and times. These values are typically derived from observations conducted by the 
+        Swift telescope and are crucial in time-series analyses of astronomical sources.
+
+        """
         self.stacked_flux = stacked_flux
         self.stacked_flux_err = stacked_flux_err
         self.stacked_times = stacked_times
+        
         
     # ------------------------------------------- #
 
@@ -2985,8 +3889,53 @@ class SwiftData:
 
 
 class Source:
+    """
+    A class to encapsulate various observational data of an astronomical source, 
+    including flux measurements, band flux data, observation times, and additional 
+    source-specific parameters.
+
+    This class is designed to provide a structured way to store and manipulate 
+    observational data from different catalogs, making it easier to perform various 
+    analyses like calculating hardness ratios or handling Swift telescope data.
+
+    Attributes:
+    catalog (str): Name of the catalog from which the source data is obtained.
+    iau_name (str): International Astronomical Union (IAU) designated name of the source.
+    flux (list of float): List of flux values of the source.
+    flux_err (list of float): Corresponding errors of the flux values.
+    time_steps (list of float): Time steps of the observations.
+    obs_ids (list of int): Observation IDs, if available.
+    band_flux (list of float): Flux values in specific energy bands.
+    band_flux_err (list of float): Errors associated with the band flux values.
+    swift_data (SwiftData): Object containing Swift telescope specific data.
+    xmm_offaxis (list): Off-axis angles for XMM-Newton observations, if available.
+    short_term_var (list): Information about short-term variability, if available.
+
+    Methods:
+    __init__: Initializes the Source object with given data.
+    hardness_ratio: Calculates the hardness ratio for the source based on catalog-specific parameters.
+    swift_modif: Modifies Swift data attributes based on provided flux and flux error.
+
+    """
     
     def __init__(self, catalog, iau_name, flux, flux_err, time_steps, band_flux_data, **kwargs) -> None:
+        """
+        Initializes a new instance of the Source class.
+
+        Parameters:
+        catalog (str): Name of the catalog from which the source data is obtained.
+        iau_name (str): IAU designated name of the source.
+        flux (list of float): List of flux values of the source.
+        flux_err (list of float): Corresponding errors of the flux values.
+        time_steps (list of float): Time steps of the observations.
+        band_flux_data (BandFlux): Object containing flux and flux error data for specific energy bands.
+        kwargs: Additional parameters such as observation IDs (obs_id), Swift data (swift_data), etc.
+
+        This constructor initializes the Source object with the given data, converting some of the data 
+        like observation times and observation IDs into appropriate formats. It also sets up default 
+        values for some attributes based on the provided keyword arguments.
+
+        """
         self.catalog = catalog
         self.iau_name = iau_name
         self.flux = flux
@@ -3004,7 +3953,23 @@ class Source:
         self.hardness_ratio(catalog=catalog)
         self.swift_modif(flux=flux, flux_err=flux_err)
 
+    
     def hardness_ratio(self, catalog:str) -> None:
+        """
+        Calculates the hardness ratio for a source based on the given catalog's parameters.
+
+        The hardness ratio is a measure of the spectral shape of the source, typically
+        used in X-ray astronomy. It is calculated using soft and hard detections which are 
+        derived from band flux data, considering the specific energy bands defined for the 
+        given catalog.
+
+        Parameters:
+        catalog (str): Name of the catalog which defines the energy bands and conversion factors.
+
+        This method modifies the source object by calculating and setting the hardness ratio
+        along with the associated errors.
+
+        """
 
         hr_bandlimit_index = dict_cat.dictionary_catalog[catalog]["hr_bandlimit_index"]
         band_conv_factor_soft = dict_cat.dictionary_catalog[catalog]["band_conv_factor_soft"]
@@ -3039,6 +4004,21 @@ class Source:
 
 
     def swift_modif(self, flux:list, flux_err:list) -> None:
+        """
+        Modifies and updates the Swift data attributes of the source object.
+
+        This method is specifically designed to handle data from the Swift telescope.
+        It involves updating stacked flux, error values, and checking for variability 
+        based on the given flux and error parameters.
+
+        Parameters:
+        flux (list of float): List of flux values of the source.
+        flux_err (list of float): Corresponding errors of the flux values.
+
+        The method updates attributes related to Swift telescope data, including checking
+        for variability and adjusting minimum and maximum flux values.
+
+        """
 
         self.swift_stacked_flux = self.swift_data.stacked_flux
         self.swift_stacked_flux_err = self.swift_data.stacked_flux_err
@@ -3059,7 +4039,54 @@ class Source:
             self.var = max_lower/min_upper
 
 
-class MasterSource():
+class MasterSource:
+    """
+    A class representing a master source, consolidating data from various sources.
+
+    This class aggregates and processes data related to astronomical sources from 
+    different catalogs. It handles the removal of redundant data, calculation of various 
+    properties like hardness ratio, variability ratios, and maintains a comprehensive 
+    record of the source's observations across different telescopes.
+
+    Attributes:
+    src_id (int): Unique identifier for the master source.
+    sources (dict): Dictionary storing Source objects from different catalogs.
+    sources_flux (np.ndarray): Array of flux values from all sources.
+    sources_error_bar (np.ndarray): Array of flux error values from all sources.
+    sources_time_steps (list): List of time steps corresponding to each observation.
+    sources_var (list): List of variability flags for each observation.
+    tab_hr (list): List of hardness ratios.
+    tab_hr_err (list): List of errors in hardness ratios.
+    never_on_axis_xmm (bool): Indicates if source never appeared on-axis in XMM observations.
+    has_short_term_var (bool): Flag for the presence of short-term variability.
+    min_time (float): Minimum observation time across all sources.
+    max_time (float): Maximum observation time across all sources.
+    min_upper (float): Minimum upper limit of the source's flux.
+    max_lower (float): Maximum lower limit of the source's flux.
+    var_ratio (float): Variability ratio of the source.
+    var_amplitude (float): Variability amplitude.
+    var_significance (float): Significance of the variability.
+    hr_min (float): Minimum hardness ratio.
+    hr_max (float): Maximum hardness ratio.
+    hr_var (float): Variability in hardness ratio.
+    hr_var_signif (float): Significance of hardness ratio variability.
+    xmm_ul (list): List of upper limits from XMM observations.
+    xmm_ul_dates (list): Dates corresponding to XMM upper limits.
+    xmm_ul_obsids (list): Observation IDs for XMM upper limits.
+    slew_ul, slew_ul_dates, slew_ul_obsids, chandra_ul, chandra_ul_dates (lists): Similar attributes for other telescopes.
+    ra (float): Right ascension of the source.
+    dec (float): Declination of the source.
+    pos_err (float): Positional error of the source.
+    glade_distance (list): Distances from GLADE catalog.
+    simbad_type (str): Source type from the SIMBAD database.
+    has_sdss_widths (bool): Flag indicating the presence of SDSS widths.
+
+    Methods:
+    __init__(self, src_id, sources_table, ra, dec, poserr): Initializes the MasterSource object.
+
+    The class primarily focuses on aggregating and processing the source data for 
+    further analysis, particularly in the context of astronomical research.
+    """
     
     def __init__(self, src_id, sources_table, ra, dec, poserr) -> None:
         self.src_id = src_id
@@ -3176,77 +4203,73 @@ class MasterSource():
 
 class CatalogMatch:
     """
-    A class designed to perform catalog matching for astronomical datasets, 
-    particularly focused on X-ray astronomy sources. The class provides functionalities 
-    to load, analyze, and match data from different astronomical catalogs, such as XMM-Newton 
-    and Chandra. It also calculates various properties of the matched sources, including 
-    photon index, count rates, vignetting factors, and more. 
+    A class to match and analyze astronomical sources from different catalogs.
+
+    This class matches sources from two astronomical catalogs based on their 
+    proximity and performs various analyses including calculating photon indices, 
+    modeling source spectra, and creating source tables. It is designed to handle 
+    complex astronomical data sets and prepare them for further scientific analysis.
 
     Attributes:
-        nearby_sources_table_1 (Table): Table of nearby sources from the first catalog.
-        nearby_sources_table_2 (Table): Table of nearby sources from the second catalog.
-        mixed_index (List): List of indices of mixed sources from both catalogs.
-        coordinates (List): Coordinates of the matched sources.
-        photon_index_list (List[float]): List of photon indices for the sources.
-        flag (List[Tuple]): Flags indicating the catalog(s) of origin for each source.
-        nh_list (List[float]): List of column density values for the sources.
-        model_dictionary (Dict): Dictionary containing model parameters for the sources.
-        nearby_sources_table (Table): Combined table of nearby sources from both catalogs.
-        nearby_sources_position (SkyCoord): Sky coordinates of the nearby sources.
-        count_rate (List[float]): List of count rates for the sources.
-        vignetting_factor (List[float]): List of vignetting factors for the sources.
-        OptimalPointingIdx (int): Index of the optimal pointing for observation.
-        vector_dictionary (Dict): Dictionary containing vector data related to the sources.
-    
+        nearby_sources_table_1 (Table): Nearby sources table from the first catalog.
+        nearby_sources_table_2 (Table): Nearby sources table from the second catalog.
+        nearby_sources_position_1 (SkyCoord): Positions of nearby sources from the first catalog.
+        nearby_sources_position_2 (SkyCoord): Positions of nearby sources from the second catalog.
+        mixed_index (List): List of mixed indexes where sources from both catalogs are matched.
+        coordinates (List): List of coordinates of matched sources.
+        photon_index_list (List): List of photon indices for sources.
+        flag (List): Flags to identify the source of data.
+        nh_list (List): List of hydrogen column densities.
+        model_dictionary (Dict): Dictionary of models for sources.
+        nearby_sources_table (Table): Combined nearby sources table.
+        nearby_sources_position (SkyCoord): Positions of sources in the combined table.
+        count_rate (List): List of count rates for sources.
+        vignetting_factor (List): Vignetting factors for sources.
+        master_source_cone (Table): Table of master sources within a cone search.
+        var_index (List): List of variable indexes in the nearby sources table.
+
     Methods:
-        load_catalog(catalog_name: Tuple[str, str], os_dictionary: Dict) -> Tuple[Table, Table]:
-            Loads catalogs from specified paths and returns two tables of catalog data.
+        __init__(self, catalog_name, radius, simulation_data): Initializes the CatalogMatch object.
+        load_catalog(...): Loads the catalogs and returns their tables.
+        load_cs_catalog(...): Loads the cone search catalog.
+        unique_sources_table(...): Creates a table of unique sources.
+        find_nearby_sources(...): Finds nearby sources within a specified radius.
+        get_mixed_coordinate(...): Gets coordinates of mixed sources from both catalogs.
+        neighbourhood_of_object(...): Plots the neighborhood of an object.
+        get_photon_index(...): Calculates the photon index for a source.
+        get_mixed_photon_index(...): Calculates the photon index for a mixed source.
+        get_total_photon_nh_list(...): Returns total photon indices and hydrogen column densities.
+        model_dictionary(...): Creates a dictionary of models for sources.
+        create_nearby_sources_table(...): Creates a table of nearby sources.
+        get_sources_position(...): Gets positions of sources in the nearby sources table.
+        count_rate_SNR_map(...): Calculates count rates and generates a signal-to-noise ratio map.
+        vignetting_factor(...): Calculates vignetting factors for sources.
+        write_fits_table(...): Writes the nearby sources table to a FITS file.
+        load_master_source_cone(...): Loads the master source cone.
+        cross_table_index(...): Finds cross table indexes in the nearby sources table.
 
-        load_cs_catalog(radius: float, object_data: Dict) -> Table:
-            Loads a cone search catalog based on given radius and object data.
-
-        find_nearby_sources(os_dictionary: Dict) -> Tuple[Dict, Dict]:
-            Finds and returns nearby sources based on the operational system dictionary.
-
-        get_mixed_coordinate(catalog_key: Tuple[str, str], table: Tuple[Table, Table]) -> Tuple[List, List]:
-            Computes mixed coordinates from two given tables and catalog keys.
-
-        neighbourhood_of_object(simulation_data: Dict, radius: float) -> Tuple[List, List]:
-            Determines the neighborhood of an object based on simulation data and radius.
-
-        get_photon_index(catalog_key: Tuple[str, str], table: Table, index: int, os_dictionary: Dict) -> float:
-            Retrieves the photon index for a specific source in a catalog.
-
-        get_mixed_photon_index(catalog_key: Tuple[str, str], table: Tuple[Table, Table], mixed_index: List[Tuple], row: int, os_dictionary: Dict) -> float:
-            Calculates the photon index for a source present in both catalogs.
-
-        get_total_photon_nh_list(os_dictionary: Dict) -> Tuple[List[float], List[Tuple], List[float]]:
-            Compiles a complete list of photon indices, flags, and column densities for all sources.
-
-        model_dictionary() -> Dict:
-            Creates a dictionary containing the modeling data for each source.
-
-        create_nearby_sources_table() -> Table:
-            Generates a table containing data of all nearby sources.
-
-        get_sources_position() -> SkyCoord:
-            Returns the sky coordinates of all nearby sources.
-
-        count_rate_SNR_map(simulation_data: Dict, radius: float) -> List[float]:
-            Calculates the count rate and signal-to-noise ratio map for the sources.
-
-        vignetting_factor(OptimalPointingIdx: int, vector_dictionary: Dict, simulation_data: Dict) -> List[float]:
-            Computes the vignetting factor for each source based on optimal pointing data.
-
-        write_fits_table(os_dictionary: Dict) -> None:
-            Writes the nearby sources data to a FITS table and opens it using TOPCAT.
-
+    The class is essential for analyzing astronomical data from multiple catalogs and preparing
+    it for scientific research.
     """
+
     def __init__(self, catalog_name: Tuple[str, str], radius, simulation_data: Dict) -> None:
-        table_1, table_2 = self.load_catalog(catalog_name=catalog_name, os_dictionary=simulation_data["os_dictionary"])
+        """
+        Initializes the CatalogMatch class with specific catalog names, a search radius, 
+        and simulation data. The class is designed to match and analyze data from two different 
+        astronomical catalogs.
+
+        Args:
+        catalog_name (Tuple[str, str]): A tuple containing the names of the two catalogs to be matched.
+        radius (float): The search radius for finding nearby sources, typically specified in arcminutes.
+        simulation_data (Dict): A dictionary containing various simulation parameters and data paths.
+
+        This method loads the specified catalogs, finds nearby sources within the given radius, 
+        calculates photon indices and hydrogen column densities, models the sources, and prepares 
+        the data for further analysis.
+
+        """
         
-        # if "Chandra" in catalog_name:
-        #     self.cone_search_catalog = self.load_cs_catalog(radius=radius, object_data=simulation_data["object_data"])
+        table_1, table_2 = self.load_catalog(catalog_name=catalog_name, os_dictionary=simulation_data["os_dictionary"])
 
         self.nearby_sources_table_1, self.nearby_sources_table_2, self.nearby_sources_position_1, self.nearby_sources_position_2 = self.find_nearby_sources(radius=radius, simulation_data=simulation_data, table=(table_1, table_2))
         self.mixed_index, self.coordinates = self.neighbourhood_of_object(simulation_data=simulation_data, radius=radius)
@@ -3263,6 +4286,24 @@ class CatalogMatch:
         
 
     def load_catalog(self, catalog_name: Tuple[str, str], os_dictionary: Dict) -> Tuple[Table, Table]:
+        """
+        Loads two specified astronomical catalogs for further analysis and matching.
+
+        Args:
+        catalog_name (Tuple[str, str]): A tuple containing the names of the two catalogs to be loaded.
+        os_dictionary (Dict): A dictionary containing the operating system information, 
+                            including the data path for the catalogs.
+
+        Returns:
+        Tuple[Table, Table]: A tuple of astropy Table objects corresponding to the loaded catalogs.
+
+        This method attempts to open FITS files for the specified catalogs. If successful, 
+        it sets various class attributes for future data processing. 
+
+        Raises:
+        SystemExit: If the file paths are invalid or an error occurs during file loading.
+        """
+        
         name_1, name_2 = catalog_name
         catalog_datapath = os_dictionary["catalog_datapath"]
         
@@ -3292,6 +4333,20 @@ class CatalogMatch:
                 
                 
     def load_cs_catalog(self, radius: float, object_data: Dict) -> Table:
+        """
+        Loads a cone search catalog based on the provided object name and search radius.
+
+        Args:
+        radius (float): The radius for the cone search, typically specified in arcminutes.
+        object_data (Dict): A dictionary containing the object's data, specifically its name.
+
+        Returns:
+        Table: An astropy Table object containing the results of the cone search.
+
+        This method uses the VO cone search service to find astronomical objects within the specified 
+        radius of the named object. The results are converted to an astropy Table for easy handling.
+        """
+        
         cone = vo.dal.SCSService('http://cda.cfa.harvard.edu/csc2scs/coneSearch') 
         name = SkyCoord.from_name(object_data['object_name'])
         cone_search_catalog = cone.search(pos=name, radius=radius, verbosity=3)
@@ -3300,6 +4355,23 @@ class CatalogMatch:
 
     
     def unique_sources_table(self, nearby_sources_table, column_name) -> Table:
+        """
+        Generates a table of unique sources from a given nearby sources table.
+
+        Args:
+        nearby_sources_table (Table): The table containing sources from a particular catalog.
+        column_name (dict): A dictionary specifying column names to be used, 
+                            including catalog name and other relevant fields.
+
+        Returns:
+        Table: A table of unique sources, with averaged values for sources 
+            that are listed multiple times in the input table.
+
+        This method processes the nearby sources table to identify and consolidate 
+        duplicate entries. It averages the flux values for duplicated sources 
+        and creates a new table with unique sources.
+        """
+        
         key = column_name["catalog_name"]
 
         dict_flux_name = {"flux_obs": dict_cat.dictionary_catalog[key]["flux_obs"],
@@ -3359,6 +4431,22 @@ class CatalogMatch:
     
     
     def find_nearby_sources(self, radius: float, simulation_data: Dict, table: Tuple[Table, Table]) -> Tuple[Table, Table]:
+        """
+        Identifies nearby sources from astronomical catalogs based on a given radius around an object.
+
+        Args:
+        radius (float): The radius within which to search for nearby sources.
+        simulation_data (Dict): A dictionary containing the simulation data, including the object's information.
+        table (Tuple[Table, Table]): A tuple containing two tables from different catalogs to search within.
+
+        Returns:
+        Tuple[Table, Table]: A tuple of tables containing the nearby sources from each catalog.
+
+        This method filters the sources in the provided catalog tables to find those 
+        that are within a specified radius from the object's position. It creates new 
+        tables containing these nearby sources.
+        """
+        
         object_data = simulation_data["object_data"]
         pointing_area = radius + 5*u.arcmin
         name = object_data['object_name']
@@ -3429,6 +4517,22 @@ class CatalogMatch:
     
     
     def get_mixed_coordinate(self, catalog_key: Tuple[str, str], table: Tuple[Table, Table]) -> Tuple[List, List]:
+        """
+        Identifies and averages coordinates of overlapping sources between two astronomical catalogs.
+
+        Args:
+        catalog_key (Tuple[str, str]): A tuple containing the names of the two catalogs.
+        table (Tuple[Table, Table]): A tuple of tables from the two catalogs.
+
+        Returns:
+        Tuple[List, List]: A tuple containing the mixed coordinates and indices of sources found in both catalogs.
+
+        This method compares the coordinates of sources in both catalogs. If sources are within a certain 
+        threshold distance, it averages their coordinates to create a 'mixed' coordinate. It also tracks 
+        the indices of these sources in both catalogs for further analysis.
+
+        """
+        
         key_1, key_2 = catalog_key
         table_1, table_2 = table
         
@@ -3472,6 +4576,21 @@ class CatalogMatch:
     
     
     def neighbourhood_of_object(self, simulation_data: Dict, radius: float) -> Tuple[List, List]:
+        """
+        Visualizes the neighborhood of an astronomical object within a given radius, using data from multiple catalogs.
+
+        Args:
+        simulation_data (Dict): Dictionary containing simulation data including the object's information.
+        radius (float): Radius within which to identify neighboring sources.
+
+        Returns:
+        Tuple[List, List]: A tuple containing indices of mixed sources and their coordinates.
+
+        This method plots the neighborhood of the specified object and shows the distribution of sources 
+        from different catalogs. It also identifies and marks sources that are common between catalogs.
+
+        """
+        
         object_data = simulation_data["object_data"]
         os_dictionary = simulation_data["os_dictionary"]
         table = (self.nearby_sources_table_1, self.nearby_sources_table_2)
@@ -3498,6 +4617,24 @@ class CatalogMatch:
     
     
     def get_photon_index(self, catalog_key: Tuple[str, str], table: Table, index: int, os_dictionary: Dict) -> float:
+        """
+        Calculates the photon index for a source from a specific catalog based on its spectral data.
+
+        Args:
+        catalog_key (Tuple[str, str]): A tuple representing the name of the catalog.
+        table (Table): The table containing the source data from the catalog.
+        index (int): The index of the source in the table.
+        os_dictionary (Dict): Dictionary containing various paths and settings used in the simulation.
+
+        Returns:
+        float: The calculated photon index for the source.
+
+        This method processes the spectral data of a source and fits it to a model to determine the photon index. 
+        It supports both non-absorbed and absorbed models for fitting. For visualization purposes, it plots the 
+        interpolation and fitting results for the first source in the dataset.
+
+        """
+        
         band_flux_name = dict_cat.dictionary_catalog[catalog_key]["band_flux_obs"]
         band_flux = [table[name][index] for name in band_flux_name]
         
@@ -3544,6 +4681,25 @@ class CatalogMatch:
            
             
     def get_mixed_photon_index(self, catalog_key: Tuple[str, str], table: Tuple[Table, Table], mixed_index: List[Tuple], row: int, os_dictionary: Dict) -> float:
+        """
+        Determines the photon index for a source that appears in both catalogs, using combined spectral data.
+
+        Args:
+        catalog_key (Tuple[str, str]): A tuple containing the names of the two catalogs.
+        table (Tuple[Table, Table]): A tuple of tables from the two catalogs.
+        mixed_index (List[Tuple]): List of tuples with indices of sources appearing in both catalogs.
+        row (int): The row number in the mixed_index list for which the photon index is to be calculated.
+        os_dictionary (Dict): Dictionary containing various paths and settings used in the simulation.
+
+        Returns:
+        float: The calculated photon index for the mixed source.
+
+        This method merges the spectral data from two different catalogs for the same source and calculates the photon index. 
+        It supports fitting to both non-absorbed and absorbed models. A visualization of the interpolation and fitting 
+        is provided for a specific case (row = 10).
+
+        """
+        
         key_1, key_2 = catalog_key
         table_1, table_2 = table[0], table[1]
         
@@ -3617,6 +4773,21 @@ class CatalogMatch:
     
     
     def get_total_photon_nh_list(self, os_dictionary: Dict) -> Tuple[List[float], List[Tuple], List[float]]:
+        """
+        Compiles a list of photon indices, source flags, and column densities for sources in the catalog.
+
+        Args:
+        os_dictionary (Dict): Dictionary containing various paths and settings used in the simulation.
+
+        Returns:
+        Tuple[List[float], List[Tuple], List[float]]: A tuple containing three lists - photon indices, flags, and column densities.
+
+        This method iterates over the sources in the provided catalogs (XMM and Chandra), calculates the photon index 
+        for each source, and assigns a flag indicating the catalog(s) to which the source belongs. It also appends 
+        a default column density value for each source. The method handles sources unique to one catalog and those 
+        appearing in both.
+
+        """
         
         key_1, key_2 = self.catalog_key
         photon_index_list, nh_list = [], []
@@ -3652,6 +4823,18 @@ class CatalogMatch:
     
     
     def model_dictionary(self) -> Dict:
+        """
+        Creates a dictionary mapping each source to its spectral model parameters.
+
+        Returns:
+        Dict: A dictionary where each key represents a source and its value is a dictionary of model parameters.
+
+        The method iterates over all sources, categorizing them based on their catalog (XMM, Chandra, or both). 
+        It then constructs a model dictionary for each source, specifying the model type ('power'), the photon index, 
+        observed flux, and a default column density. The model parameters are derived from the catalog data and 
+        previously calculated photon indices.
+
+        """
      
         model_dictionary = {}
         
@@ -3684,6 +4867,18 @@ class CatalogMatch:
 
 
     def create_nearby_sources_table(self) -> Table:
+        """
+        Constructs a table of nearby sources with their respective details from XMM and Chandra catalogs.
+
+        Returns:
+        astropy.table.Table: A table containing the combined data of nearby sources from both catalogs.
+
+        This method processes the sources identified as nearby in either the XMM or Chandra catalogs, or both.
+        It creates a table with columns for flags indicating the source's catalog, names from both catalogs, 
+        coordinates (RA, DEC), and flux observations. The method also appends photon index and column density (Nh) 
+        data to each source. The table facilitates easy reference to the properties of all nearby sources.
+
+        """
                 
         key_1, key_2 = self.catalog_key
         row = 0
@@ -3732,6 +4927,18 @@ class CatalogMatch:
     
     
     def get_sources_position(self) -> SkyCoord:
+        """
+        Retrieves the positions of all nearby sources as SkyCoord objects.
+
+        Returns:
+        astropy.coordinates.SkyCoord: SkyCoord object containing the RA and DEC of each nearby source.
+
+        This method extracts the right ascension (RA) and declination (DEC) of each nearby source from the 
+        compiled table and converts them into a SkyCoord object for convenient handling of celestial coordinates.
+        It is particularly useful for astronomical calculations and visualizations that require positional data.
+
+        """
+        
         ra_value = list(self.nearby_sources_table["RA"])
         dec_value = list(self.nearby_sources_table["DEC"])
         
@@ -3739,10 +4946,29 @@ class CatalogMatch:
     
     
     def count_rate_SNR_map(self, simulation_data: Dict, radius: float) -> List[float]:
+        """
+        Calculates the count rates for nearby sources and generates a Signal-to-Noise Ratio (SNR) map.
+
+        Args:
+        simulation_data (Dict): A dictionary containing simulation data including telescope and object data.
+        radius (float): The radius within which to consider nearby sources.
+
+        Returns:
+        List[float]: A list of count rates for each nearby source.
+
+        This method computes count rates for sources within a specified radius from the object of interest.
+        It generates count rates based on the sources' table, the model dictionary, and telescope data. 
+        The method also involves various stages of data processing and visualization, including calculating 
+        optimal pointing information, creating a SNR map, and updating the nearby sources table with 
+        relevant data. It is specific to astronomy and astrophysics simulations where understanding the 
+        surrounding field of sources is crucial.
+
+        """
+        
         telescop_data = simulation_data["telescop_data"]
         object_data = simulation_data["object_data"]
-        active_workflow = simulation_data["os_dictionary"]["active_workflow"]
-        excel_data_path = os.path.join(active_workflow, 'excel_data').replace("\\", "/")
+        data_path = simulation_data["os_dictionary"]["data_path"]
+        excel_data_path = os.path.join(data_path, 'excel_data').replace("\\", "/")
         
         key = "xmmXchandra"
         catalog ="match"
@@ -3769,6 +4995,25 @@ class CatalogMatch:
 
 
     def vignetting_factor(self, OptimalPointingIdx: int, vector_dictionary: Dict, simulation_data: Dict) -> List[float]:
+        """
+        Calculates the vignetting factor for each nearby source based on the optimal pointing index.
+
+        Args:
+        OptimalPointingIdx (int): The index of the optimal pointing position.
+        vector_dictionary (Dict): A dictionary containing vectors for calculation.
+        simulation_data (Dict): A dictionary containing simulation data.
+
+        Returns:
+        List[float]: A list of vignetting factors for each nearby source.
+
+        This method evaluates the vignetting factor, a measure of the decrease in telescope sensitivity 
+        with increasing off-axis angles, for each nearby source. It uses the optimal pointing index to 
+        determine the minimum angular distance of each source from the optimal pointing position and 
+        calculates the corresponding vignetting factor. The method is essential in astrophysical 
+        observations to correct for instrumental effects on observed fluxes.
+        
+        """
+        
         ra, dec, name_1, name_2 = self.data_to_vignetting
         
         object_data = simulation_data["object_data"]
@@ -3827,6 +5072,23 @@ class CatalogMatch:
     
     
     def write_fits_table(self, os_dictionary: Dict) -> None:
+        """
+        Writes the nearby sources table to a FITS file and opens it using TOPCAT software.
+
+        Args:
+        os_dictionary (Dict): A dictionary containing operating system paths and other related information.
+
+        This method saves the nearby sources table as a FITS file to the path specified in the 
+        'cloesest_dataset_path' key of the os_dictionary. It then attempts to open this file using 
+        TOPCAT software for further analysis and visualization. This function is essential for astronomers 
+        and astrophysicists who need to store and analyze large sets of astronomical data.
+
+        Note:
+        - The method assumes the existence of the TOPCAT software in the active workflow directory.
+        - Errors during the process are caught and printed, but do not halt the execution of the program.
+
+        """
+        
         try:
             cloesest_dataset_path = os_dictionary["cloesest_dataset_path"]
             nearby_sources_table_path = os.path.join(cloesest_dataset_path, "nearby_sources_table.fits").replace("\\", "/")
@@ -3842,6 +5104,28 @@ class CatalogMatch:
             
             
     def load_master_source_cone(self, radius: float, simulation_data: Dict) -> Table:
+        """
+        Loads and processes a master source cone file within a given radius for a specific object.
+
+        Args:
+        radius (float): The search radius in arcminutes.
+        simulation_data (Dict): A dictionary containing essential simulation data and paths.
+
+        Returns:
+        Table: An astropy table containing the processed master source cone data.
+
+        This method processes a master source FITS file to select and match sources around a 
+        specified region based on the object's position in the simulation data. It uses various 
+        software tools like STILTS and TOPCAT for data processing and visualization. The method is 
+        crucial for isolating and analyzing celestial objects within a specific region in 
+        astrophysical studies.
+
+        Note:
+        - The method assumes the presence of necessary software tools in the specified paths.
+        - It handles exceptions during processing and displays relevant error messages.
+        
+        """
+        
         catalogs = dict_cat.catalogs
         object_data = simulation_data["object_data"]
         os_dictionary = simulation_data["os_dictionary"]
@@ -3883,7 +5167,7 @@ class CatalogMatch:
             select_master_sources_around_region(ra=right_ascension, dec=declination, radius=radius, output_name=output_name)
             select_catalogsources_around_region(output_name=output_name)
             master_sources = f.load_master_sources(output_name)
-            f.master_source_plot(master_sources=master_sources, object_data=object_data, number_graph=1)
+            f.master_source_plot(master_sources=master_sources, simulation_data=simulation_data, number_graph=len(master_sources))
         except Exception as error :
             print(f"{colored('An error occured : ', 'red')} {error}")
             
@@ -3899,6 +5183,23 @@ class CatalogMatch:
     
 
     def cross_table_index(self) -> List:
+        """
+        Generates a list of indices where sources from the master source cone match those in the nearby sources table.
+
+        Returns:
+        List: A list of indices representing the matching sources across the two tables.
+
+        This method compares the master source cone table with the nearby sources table to identify common sources. 
+        It specifically looks for matches in the 'Xmm_IAUNAME' and 'Chandra_IAUNAME' columns of the nearby sources table 
+        based on the names listed in the master source cone table. The method is essential for astrophysical research 
+        where identifying overlapping observations from different catalogs is necessary.
+
+        Note:
+        - The method relies on the catalog key to determine the columns for comparison.
+        - The result is a sorted list of unique indices, representing the intersection of the two tables.
+
+        """
+        
         key_0, key_1 = self.catalog_key
         msc_xmm_name = [name for name in self.master_source_cone[key_0] if name != ""]
         msc_csc_name = [name for name in self.master_source_cone[key_1] if name != ""]
@@ -3919,4 +5220,5 @@ class CatalogMatch:
 
         return var_index_in_nearby_sources_table
    
+
 # -------------------------------------------- #
