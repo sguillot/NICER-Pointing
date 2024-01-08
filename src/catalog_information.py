@@ -1,5 +1,34 @@
+# ------------------------------ #
+        # Python's packages
+        
 import matplotlib
 import numpy as np
+
+# ------------------------------ #
+
+"""
+This module is designed for managing and analyzing observational data from various astronomical source catalogs such as XMM, Chandra, Swift, eRosita, and others. 
+It implements data structures to organize information from observations, including position errors, source names, plotting colors, as well as catalog-specific 
+details like observed fluxes, flux errors, conversion factors, and other relevant metrics.
+
+Imported Modules:
+- matplotlib: Used for color management in plots.
+- numpy (np): Used for mathematical operations and array handling.
+
+Main Data Structures:
+- catalogs: List of catalog names used.
+- style: Style for matplotlib plots.
+- cmap_to_use: Color map for matplotlib.
+- posErr_Names, src_names, colors: Dictionaries for managing position error names, source names, and colors respectively.
+- dictionary_catalog: Dictionary containing catalog-specific details such as observation names, fluxes, flux errors, conversion factors, etc.
+- dictionary_coord: Dictionary containing source coordinates for different catalogs.
+- band_edges, frequencies, frequencies_half_width: Calculating frequency band edges and average frequencies for each catalog.
+- xband_average_frequency, xband_width: Frequencies used for alpha_OX metric calculation.
+
+This file essentially serves as a library of configurations and constants used in astronomical catalog data analysis. It does not contain executable functions or classes but acts as a resource for data analysis scripts that utilize it.
+
+"""
+
 
 catalogs = ["XMM", "Chandra", "Swift", "eRosita", "Slew", "Stacked", "RASS", "WGACAT"]
 style = "bmh"
