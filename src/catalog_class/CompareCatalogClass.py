@@ -86,7 +86,7 @@ class CompareCatalog:
         write_txt_file: Writes data to a text file for storage and documentation.
     """
    
-    def __init__(self, catalog_path: List, radius, simulation_data: dict, exp_time: int) -> None:
+    def __init__(self, catalog_path: tuple, radius, simulation_data: dict, exp_time: int) -> None:
         """
         Initializes the CompareCatalog class with necessary parameters for catalog comparison and analysis.
 

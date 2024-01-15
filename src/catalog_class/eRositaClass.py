@@ -33,28 +33,28 @@ class eRositaCatalog:
     and building a dictionary model for the sources.
 
     Attributes:
-    ra (str): Right ascension column name in the eRosita catalog.
-    dec (str): Declination column name in the eRosita catalog.
-    eRo_catalog (Table): The eRosita catalog data as an astropy Table.
-    nearby_sources_table (Table): Table of nearby sources.
-    nearby_sources_position (SkyCoord): Sky coordinates of nearby sources.
-    photon_index (List[float]): List of photon index values for sources.
-    model_dictionary (Dict[str, Dict[str, Union[str, float]]]): Dictionary of source models.
+        ra (str): Right ascension column name in the eRosita catalog.
+        dec (str): Declination column name in the eRosita catalog.
+        eRo_catalog (Table): The eRosita catalog data as an astropy Table.
+        nearby_sources_table (Table): Table of nearby sources.
+        nearby_sources_position (SkyCoord): Sky coordinates of nearby sources.
+        photon_index (List[float]): List of photon index values for sources.
+        model_dictionary (Dict[str, Dict[str, Union[str, float]]]): Dictionary of source models.
 
     Parameters:
-    catalog_path (str): Path to the eRosita catalog file.
-    radius (Quantity): Radius for searching nearby sources.
-    simulation_data (dict): Dictionary containing simulation data.
-    user_table (Table): User-provided astropy Table.
+        catalog_path (str): Path to the eRosita catalog file.
+        radius (Quantity): Radius for searching nearby sources.
+        simulation_data (dict): Dictionary containing simulation data.
+        user_table (Table): User-provided astropy Table.
 
     Methods:
-    open_catalog(catalog_path): Opens the eRosita catalog file and returns it as an astropy Table.
-    find_nearby_sources(radius, simulation_data): Finds and returns nearby sources and their positions.
-    neighbourhood_of_object(dictionary, radius): Visualizes the neighborhood of a specified object.
-    visualization_inter(optimization_parameters, photon_index, key): Visualizes the interpolation of photon index values.
-    get_photon_index(table, key, index): Calculates the photon index for a given source.
-    get_phoindex_nh(): Computes and assigns photon index and Nh values for sources.
-    dictionary_model(): Constructs a dictionary with model parameters for sources.
+        open_catalog(catalog_path): Opens the eRosita catalog file and returns it as an astropy Table.
+        find_nearby_sources(radius, simulation_data): Finds and returns nearby sources and their positions.
+        neighbourhood_of_object(dictionary, radius): Visualizes the neighborhood of a specified object.
+        visualization_inter(optimization_parameters, photon_index, key): Visualizes the interpolation of photon index values.
+        optim_index(table, key, index): Calculates the photon index for a given source.
+        get_phoindex_nh(): Computes and assigns photon index and Nh values for sources.
+        dictionary_model(): Constructs a dictionary with model parameters for sources.
 
     """
 
@@ -260,7 +260,7 @@ class eRositaCatalog:
         plt.show()
         
 
-    def get_photon_index(self, table, key, index) -> Tuple[List, Tuple]:
+    def optim_index(self, table, key, index) -> Tuple[List, Tuple]:
         """
         Calculates the photon index for a specified source in the eRosita catalog using an absorbed power-law fitting.
 
@@ -331,7 +331,7 @@ class eRositaCatalog:
 
         for index in range(len(self.nearby_sources_table)):
             nh_list.append(3e20)
-            photon, params = self.get_photon_index(table=self.nearby_sources_table, key=key, index=index)
+            photon, params = self.optim_index(table=self.nearby_sources_table, key=key, index=index)
             photon_index_list.append(photon if photon > 0.0 else 1.7)
             parameters_list.append(params)
         
