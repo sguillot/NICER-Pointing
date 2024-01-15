@@ -57,9 +57,8 @@ class XmmCatalog:
     Methods:
         open_catalog: Opens an XMM catalog from a given path.
         find_nearby_sources: Finds sources close to a given object.
-        optimization_phoindex: Optimizes the photon index for a given source.
+        optim_index: Optimizes the photon index for a given source.
         visualization_interp: Visualizes the interpolation of the photon index.
-        empty_row: Creates an empty row for a catalog table.
         get_phoindex_nh: Retrieves the photon index and column density for nearby sources.
         variability_table: Constructs a table of nearby sources with their variability.
         neighbourhood_of_object: Displays the neighborhood of a given object.
@@ -215,7 +214,7 @@ class XmmCatalog:
             print(f"An error occured : {error}")
             
        
-    def optimization_phoindex(self, number: int) -> Tuple[Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray], Tuple[float, float]]:
+    def optim_index(self, number: int) -> Tuple[Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray], Tuple[float, float]]:
         """
         Optimizes the photon index for a specific source in the catalog using an absorbed power law model.
 
@@ -354,7 +353,6 @@ class XmmCatalog:
             else:
                 print(f"{colored('Missing data in Xmm_DR11 : ', 'red')} {name}")
                 index_dr11 = np.append(index_dr11, np.nan)
-                xmm_dr_11_table.add_row(self.empty_row([]))
 
         index_x2a = np.array([], dtype=int)
         for det_id in xmm_dr_11_table["DETID"]:
@@ -379,7 +377,7 @@ class XmmCatalog:
                 column_phoindex = np.append(column_phoindex, self.x2a_catalog['PhoIndex_med'][number])
             else:
                 column_nh = np.append(column_nh, 3e20)
-                parameters, pho_value = self.optimization_phoindex(number)
+                parameters, pho_value = self.optim_index(number)
                 optimization_parameters.append(parameters)
                 photon_index.append(pho_value)
                 column_phoindex = np.append(column_phoindex, pho_value)
@@ -393,7 +391,7 @@ class XmmCatalog:
                     
         for index in index_add_source:
             column_nh = np.append(column_nh, 3e20)
-            parameters, pho_value = self.optimization_phoindex(index)
+            parameters, pho_value = self.optim_index(index)
             optimization_parameters.append(parameters)
             photon_index.append(pho_value)
             column_phoindex = np.append(column_phoindex, pho_value)

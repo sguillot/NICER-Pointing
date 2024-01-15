@@ -486,7 +486,7 @@ class ChandraCatalog:
         plt.show()
 
 
-    def get_photon_index(self, key, table, index):
+    def optim_index(self, key, table, index):
         """
         Calculates the photon index for a given source using absorbed power-law fitting.
 
@@ -589,7 +589,7 @@ class ChandraCatalog:
             if item != 0:
                 cs_photon_index_list.append(item)
             else:
-                photon, params = self.get_photon_index(key=cs_key, table=self.cone_search_catalog, index=index)
+                photon, params = self.optim_index(key=cs_key, table=self.cone_search_catalog, index=index)
                 photon = photon if photon > 0.0 else 1.7
                 cs_parameters_list.append(params)
                 cs_photon_index_list.append(photon)
@@ -606,7 +606,7 @@ class ChandraCatalog:
                 if self.cone_search_catalog["powlaw_gamma"][index] != 0.0:
                     photon_index_list.append(self.cone_search_catalog["powlaw_gamma"][index])
                 else:
-                    photon , params = self.get_photon_index(key=key, table=self.nearby_sources_table, index=nearby_index) #TODO modifier index ici pour avoir celui de nearby sources table
+                    photon , params = self.optim_index(key=key, table=self.nearby_sources_table, index=nearby_index)
                     photon = photon if photon > 0.0 else 1.7
                     parameters_list.append(params)
                     photon_index_list.append(photon)

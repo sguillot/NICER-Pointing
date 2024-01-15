@@ -208,7 +208,7 @@ telescop_data = {"telescop_name": "nicer",
 simulation_data = {"object_data": object_data,
                    "telescop_data": telescop_data,
                    "INSTbkgd": 0.2,
-                   "EXPtime": 1e6
+                   "EXPtime": args.exp_time
                    }
 
 # ----------------------------------------------- #

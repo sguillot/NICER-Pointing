@@ -54,7 +54,7 @@ class SwiftCatalog:
         find_nearby_sources(radius, object_data): Finds and returns nearby sources and their positions.
         neighbourhood_of_object(radius, simulation_data): Visualizes the neighborhood of a specified object.
         visualization_inter(optimization_parameters, photon_index, key): Visualizes the interpolation of photon index values.
-        get_photon_index(table, key, index): Calculates the photon index for a given source.
+        optim_index(table, key, index): Calculates the photon index for a given source.
         get_phoindex_nh(): Computes and assigns photon index and Nh values for sources.
         dictionary_model(): Constructs a dictionary with model parameters for sources.
     """
@@ -258,7 +258,7 @@ class SwiftCatalog:
         plt.show()
         
 
-    def get_photon_index(self, table, key, index) -> Tuple[List, Tuple]:
+    def optim_index(self, table, key, index) -> Tuple[List, Tuple]:
         """
         Calculates the photon index for a specified source in the Swift catalog using absorbed power-law fitting.
 
@@ -331,7 +331,7 @@ class SwiftCatalog:
 
         for index in range(len(self.nearby_sources_table)):
             nh_list.append(3e20)
-            photon, params = self.get_photon_index(table=self.nearby_sources_table, key=key, index=index)
+            photon, params = self.optim_index(table=self.nearby_sources_table, key=key, index=index)
             photon_index_list.append(photon if photon > 0.0 else 1.7)
             parameters_list.append(params)
         
