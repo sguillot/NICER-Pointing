@@ -5,27 +5,49 @@ import numpy as np
 
 # ---------------------------------------- #
 
+# ---------- for documentation ---------- #
+
+# import src.catalog_information as dict_cat
+
+# --------------------------------------- #
+
 class BandFlux:
     """
-    A class representing the observed flux and its error in a specific energy band.
+    Represents the observed flux and its error in a specific energy band for astronomical objects.
 
-    Attributes:
-    flux (float): The observed flux value in the energy band.
-    flux_err (float): The error associated with the observed flux value.
+    The `BandFlux` class is tailored for handling and encapsulating data related to the observed flux in a distinct energy band. It's an essential component in spectral analysis and photometric measurements, where precise flux data and associated uncertainties are crucial.
 
-    The `BandFlux` class is designed to encapsulate the properties of an observed flux in a specific energy band of an astronomical object. It stores the flux value along with its corresponding error. This class can be used in scenarios where handling flux data and its uncertainty is required, such as in spectral analysis or photometric measurements.
+    Note:
+        - This class is particularly useful in scenarios where a clear and concise representation of flux data, along with its accuracy, is required.
+        - The energy band specificity of the class makes it adaptable to different wavelength ranges, facilitating its use in various astronomical studies.
+        
+    Example:
+        Creating a BandFlux instance for a hypothetical observation:
+        
+        >>> observed_flux = 2.3  # Flux value
+        >>> observed_flux_err = 0.2  # Flux error
+        >>> band_flux = BandFlux(observed_flux, observed_flux_err)
 
-    Methods:
-    __init__: Initializes a new instance of the `BandFlux` class with the specified flux and error values.
+    This class is an integral tool for astronomers and researchers, enabling the effective management and analysis of flux data in specific energy bands.
     """
     
     def __init__(self, flux, flux_err) -> None:
         """
         Initializes a new instance of the `BandFlux` class.
 
-        Parameters:
-        flux (float): The observed flux value in the energy band.
-        flux_err (float): The error associated with the observed flux value.
+        Args:
+            flux (float): The observed flux value in the energy band.
+            flux_err (float): The error associated with the observed flux value.
+        
+        Attributes:
+        
+        .. attribute:: flux
+            :type: float
+            :value: flux
+            
+        .. attribute:: flux_err
+            :type: float
+            :value: flux_err
 
         This constructor method creates an instance of `BandFlux` with the provided flux and its error. 
         These values are expected to be numerical representations of the observed flux and its uncertainty.
@@ -37,36 +59,69 @@ class BandFlux:
 
 class SwiftData:
     """
-    A class to represent and store the stacked flux data, its associated errors, 
-    and observation times for astronomical observations, specifically from the Swift telescope.
+    The SwiftData class serves as a specialized container for handling time-series data obtained from the Swift telescope. 
+    It is particularly designed to store and manage flux observations along with their corresponding errors and observation times.
 
-    This class is tailored for handling time-series data from the Swift telescope, 
-    commonly used in astrophysical studies. It stores stacked flux values, their corresponding 
-    errors, and the observation times, facilitating data analysis and manipulation in 
-    time-resolved studies.
+    Important:
+        - SwiftData is tailored for handling time-series data specifically from the Swift telescope, one of the most 
+          versatile observatories for astrophysical research.
+        - The class is crucial for astronomers and researchers focusing on time-resolved studies of celestial sources, 
+          providing a structured approach to manage and analyze variable flux data over time.
+        - By organizing flux values, their errors, and observation times, SwiftData facilitates various time-series 
+          analysis techniques, essential for understanding transient or variable astronomical phenomena.
 
-    Attributes:
-    stacked_flux (list of float): A list of stacked flux values observed by the Swift telescope.
-    stacked_flux_err (list of float): A list of errors associated with the stacked flux values.
-    stacked_times (list of float): A list of observation times corresponding to each flux value.
+    Note:
+        - The design of SwiftData underscores the importance of precision and accuracy in astrophysical data analysis. 
+          It emphasizes careful handling of observational data and associated errors.
+        - While specific to Swift telescope data, the principles and structure of the SwiftData class can be adapted 
+          for use with time-series data from other telescopes or astronomical surveys.
+        - Users of SwiftData are expected to have a fundamental understanding of observational astronomy and time-series 
+          analysis to effectively utilize the class for research purposes.
 
-    Methods:
-    __init__: Initializes a new instance of the `SwiftData` class with the specified data.
+    Example Usage:
+        Example of initializing SwiftData with sample flux data, errors, and times:
+        
+        >>> sample_flux = [1.2, 1.3, 1.4]
+        >>> sample_flux_err = [0.1, 0.1, 0.1]
+        >>> sample_times = [10.5, 10.6, 10.7]
+        >>> swift_data_instance = SwiftData(sample_flux, sample_flux_err, sample_times)
+
+    SwiftData represents a critical step in organizing and preparing astrophysical time-series data for comprehensive analysis, 
+    offering researchers a reliable and efficient way to manage observations from one of the leading space telescopes.
     """
     
     def __init__(self, stacked_flux, stacked_flux_err, stacked_times):
         """
-        Initializes a new instance of the `SwiftData` class.
+        Initializes a new instance of the `SwiftData` class, which is designed for managing and analyzing time-series data from the Swift telescope.
 
-        Parameters:
-        stacked_flux (list of float): A list of stacked flux values observed by the Swift telescope.
-        stacked_flux_err (list of float): A list of errors associated with the stacked flux values.
-        stacked_times (list of float): A list of observation times corresponding to each flux value.
+        This constructor sets up the `SwiftData` object with stacked flux values, their associated errors, and corresponding observation times. These data are crucial for time-series analyses, offering insights into the behavior and characteristics of astronomical sources as observed by the Swift telescope.
+
+        Args:
+            stacked_flux (List[float]): A list of stacked flux values. Each value represents the integrated or cumulative flux measured by the Swift telescope over a specific time interval.
+            stacked_flux_err (List[float]): A list of errors associated with the stacked flux values. These errors provide an estimate of the uncertainty in each flux measurement.
+            stacked_times (List[float]): A list of observation times. Each time value corresponds to the observation time of the respective flux measurement.
+
+        Attributes:
+        
+        .. attribute:: stacked_flux
+            :type: List[float]
+            :value: stacked_flux
+            
+        .. attribute:: stacked_flux_err
+            :type: List[float]
+            :value: stacked_flux_err
+            
+        .. attribute:: stacked_times
+            :type: List[float]
+            :value: stacked_times
 
         This constructor method creates an instance of `SwiftData` with the provided flux data, 
         errors, and times. These values are typically derived from observations conducted by the 
         Swift telescope and are crucial in time-series analyses of astronomical sources.
-
+        
+        Note:
+            - The `SwiftData` class is specifically designed to work with time-series data from the Swift telescope. It may not be suitable for data from other telescopes without modifications.
+            - Users are expected to have a foundational understanding of flux measurements and error analysis in astronomy for effective use of this class.
         """
         self.stacked_flux = stacked_flux
         self.stacked_flux_err = stacked_flux_err
@@ -75,52 +130,92 @@ class SwiftData:
 
 class Source:
     """
-    A class to encapsulate various observational data of an astronomical source, 
-    including flux measurements, band flux data, observation times, and additional 
-    source-specific parameters.
+    ERWAN's QUINTIN code
+    
+    Manages and interprets observational data of an astronomical source, integrating various types of measurements.
 
-    This class is designed to provide a structured way to store and manipulate 
-    observational data from different catalogs, making it easier to perform various 
-    analyses like calculating hardness ratios or handling Swift telescope data.
+    The `Source` class is a comprehensive tool designed for astronomers and astrophysicists to handle diverse observational data of celestial objects. It seamlessly integrates flux measurements, time series data, hardness ratios, and band-specific flux information, offering a unified approach to data analysis. This class proves invaluable in studies involving multi-wavelength observations, time variability analysis, and spectral properties of astronomical sources.
 
-    Attributes:
-    catalog (str): Name of the catalog from which the source data is obtained.
-    iau_name (str): International Astronomical Union (IAU) designated name of the source.
-    flux (list of float): List of flux values of the source.
-    flux_err (list of float): Corresponding errors of the flux values.
-    time_steps (list of float): Time steps of the observations.
-    obs_ids (list of int): Observation IDs, if available.
-    band_flux (list of float): Flux values in specific energy bands.
-    band_flux_err (list of float): Errors associated with the band flux values.
-    swift_data (SwiftData): Object containing Swift telescope specific data.
-    xmm_offaxis (list): Off-axis angles for XMM-Newton observations, if available.
-    short_term_var (list): Information about short-term variability, if available.
+    Important:
+        - The class is versatile, capable of handling data from different astronomical catalogs and telescopes, including Swift and XMM-Newton.
+        - It offers advanced features such as hardness ratio calculations and handling Swift telescope data, essential for X-ray astronomy.
+        - The class supports the inclusion of band flux data, enhancing its utility in spectral analysis and energy distribution studies.
+        - Users can leverage this class to analyze short-term variability and off-axis observations, crucial for understanding dynamic celestial phenomena.
 
-    Methods:
-    __init__: Initializes the Source object with given data.
-    hardness_ratio: Calculates the hardness ratio for the source based on catalog-specific parameters.
-    swift_modif: Modifies Swift data attributes based on provided flux and flux error.
+    Note:
+        - `Source` class is a pivotal element in the toolkit of astronomers analyzing complex observational datasets.
+        - It simplifies the process of correlating various data types, offering a holistic view of the observed astronomical source.
+        - The class structure is adaptable, allowing for the integration of additional data types and parameters as astronomical research evolves.
+        - Its design caters to both specific and broad analyses, making it suitable for detailed studies of individual sources and comparative studies across different catalogs.
 
+    Example:
+        Example of initializing a Source object with sample data:
+        
+        >>> catalog_name = "Sample Catalog"
+        >>> iau_name = "NAME"
+        >>> flux = [1.2, 1.4, 1.3]
+        >>> flux_err = [0.1, 0.1, 0.1]
+        >>> time_steps = [100, 200, 300]
+        >>> band_flux_data = BandFlux([1.1, 1.2, 1.1], [0.05, 0.05, 0.05])
+        >>> source = Source(catalog_name, iau_name, flux, flux_err, time_steps, band_flux_data)
+
+    The `Source` class is an indispensable asset in the field of astronomy, facilitating the detailed analysis of sources and enhancing our understanding of the universe.
     """
     
     def __init__(self, catalog, iau_name, flux, flux_err, time_steps, band_flux_data, **kwargs) -> None:
         """
         Initializes a new instance of the Source class.
 
-        Parameters:
-        catalog (str): Name of the catalog from which the source data is obtained.
-        iau_name (str): IAU designated name of the source.
-        flux (list of float): List of flux values of the source.
-        flux_err (list of float): Corresponding errors of the flux values.
-        time_steps (list of float): Time steps of the observations.
-        band_flux_data (BandFlux): Object containing flux and flux error data for specific energy bands.
-        kwargs: Additional parameters such as observation IDs (obs_id), Swift data (swift_data), etc.
+        Args:
+            catalog (str): The name of the catalog from which the source data is obtained.
+            iau_name (str): The IAU designated name of the source.
+            flux (list[float]): A list of observed flux values for the source.
+            flux_err (list[float]): A list of errors associated with the observed flux values.
+            time_steps (list[float]): A list of observation times corresponding to each flux value.
+            band_flux_data (BandFlux): An instance of the BandFlux class containing flux and flux error data for specific energy bands.
+            kwargs: Additional optional parameters such as observation IDs (obs_id), Swift data (swift_data), etc.
 
-        This constructor initializes the Source object with the given data, converting some of the data 
-        like observation times and observation IDs into appropriate formats. It also sets up default 
-        values for some attributes based on the provided keyword arguments.
+        This constructor initializes the Source object with observational data, converting time steps and observation IDs into appropriate formats and setting up default values for attributes based on the provided keyword arguments.
 
+        Attributes:
+        
+        .. attribute:: catalog
+            :type: str
+            :value: catalog
+            
+        .. attribute:: iau_name
+            :type: str
+            :value: iau_name
+            
+        .. attribute:: flux
+            :type: float
+            :value: flux
+            
+        .. attribute:: flux_err
+            :type: float
+            :value: flux_err
+            
+        .. attribute:: time_steps
+            :type: List[float]
+            
+        .. attribute:: obs_ids
+            :type: List[int]
+            
+        .. attribute:: band_flux
+            :type: List[float]
+            :value: band_flux_data.flux
+            
+        .. attribute:: band_flux_err
+            :type: List[float]
+            :value: band_flux_data.flux_err
+
+        Note:
+            - The catalog name helps to tailor the analysis methods to the specific format and conventions used in the catalog.
+            - The IAU name is a standardized astronomical naming convention, ensuring consistency across different datasets and studies.
+            - Flux, flux error, and time steps are fundamental observational data, crucial for any time-series or spectral analysis.
+            - The band_flux_data argument allows for integration of spectral data specific to certain energy bands, enhancing the scope of analysis.
         """
+        
         self.catalog = catalog
         self.iau_name = iau_name
         self.flux = flux
@@ -141,19 +236,17 @@ class Source:
     
     def hardness_ratio(self, catalog:str) -> None:
         """
-        Calculates the hardness ratio for a source based on the given catalog's parameters.
+        Calculates and assigns the hardness ratio for the source based on catalog-specific parameters.
 
-        The hardness ratio is a measure of the spectral shape of the source, typically
-        used in X-ray astronomy. It is calculated using soft and hard detections which are 
-        derived from band flux data, considering the specific energy bands defined for the 
-        given catalog.
+        Args:
+            catalog (str): The name of the catalog, which defines energy bands and conversion factors for calculating the hardness ratio.
 
-        Parameters:
-        catalog (str): Name of the catalog which defines the energy bands and conversion factors.
+        The hardness ratio is a dimensionless value that represents the spectral shape of the source, typically used in X-ray and gamma-ray astronomy. This method calculates the hardness ratio using soft and hard detections derived from band flux data, taking into account the specific energy bands defined for the given catalog.
 
-        This method modifies the source object by calculating and setting the hardness ratio
-        along with the associated errors.
-
+        Note:
+            - The hardness ratio is a crucial parameter for understanding the spectral properties of astronomical sources.
+            - Different catalogs may have different definitions and energy ranges for calculating the hardness ratio, hence the need for the catalog parameter.
+            - This method modifies the source object by adding new attributes for the hardness ratio and associated errors.
         """
 
         hr_bandlimit_index = dict_cat.dictionary_catalog[catalog]["hr_bandlimit_index"]
@@ -190,19 +283,18 @@ class Source:
 
     def swift_modif(self, flux:list, flux_err:list) -> None:
         """
-        Modifies and updates the Swift data attributes of the source object.
+        Updates the Swift telescope-specific data attributes of the source object.
 
-        This method is specifically designed to handle data from the Swift telescope.
-        It involves updating stacked flux, error values, and checking for variability 
-        based on the given flux and error parameters.
+        Args:
+            flux (list[float]): A list of flux values observed by the Swift telescope.
+            flux_err (list[float]): A list of errors associated with the observed flux values.
 
-        Parameters:
-        flux (list of float): List of flux values of the source.
-        flux_err (list of float): Corresponding errors of the flux values.
+        This method is designed for handling and updating data specifically from the Swift telescope. It involves modifying stacked flux values, error margins, and checking for variability based on the provided flux and error parameters.
 
-        The method updates attributes related to Swift telescope data, including checking
-        for variability and adjusting minimum and maximum flux values.
-
+        Note:
+            - The method is tailored for Swift telescope data but can be adapted for other telescopic data with similar structure.
+            - It enhances the source object by incorporating telescope-specific variations and nuances into the analysis.
+            - Variability checks are crucial for time-sensitive and transient astronomical phenomena.
         """
 
         self.swift_stacked_flux = self.swift_data.stacked_flux
@@ -226,54 +318,189 @@ class Source:
 
 class MasterSource:
     """
-    A class representing a master source, consolidating data from various sources.
+    A class for consolidating and managing astronomical data from various sources into a single master source.
 
-    This class aggregates and processes data related to astronomical sources from 
-    different catalogs. It handles the removal of redundant data, calculation of various 
-    properties like hardness ratio, variability ratios, and maintains a comprehensive 
-    record of the source's observations across different telescopes.
+    The `MasterSource` class is instrumental in aggregating diverse observational data related to astronomical sources from multiple catalogs. It expertly manages the complexities of data integration, including the removal of redundant data, and ensures the maintenance of a comprehensive and unified record. This class is particularly valuable in multi-wavelength astronomical research, where data from different telescopes and catalogs need to be combined for a holistic analysis.
 
-    Attributes:
-    src_id (int): Unique identifier for the master source.
-    sources (dict): Dictionary storing Source objects from different catalogs.
-    sources_flux (np.ndarray): Array of flux values from all sources.
-    sources_error_bar (np.ndarray): Array of flux error values from all sources.
-    sources_time_steps (list): List of time steps corresponding to each observation.
-    sources_var (list): List of variability flags for each observation.
-    tab_hr (list): List of hardness ratios.
-    tab_hr_err (list): List of errors in hardness ratios.
-    never_on_axis_xmm (bool): Indicates if source never appeared on-axis in XMM observations.
-    has_short_term_var (bool): Flag for the presence of short-term variability.
-    min_time (float): Minimum observation time across all sources.
-    max_time (float): Maximum observation time across all sources.
-    min_upper (float): Minimum upper limit of the source's flux.
-    max_lower (float): Maximum lower limit of the source's flux.
-    var_ratio (float): Variability ratio of the source.
-    var_amplitude (float): Variability amplitude.
-    var_significance (float): Significance of the variability.
-    hr_min (float): Minimum hardness ratio.
-    hr_max (float): Maximum hardness ratio.
-    hr_var (float): Variability in hardness ratio.
-    hr_var_signif (float): Significance of hardness ratio variability.
-    xmm_ul (list): List of upper limits from XMM observations.
-    xmm_ul_dates (list): Dates corresponding to XMM upper limits.
-    xmm_ul_obsids (list): Observation IDs for XMM upper limits.
-    slew_ul, slew_ul_dates, slew_ul_obsids, chandra_ul, chandra_ul_dates (lists): Similar attributes for other telescopes.
-    ra (float): Right ascension of the source.
-    dec (float): Declination of the source.
-    pos_err (float): Positional error of the source.
-    glade_distance (list): Distances from GLADE catalog.
-    simbad_type (str): Source type from the SIMBAD database.
-    has_sdss_widths (bool): Flag indicating the presence of SDSS widths.
+    Important:
+        - The class is designed to handle a variety of data types, including flux measurements, time steps, observation IDs, and hardness ratios.
+        - It provides functionalities for calculating various parameters such as variability ratios, minimum and maximum observational times, and flux limits.
+        - The class is equipped to deal with specific data from telescopes like Swift, XMM-Newton, and Chandra, enhancing its utility in observational astronomy.
 
-    Methods:
-    __init__(self, src_id, sources_table, ra, dec, poserr): Initializes the MasterSource object.
+    Note:
+        - `MasterSource` is a key component in studies that require cross-matching and analysis of data from different astronomical catalogs.
+        - By offering a structured approach to data consolidation, it aids in the accurate and comprehensive analysis of astronomical sources.
+        - This class serves as a foundational tool for researchers aiming to understand the complex nature of celestial objects by examining their multi-wavelength signatures.
 
-    The class primarily focuses on aggregating and processing the source data for 
-    further analysis, particularly in the context of astronomical research.
+    Example Usage:
+        Creating a MasterSource instance with data from various Source objects:
+        
+        >>> master_source = MasterSource(src_id=12345, sources_table=[source1, source2], ra=180.0, dec=-45.0, poserr=0.1)
+        
+        Here, source1 and source2 are instances of the Source class, representing data from different catalogs.
+
+    The MasterSource class stands at the forefront of modern astronomical data analysis, offering an integrated and efficient way to study the cosmos.
     """
     
     def __init__(self, src_id, sources_table, ra, dec, poserr) -> None:
+        """
+        Initializes a new instance of the MasterSource class.
+
+        Args:
+            src_id (int): A unique identifier for the master source.
+            sources_table (list[Source]): A list of Source objects from different catalogs.
+            ra (float): Right ascension of the master source.
+            dec (float): Declination of the master source.
+            poserr (float): Positional error of the master source's location.
+
+        This constructor method creates an instance of `MasterSource` with the provided source data. 
+        It processes each source in the sources_table, consolidates flux measurements, and calculates 
+        various parameters like minimum and maximum times, flux limits, variability ratios, and hardness 
+        ratios. The method also deals with data specific to certain telescopes like Swift, XMM-Newton, 
+        and Chandra.
+        
+        Attributes:
+        
+        .. attribute:: src_id
+            :type: int
+            :value: Unique identifier for the master source.
+        
+        .. attribute:: sources
+            :type: dict
+            :value: Dictionary storing Source objects from different catalogs.
+        
+        .. attribute:: sources_flux
+            :type: np.ndarray
+            :value: Array of flux values from all sources.
+        
+        .. attribute:: sources_error_bar
+            :type: np.ndarray
+            :value: Array of flux error values from all sources.
+        
+        .. attribute:: sources_time_steps
+            :type: list
+            :value: List of time steps corresponding to each observation.
+        
+        .. attribute:: sources_var
+            :type: list
+            :value: List of variability flags for each observation.
+        
+        .. attribute:: tab_hr
+            :type: list
+            :value: List of hardness ratios.
+        
+        .. attribute:: tab_hr_err
+            :type: list
+            :value: List of errors in hardness ratios.
+        
+        .. attribute:: never_on_axis_xmm
+            :type: bool
+            :value: Indicates if source never appeared on-axis in XMM observations.
+        
+        .. attribute:: has_short_term_var
+            :type: bool
+            :value: Flag for the presence of short-term variability.
+        
+        .. attribute:: min_time
+            :type: float
+            :value: Minimum observation time across all sources.
+        
+        .. attribute:: max_time
+            :type: float
+            :value: Maximum observation time across all sources.
+        
+        .. attribute:: min_upper
+            :type: float
+            :value: Minimum upper limit of the source's flux.
+        
+        .. attribute:: max_lower
+            :type: float
+            :value: Maximum lower limit of the source's flux.
+        
+        .. attribute:: var_ratio
+            :type: float
+            :value: Variability ratio of the source.
+        
+        .. attribute:: var_amplitude
+            :type: float
+            :value: Variability amplitude.
+        
+        .. attribute:: var_significance
+            :type: float
+            :value: Significance of the variability.
+        
+        .. attribute:: hr_min
+            :type: float
+            :value: Minimum hardness ratio.
+        
+        .. attribute:: hr_max
+            :type: float
+            :value: Maximum hardness ratio.
+        
+        .. attribute:: hr_var
+            :type: float
+            :value: Variability in hardness ratio.
+        
+        .. attribute:: hr_var_signif
+            :type: float
+            :value: Significance of hardness ratio variability.
+        
+        .. attribute:: xmm_ul
+            :type: list
+            :value: List of upper limits from XMM observations.
+        
+        .. attribute:: xmm_ul_dates
+            :type: list
+            :value: Dates corresponding to XMM upper limits.
+        
+        .. attribute:: xmm_ul_obsids
+            :type: list
+            :value: Observation IDs for XMM upper limits.
+        
+        [additional attributes for other telescopes like slew_ul, slew_ul_dates, etc., as applicable]
+        
+        .. attribute:: ra
+            :type: float
+            :value: Right ascension of the source.
+        
+        .. attribute:: dec
+            :type: float
+            :value: Declination of the source.
+        
+        .. attribute:: pos_err
+            :type: float
+            :value: Positional error of the source.
+        
+        .. attribute:: glade_distance
+            :type: list
+            :value: Distances from GLADE catalog.
+        
+        .. attribute:: simbad_type
+            :type: str
+            :value: Source type from the SIMBAD database.
+        
+        .. attribute:: has_sdss_widths
+            :type: bool
+            :value: Flag indicating the presence of SDSS widths.
+
+        Important:
+            - The src_id serves as a unique identifier for the master source across different catalogs.
+            - The sources_table contains Source objects, each representing an astronomical source from 
+              a specific catalog. This table is crucial for aggregating and analyzing multi-wavelength data.
+            - The method handles complexities such as redundant data removal and consolidation of 
+              measurements from various telescopes.
+            - The right ascension (ra) and declination (dec) along with the positional error (poserr) 
+              provide accurate spatial information about the master source.
+
+        Note:
+            - This class is integral to studies involving cross-matching and combining data from different 
+              astronomical catalogs.
+            - It enhances the capacity to perform comprehensive and multi-faceted analyses of astronomical sources.
+            - The constructor carefully processes the input data, ensuring accuracy and consistency in the 
+              combined master source profile.
+        """
+        
+        
         self.src_id = src_id
         self.sources, self.sources_flux, self.sources_error_bar = {}, [], [[], []]
         self.sources_time_steps, self.sources_var = [], []

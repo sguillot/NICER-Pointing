@@ -10,6 +10,12 @@ import catalog_information as dict_cat
 
 # ------------------------------ #
 
+# ---------- for documentation ---------- #
+
+# import src.catalog_information as dict_cat
+
+# --------------------------------------- #
+
 """
 This module is designed for reducing a multiple sources table to a unique source table in astronomical data analysis. It provides functions for creating and manipulating unique source catalogs based on various criteria and data from different astronomical catalogs. The module integrates with the astropy library for table manipulation and utilizes custom catalog information for specific data fields.
 
@@ -28,13 +34,25 @@ Note:
 
 def unique_dict(name_list: List) -> Dict:
     """
-    Create a dictionary that associates names with their indices in a list.
+    Creates a dictionary mapping each unique name in a list to its indices.
+
+    This function processes a list of names and constructs a dictionary where each unique name is a key, 
+    and its value is a list of indices where that name appears in the original list. It's particularly useful 
+    for identifying and handling duplicates in a list of names.
 
     Args:
-        name_list (List): A list of names.
+        name_list (List[str]): A list of names, which can include duplicates.
 
     Returns:
-        Dict: A dictionary where keys are names and values are lists of corresponding indices.
+        Dict[str, List[int]]: A dictionary where each key is a unique name from the list, and the value is a 
+                              list of indices at which this name appears in the original list. Only names that 
+                              appear more than once in the list are included as keys in the dictionary.
+
+    The function iterates through the list, tracking the occurrence of each name. If a name appears more than 
+    once, it's added to the dictionary with a list of all its indices in the original list.
+
+    Note:
+        - Names that appear only once in the list are not included in the returned dictionary.
     """
     index_dict = {}
     duplicate_dict = {}
@@ -52,14 +70,24 @@ def unique_dict(name_list: List) -> Dict:
 
 def insert_row(duplicate_dict: Dict, new_row: List[Tuple]) -> Dict:
     """
-    Insert a new row into a dictionary and maintain sorted order based on values.
+    Inserts new items into a dictionary and maintains sorted order based on the values.
+
+    This function updates a dictionary by inserting new items from a list of tuples. Each tuple contains 
+    a name and an index. The dictionary has names as keys and lists of indices as values. After insertion, 
+    the indices in the values are kept in sorted order, ensuring that the dictionary remains organized.
 
     Args:
-        duplicate_dict (Dict): A dictionary with names as keys and lists of indices as values.
-        new_row (List[Tuple]): A list of tuples containing (name, index) to be inserted.
+        duplicate_dict (Dict[str, List[int]]): A dictionary where keys are names and values are lists of indices.
+        new_row (List[Tuple[str, int]]): A list of tuples, with each tuple containing a name (str) and an index (int) to be inserted.
 
     Returns:
-        Dict: Updated dictionary with the new row inserted.
+        Dict[str, List[int]]: The updated dictionary with new items inserted. For each name in the new row, 
+                              the corresponding index is inserted into the list of indices in the dictionary 
+                              and sorted to maintain order.
+
+    The function iterates through each tuple in the new row, updating the dictionary accordingly. If the name 
+    already exists as a key in the dictionary, the new index is added to its list and then sorted. If the name 
+    is new, it is added as a new key with its index as the first item in the list.
     """
     
     new_row.sort(key=lambda x: x[1])
@@ -83,14 +111,26 @@ def insert_row(duplicate_dict: Dict, new_row: List[Tuple]) -> Dict:
 
 def replace_nan_value(key: str, unique_table: Table) -> Table:
     """
-    Replace NaN values in a table's specified columns with their minimum non-NaN values.
+    Replaces NaN values in specific columns of an astropy Table with the minimum non-NaN values from the same column.
+
+    This function is designed to process an astropy Table, targeting specific columns identified using a catalog key. 
+    In each specified column, NaN values are replaced with the minimum non-NaN value found in that column. This is 
+    particularly useful for cleaning up astronomical data tables where NaN values can impede analysis.
 
     Args:
-        key (str): The catalog key to determine which columns to process.
-        unique_table (Table): A table containing data with NaN values.
+        key (str): The catalog key used to identify which columns in the table should be processed.
+        unique_table (Table): An astropy Table object containing data, some of which may include NaN values.
 
     Returns:
-        Table: Updated table with NaN values replaced.
+        Table: The updated astropy Table with NaN values replaced by the minimum non-NaN values in their respective columns.
+
+    The function identifies columns based on the catalog key and iterates through them. For each column, it determines 
+    the minimum non-NaN value and replaces any NaN values with this minimum value. This operation is performed in-place,
+    modifying the original table.
+
+    Note:
+        - The function depends on the structure defined in `dict_cat.dictionary_catalog[key]` to identify relevant columns.
+        - This method does not create a new table but modifies the existing one.
     """
     
     flux_obs = dict_cat.dictionary_catalog[key]["flux_obs"]
@@ -127,14 +167,31 @@ def replace_nan_value(key: str, unique_table: Table) -> Table:
 
 def create_unique_sources_catalog(nearby_sources_table: Table, column_name: List) -> Table:
     """
-    Create a unique sources catalog based on a nearby sources table and catalog-specific column names.
+    Creates a catalog of unique astronomical sources based on data from a nearby sources table.
+
+    This function processes a table of nearby source data, focusing on consolidating duplicate entries and 
+    normalizing data across various columns. It uses specified column names to identify and aggregate data 
+    for each unique source, such as their average positions and fluxes. The function is tailored to work 
+    with different astronomical catalogs by adapting to their specific column naming conventions.
 
     Args:
-        nearby_sources_table (Table): A table containing nearby sources data.
-        column_name (List): A list of column names used for catalog-specific data.
+        nearby_sources_table (Table): An astropy Table containing data of nearby astronomical sources.
+        column_name (Dict): A dictionary specifying the column names to use, including keys for catalog names, 
+                            source names, right ascension, declination, and various flux measurements.
 
     Returns:
-        Table: A table representing the unique sources catalog.
+        Table: An astropy Table representing the unique sources catalog. This table includes averaged 
+               positional data and flux measurements for each unique source, based on the catalog key provided.
+
+    The function identifies unique sources, calculates their mean right ascension and declination, and averages 
+    flux data where duplicates are found. The output table is structured to include columns for source identifiers 
+    (e.g., IAUNAME), average coordinates, and flux data. The structure of the output table varies based on the 
+    catalog key specified in `column_name`.
+
+    Note:
+        - The function handles NaN values in flux columns by replacing them with the mean of non-NaN values.
+        - This method is particularly useful for cleaning and organizing astronomical data from surveys 
+          with multiple observations of the same sources.
     """
     
     key = column_name["catalog_name"]

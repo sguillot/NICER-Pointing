@@ -37,16 +37,23 @@ The module's functionality is diverse, catering to specific needs in astronomica
 
 def is_valid_file_path(file_path) -> bool:
     """
-    Check if a file exists at the given file path.
+    Determines whether a file exists at the specified file path.
 
-    Parameters:
-        file_path (str): The file path to be checked.
+    This function checks the existence of a file at a given path. It's useful for validating file paths 
+    before attempting to open or process files, thereby preventing errors related to file access or non-existence.
+
+    Args:
+        file_path (str): The path of the file to be checked.
 
     Returns:
-        bool: True if the file exists, False otherwise.
+        bool: Returns True if the file exists at the given path, False otherwise.
 
-    Raises:
-        None
+    The function uses the os.path.exists method to verify the existence of the file. In case of any 
+    unexpected error during the check, the error is caught and printed, and the function returns False.
+
+    Note:
+        - The function is designed to handle general file path checks and is not specific to any file type.
+        - If the file path is invalid or inaccessible due to permissions, the function returns False.
     """
     try:
         if os.path.exists(file_path):
@@ -61,14 +68,11 @@ def get_valid_file_path(path) -> str:
     """
     Prompt the user for a valid file path until a valid one is provided.
 
-    Parameters:
+    Args:
         path (str): The initial file path.
 
     Returns:
         str: A valid file path that exists.
-
-    Raises:
-        None
     """
     while True :
         if is_valid_file_path(path):
@@ -84,7 +88,7 @@ def choose_catalog(args_catalog) -> Tuple[str, str]:
     """
     Choose a catalog based on the provided keyword and return a valid file path for it.
 
-    Parameters:
+    Args:
         Catalog (str): The catalog keyword, should be 'DR11' or 'DR13'.
 
     Returns:
@@ -181,19 +185,20 @@ def choose_catalog(args_catalog) -> Tuple[str, str]:
 
 def define_sources_list() -> Table:
     """
-    Prompts the user to define a list of sources for calculations. This function allows users to add sources either manually or by importing data from a file.
+    Prompts the user to define a list of astronomical sources for calculations. This function allows users to add sources either manually or by importing data from a file.
+
+    The function initially asks the user if they wish to add sources to the calculation. Users can add sources manually by entering the source details (name, right ascension (ra), declination (dec), and variability rate) or choose to import this data from a specified file. The data, whether manually input or imported, is stored as a list of tuples, each tuple representing a source.
+
+    The process continues until the user decides not to add more sources or completes importing sources from a file. Invalid inputs at any stage are handled with error messages and re-prompting for valid input.
 
     Returns:
-    SRC_LIST (list): A list of source tuples, each containing the source name, right ascension (ra), and declination (dec).
+        list: A list of tuples, where each tuple contains:
+            - Source name (str)
+            - Right ascension (float)
+            - Declination (float)
+            - Variability rate (float or np.nan): 'np.nan' if the source is invariant or a float value representing the variability rate.
 
-    The function begins by asking the user whether they want to add sources to the calculation.
-    If the user chooses to add sources manually, they will be prompted to enter the source details (name, ra, and dec) for each source.
-    If the user chooses to import data from a file, the function reads data from the specified file and extracts the necessary columns.
-    The extracted data is then added to the SRC_LIST as source tuples.
-
-    The function continues to prompt the user until they have either manually added all the sources they need or imported sources from a file.
-    If the user enters invalid input at any point, the function will display an error message and continue to prompt for valid input.
-    
+    Each tuple in the returned list represents an astronomical source with its respective coordinates and variability rate.
     """
     UserList = []
 
@@ -263,13 +268,15 @@ def add_source_list(active_workflow) -> Table:
         active_workflow (str): The path to the active workflow directory.
 
     Returns:
-        Table: A table containing the source list data loaded from the FITS file.
+        Table: A table containing the source list data loaded from the FITS file. 
+               If the user chooses not to add sources, an empty Table object is returned.
 
-    This function prompts the user to add sources to a calculation and allows them to load a FITS file as a source list.
-    If the user chooses to add sources, they will be prompted to enter the file path of the FITS file.
-    The function then opens the FITS file, reads the data, and returns it as a Table object.
-
-    If the user chooses not to add sources, an empty Table is returned.
+    Note:
+        This function interacts with the user to determine if they wish to add sources to their calculation 
+        by loading data from a FITS file. If the user opts to add sources, they are prompted to provide the 
+        file path for the FITS file. The function then reads the specified FITS file and returns its contents 
+        as an astropy Table object. The function ensures the file path is valid and handles any file-reading 
+        errors. If the user decides not to add sources, the function returns an empty Table object.
     """
     
     print(f"You can add a {colored('.fits', 'blue')} file to your modeling ! ")
@@ -301,11 +308,11 @@ def get_coord_psr(name) -> SkyCoord:
     """
     Get the PSR coordinates from the SIMBAD database.
 
-    Parameters:
-    name (str): The name of the pulsar object.
+    Args:
+        name (str): The name of the pulsar object.
 
     Returns:
-    SkyCoord: A SkyCoord object representing the coordinates (RA and DEC) of the pulsar.
+        SkyCoord: A SkyCoord object representing the coordinates (RA and DEC) of the pulsar.
     """
     return SkyCoord(ra=Simbad.query_object(name)['RA'][0], dec=Simbad.query_object(name)['DEC'][0], unit=(u.hourangle, u.deg))
 
@@ -315,21 +322,27 @@ def get_coord_psr(name) -> SkyCoord:
 
 def py_to_xlsx(excel_data_path: str, count_rates: List, object_data: Dict, args: Tuple[str, str], radius: float) -> None:
     """
-    Converts and saves Python data into an Excel file.
+    Converts a list of count rates into an Excel file and saves it to the specified directory.
 
     Args:
-    excel_data_path (str): The path to the directory where the Excel file will be saved.
-    count_rates (List): A list of count rates to be saved.
-    object_data (Dict): A dictionary containing data about the observed object.
-    args (Tuple[str, str]): A tuple containing additional arguments, typically catalog identifiers.
-    radius (float): The radius parameter related to the data.
+        excel_data_path (str): Path to the directory where the Excel file will be saved.
+        count_rates (List[float]): A list of count rates to be saved.
+        object_data (Dict): Dictionary containing data about the observed astronomical object.
+        args (Tuple[str, str]): Tuple of additional arguments, typically catalog identifiers 
+                                (e.g., 'Xmm_DR13', 'CSC_2.0', 'Swift', 'eRosita', 'match').
+        radius (float): Radius parameter related to the data, usually specifying a region of interest around the object.
 
-    This function creates an Excel workbook and writes the provided count rates into it. The file is named based on 
-    the provided arguments and object data, and is saved in the specified directory.
+    This function creates an Excel workbook, writes the count rates into it, and saves the file in the specified directory.
+    The Excel file is named using a convention derived from the catalog type, radius, and object information. The file 
+    name format is typically '{catalog}_{radius}_{object_name}.xlsx'.
+
+    Returns:
+        None
 
     Note:
-    - The file naming convention is derived from the catalog type and object information.
-    - The function currently supports different catalogs (e.g., Xmm_DR13, CSC_2.0, Swift, eRosita, match).
+        - The function supports various astronomical catalogs and adapts the file naming convention accordingly.
+        - The count rates are written in a single column, starting from the first row of the Excel sheet.
+        - The path and filename are processed to ensure compatibility with the file system.
     """
 
     
@@ -356,24 +369,26 @@ def py_to_xlsx(excel_data_path: str, count_rates: List, object_data: Dict, args:
 
 def xlsx_to_py(excel_data_path: str, nearby_sources_table: Table, object_data: Dict, args: Tuple[str, str], radius: float) -> Tuple[List[float], Table]:
     """
-    Reads count rate data from an Excel file and integrates it into a Python table.
+    Converts Excel file data to Python format by reading count rate data and integrating it into an astropy Table.
 
     Args:
-    excel_data_path (str): The path to the directory containing the Excel file.
-    nearby_sources_table (Table): The table into which the count rates will be integrated.
-    object_data (Dict): A dictionary containing data about the observed object.
-    args (Tuple[str, str]): A tuple containing additional arguments, typically catalog identifiers.
-    radius (float): The radius parameter related to the data.
-
-    The function opens the specified Excel workbook, reads count rate data from it, and adds these count rates to the 
-    provided table under a new column 'count_rate'.
+        excel_data_path (str): Path to the directory containing the Excel file.
+        nearby_sources_table (Table): An astropy Table into which the count rates will be integrated.
+        object_data (Dict): Dictionary containing data about the observed astronomical object.
+        args (Tuple[str, str]): Tuple of additional arguments, typically catalog identifiers (e.g., 'Xmm_DR13', 'CSC_2.0').
+        radius (float): Radius parameter related to the data, usually specifying a region of interest around the object.
 
     Returns:
-    Tuple[List[float], Table]: A tuple containing the list of count rates and the updated nearby sources table.
+        Tuple[List[float], Table]: A tuple where the first element is a list of count rates, 
+                                    and the second element is the updated nearby sources table with a new 'count_rate' column.
+
+    The function reads count rate data from the specified Excel file and integrates this data into the `nearby_sources_table`. 
+    The Excel file is expected to be named based on catalog type and object information derived from `args` and `object_data`. 
+    This function is designed to work with various astronomical catalogs, accommodating different data structures and formats.
 
     Note:
-    - The file to be read is named based on the catalog type and object information.
-    - The function supports different catalogs (e.g., Xmm_DR13, CSC_2.0, Swift, eRosita, match).
+        - The function assumes the Excel file has a specific structure suited to astronomical count rate data.
+        - The function handles the data reading and integration process, but error handling for file reading or data inconsistencies should be managed externally.
     """
 
     

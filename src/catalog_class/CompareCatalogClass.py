@@ -36,79 +36,121 @@ import shlex
 
 # ---------------------------------------- #
 
+# ---------- for documentation ---------- #
+
+# import src.function.calculation_function as c_f
+# import src.function.software_function as s_f
+# import src.function.unique_function as u_f
+# import src.catalog_information as dict_cat
+
+# --------------------------------------- #
+
 class CompareCatalog:
     """
-    A class to compare and analyze astronomical catalogs, with a focus on calculating photon index and nh values for sources within these catalogs.
+    The CompareCatalog class is designed to analyze and compare astronomical catalogs, specifically focusing on X-ray sources. It processes two astronomical catalogs, calculating photon indices and hydrogen column densities (NH values) for sources from catalogs such as Xmm_DR13, CS_Chandra, Swift, and eRosita. This class is essential for studies involving the comparison of X-ray sources across different catalogs and determining optimal pointing positions for telescopic observations.
 
-    Attributes:
-        catalog_path (List[str]): Paths to the two catalogs being compared.
-        radius (float): The radius around the object position to consider for analysis.
-        simulation_data (dict): A dictionary containing simulation data, including object data, operating system information, and telescope data.
-        exp_time (int): The exposure time for the analysis.
-        nearby_sources_table_1 (Table): Table containing nearby sources from the first catalog.
-        nearby_sources_table_2 (Table): Table containing nearby sources from the second catalog.
-        nearby_sources_position_1 (SkyCoord): Sky coordinates of nearby sources from the first catalog.
-        nearby_sources_position_2 (SkyCoord): Sky coordinates of nearby sources from the second catalog.
-        index_table (List): List containing indices for variable sources in catalogs.
-        vignet_data_1 (List): List of vignetting-related data for the first catalog.
-        vignet_data_2 (List): List of vignetting-related data for the second catalog.
-        var_index_1 (List): List of indices for variable sources in the first catalog.
-        var_index_2 (List): List of indices for variable sources in the second catalog.
-        count_rates_1 (List): Count rates for the first catalog.
-        count_rates_2 (List): Count rates for the second catalog.
-        vector_dictionary_1 (Dict): Dictionary containing vector data for the first catalog.
-        vector_dictionary_2 (Dict): Dictionary containing vector data for the second catalog.
-        OptimalPointingIdx_1 (int): Optimal pointing index for the first catalog.
-        OptimalPointingIdx_2 (int): Optimal pointing index for the second catalog.
-        master_source_path (str): Path to the master source file.
-        total_spectra_1 (List): Total spectra information for the first catalog.
-        total_spectra_2 (List): Total spectra information for the second catalog.
-        total_var_spectra_1 (List): Total variable spectra information for the first catalog.
-        total_var_spectra_2 (List): Total variable spectra information for the second catalog.
-        instrument (Instrument): Instrument data for the analysis.
+    Note:
+        - The class handles catalog comparison and analysis, including calculations of photon index and NH values for various X-ray catalogs.
+        - It also includes functionality for generating FITS tables, text files, and plots for the analyzed data.
+        - The class supports different operating systems, catering to specific functionalities based on the system.
+        - Key operations include identifying variable sources, modeling source spectra, and calculating vignetting factors for sources.
 
-    Methods:
-        open_catalog: Opens and processes catalogs based on provided keys and paths.
-        find_nearby_sources: Finds nearby sources based on object position, radius, and catalog data.
-        photon_index_nh_for_xmm: Calculates photon index and nh values for the XMM catalog.
-        photon_index_nh_for_csc: Calculates photon index and nh values for the Chandra catalog.
-        photon_index_nh_for_other_catalog: Calculates photon index and nh values for other catalogs like Swift and eRosita.
-        neighbourhood_of_object: Plots the neighborhood of an object based on catalog data.
-        dictionary_model: Creates a dictionary model for source analysis.
-        count_rate: Calculates count rates for sources in the catalogs.
-        xslx_to_py: Converts xlsx data to Python format for further processing.
-        calculate_opti_point: Calculates optimal pointing positions for telescopes.
-        variability_table: Creates and processes a variability table for sources.
-        variability_index: Identifies variable sources in the catalogs.
-        write_fits_table: Writes data to a FITS table for storage and further analysis.
-        modeling_source_spectra: Models source spectra based on catalog data.
-        total_spectra_plot: Plots total spectra for sources in the catalogs.
-        write_txt_file: Writes data to a text file for storage and documentation.
+    Examples
+    --------
+    Creating an instance of CompareCatalog with necessary parameters:
+    
+    >>> catalog_path = ("path/to/catalog_1.fits","path/to/catalog_2.fits", "key_1", "key_2")
+    >>> compare_catalog = CompareCatalog(catalog_path, 5*u.arcmin, simulation_data, user_table)
+
+    Important:
+        - The initialization of this class requires the paths to two catalogs, a radius for analysis, and a dictionary containing simulation data.
+        - The methods within the class perform a range of analytical tasks, from opening and processing catalogs to modeling spectra and plotting data.
+        - The class supports a broad spectrum of X-ray astronomy catalog formats and provides tools for detailed comparative analysis.
     """
    
     def __init__(self, catalog_path: tuple, radius, simulation_data: dict, exp_time: int) -> None:
         """
-        Initializes the CompareCatalog class with necessary parameters for catalog comparison and analysis.
+        Initializes the CompareCatalog class for comparing astronomical catalogs.
 
-        This method processes two astronomical catalogs, computes photon index and nh values, and prepares data for further analysis, including generating tables of nearby sources, calculating vignetting factors, and modeling source spectra.
+        This constructor sets up the class by opening and processing two specified catalogs, identifying nearby sources, and performing various calculations and analyses such as photon index and NH value computations. It also handles different functionalities based on the operating system and prepares for the visualization of source spectra and the calculation of vignetting factors.
 
-        Parameters:
-            catalog_path (List[str]): A list containing paths and keys for two catalogs to be compared. The list should contain four elements: path_1, path_2, key_1, and key_2, where path_x is the file path and key_x is the catalog key.
-            radius (float): The radius around the object position to consider for analysis, typically in arcminutes.
-            simulation_data (dict): A dictionary containing simulation data, including object data, operating system information, and telescope data.
+        Args:
+            catalog_path (tuple): A tuple containing the paths and keys for two catalogs (path_1, path_2, key_1, key_2).
+            radius: The radius around the object position to consider for analysis.
+            simulation_data (dict): A dictionary containing simulation data such as object data and telescope data.
             exp_time (int): The exposure time used in the analysis.
 
-        The method performs several steps:
-        - Opens and processes the provided catalogs based on the keys and paths.
-        - Finds nearby sources from both catalogs within the specified radius.
-        - Calculates photon index and nh values for Xmm_DR13, CS_Chandra, Swift, and eRosita catalogs.
-        - Calculates the optimal pointing position for telescopic observations.
-        - Computes the vignetting factor for the sources in each catalog.
-        - Identifies variable sources in the catalogs and generates a master source path.
-        - Writes FITS tables and text files for the analyzed data.
-        - Models the source spectra and plots the total spectra for visualization.
+        Attributes:
+        
+        .. attribute:: nearby_sources_table_1
+            :type: Table
+            :value: A table of nearby sources from the first catalog.
 
-        The method also handles different operating systems for specific functionalities.
+        .. attribute:: nearby_sources_table_2
+            :type: Table
+            :value: A table of nearby sources from the second catalog.
+
+        .. attribute:: nearby_sources_position_1
+            :type: SkyCoord
+            :value: Sky coordinates of nearby sources from the first catalog.
+
+        .. attribute:: nearby_sources_position_2
+            :type: SkyCoord
+            :value: Sky coordinates of nearby sources from the second catalog.
+
+        .. attribute:: var_index_1
+            :type: List
+            :value: Indices of variable sources in the first catalog.
+
+        .. attribute:: var_index_2
+            :type: List
+            :value: Indices of variable sources in the second catalog.
+
+        .. attribute:: total_spectra_1
+            :type: List
+            :value: Modeled total spectra for the first catalog.
+
+        .. attribute:: total_spectra_2
+            :type: List
+            :value: Modeled total spectra for the second catalog.
+
+        .. attribute:: total_var_spectra_1
+            :type: List
+            :value: Modeled spectra for variable sources in the first catalog.
+
+        .. attribute:: total_var_spectra_2
+            :type: List
+            :value: Modeled spectra for variable sources in the second catalog.
+
+        .. attribute:: count_rates_1
+            :type: List
+            :value: Calculated count rates for sources in the first catalog.
+
+        .. attribute:: count_rates_2
+            :type: List
+            :value: Calculated count rates for sources in the second catalog.
+
+        .. attribute:: data_1
+            :type: Dict
+            :value: Data for plotting spectra of the first catalog.
+
+        .. attribute:: data_2
+            :type: Dict
+            :value: Data for plotting spectra of the second catalog.
+
+        .. attribute:: instrument
+            :type: Instrument
+            :value: Instrument used for spectral modeling.
+
+        Note:
+        - The constructor performs preliminary data preparation, which is critical for the subsequent analytical methods in the class.
+        - It assumes the catalogs are in a format compatible with the class methods and the simulation data provided is accurate.
+
+        Important:
+        - Proper initialization with valid parameters is crucial for the correct functioning of the class.
+        - The class is capable of handling large datasets, but performance might vary based on the system's capabilities and the size of the data.
+
+        The class is designed to handle a variety of tasks, including the processing of FITS tables, modeling of source spectra, and plotting of data. It also includes methods for writing analysis results to text files.
         """
         
         path_1, path_2 = catalog_path[0], catalog_path[1]
@@ -203,24 +245,25 @@ class CompareCatalog:
         """
         Opens and processes astronomical catalogs for further analysis.
 
-        This method is responsible for loading data from specified catalogs using given keys and paths. It handles different catalogs by checking the keys and applying appropriate procedures to load and convert the data into a usable format.
+        This method loads data from specified catalogs, identified by keys and paths, and processes it for analysis. It handles different types of catalogs, employing specific procedures to load and convert the data into a format suitable for analytical operations.
 
         Parameters:
-            key (Tuple[str, str]): A tuple containing the keys for the catalogs to be opened. The keys are used to identify the specific catalogs and the corresponding procedures for loading the data.
-            path (Tuple[str, str]): A tuple containing the paths to the files of the catalogs to be opened.
-            radius (float): The radius around the object's position, used in catalog searching, typically in arcminutes.
-            object_data (Dict): A dictionary containing information about the object of interest, including its name.
+            key (Tuple[str, str]): A tuple containing the keys of the catalogs to be opened. These keys identify the specific catalogs and dictate the corresponding data-loading procedures.
+            path (Tuple[str, str]): A tuple containing the file paths of the catalogs to be opened.
+            radius (float): The radius around the object's position, used for catalog searching, typically measured in arcminutes.
+            object_data (Dict): A dictionary containing information about the object of interest, such as its name.
 
         Returns:
-            Tuple[Table, Table]: A tuple of two `Table` objects containing the data from the opened catalogs. 
+            Tuple[Table, Table]: A tuple consisting of two `Table` objects that contain the data from the opened catalogs.
 
-        The method performs the following operations:
-        - If one of the catalogs is "CSC_2.0", it uses the Chandra Source Catalog cone search service to find sources within the specified radius of the object's position.
-        - Opens FITS files for the specified paths to load data for other catalogs.
-        - Converts the loaded data into `Table` objects for further analysis.
-        - Prints a confirmation once the catalogs are loaded successfully.
+        Note:
+            The method executes the following steps:
+            - Utilizes the Chandra Source Catalog cone search service to find sources within the specified radius from the object's position if one of the catalogs is "CSC_2.0".
+            - Opens FITS files from the provided paths to load data for other catalogs.
+            - Converts the loaded data into `Table` objects, facilitating further analysis.
+            - Outputs a confirmation message once the catalogs are successfully loaded.
 
-        This method simplifies the process of accessing astronomical data from various sources, making it easier to conduct comparative analyses between different catalogs.
+        This method streamlines the access to astronomical data from different sources, thereby aiding in conducting comparative analyses between various catalogs.
         """
         
         if key[0] == "CSC_2.0":
@@ -259,26 +302,33 @@ class CompareCatalog:
     
     def find_nearby_sources(self, table, radius, simulation_data, key: Tuple) -> Tuple[Table, Table, SkyCoord, SkyCoord]:
         """
-        Identifies and processes nearby sources from astronomical catalogs based on a specified object's position.
+        Identifies and processes nearby sources from astronomical catalogs based on the specified object's position.
 
-        Parameters:
-            table (Tuple[Table, Table]): A tuple containing two `Table` objects that hold the data from the catalogs to be processed.
-            radius (float): The radius around the object's position to consider for finding nearby sources, typically in arcminutes.
+        Args:
+            table (Tuple[Table, Table]): A tuple containing two `Table` objects with data from the catalogs to be processed.
+            radius (float): The radius around the object's position to consider when finding nearby sources, typically in arcminutes.
             simulation_data (dict): A dictionary containing simulation data, including the object's position and other relevant information.
             key (Tuple[str, str]): A tuple containing the keys identifying the specific catalogs to be processed.
 
         Returns:
-            Tuple[Table, Table, SkyCoord, SkyCoord]: A tuple containing two `Table` objects with the nearby sources from each catalog and two `SkyCoord` objects representing the positions of these sources.
+            Tuple[Table, Table, SkyCoord, SkyCoord]: A tuple containing two `Table` objects with nearby sources from each catalog and two `SkyCoord` objects representing the positions of these sources.
 
-        The method performs several steps:
+        Note:
+            This method is tailored to handle specific astronomical catalogs. Modifications may be required to adapt it to other catalog formats or to handle additional catalogs.
+
+        Important:
+            The accuracy of the results depends significantly on the quality and completeness of the input catalog data. Users should ensure that the catalog data is up-to-date and comprehensive to achieve the best results.
+
+        This method processes the following steps:
         - Determines the field of view based on the specified radius and the object's position.
         - Filters the sources in each catalog within the field of view and closer than the specified radius to the object's position.
-        - Handles different combinations of catalogs (e.g., CSC_2.0, Xmm_DR13, Swift, eRosita) and applies specific procedures for each.
+        - Applies specific procedures for handling different combinations of catalogs (e.g., CSC_2.0, Xmm_DR13, Swift, eRosita).
         - Calculates sky coordinates for the nearby sources.
         - Returns the processed tables and coordinates for further analysis.
 
-        This method is crucial for narrowing down the focus to sources in the vicinity of a specified object, enabling detailed analysis and comparison of these sources across different catalogs.
+        This method is essential for focusing on sources in the vicinity of a specified object, enabling detailed analysis and comparison of these sources across different catalogs.
         """
+    
         
         object_data = simulation_data["object_data"]
         object_position = object_data['object_position']
@@ -633,25 +683,23 @@ class CompareCatalog:
     
     def optimization(self, index: int, key: str, table: Table) -> Tuple[List, List]:
         """
-        Optimizes the parameters of an absorbed power-law model based on the observed fluxes in different energy bands.
+        Optimizes the parameters of an absorbed power-law model based on observed fluxes in different energy bands.
 
-        This method is used to fit the observed flux data from astronomical catalogs to an absorbed power-law model, which is commonly used in astrophysics to describe the spectral energy distribution of sources.
-
-        Parameters:
-            index (int): The index of the source in the catalog for which the optimization is being performed.
-            key (str): The key identifying the catalog (e.g., 'XMM', 'CS_Chandra', 'Swift', 'eRosita') from which the data is taken.
-            table (Table): The table containing the observed flux data and other relevant information for the sources.
+        Args:
+            index (int): The index of the source in the catalog for optimization.
+            key (str): The key identifying the catalog (e.g., 'XMM', 'CS_Chandra', 'Swift', 'eRosita').
+            table (Table): The table with observed flux data and other relevant information.
 
         Returns:
-            Tuple[List, List]: A tuple where the first element is a list containing the optimized parameters and the second element is the absorbed photon index.
+            Tuple[List, List]: A tuple where the first element is a list of optimized parameters, and the second is the absorbed photon index.
 
-        The method performs the following steps:
-        - Retrieves the observed fluxes, their errors, energy band centers, and widths from the catalog data based on the given key.
-        - Defines an absorbed power-law function to model the source's spectrum.
-        - Uses the curve fitting technique to find the best-fit parameters for the absorbed power-law model based on the observed data.
-        - Returns the optimized parameters and the absorbed photon index for the specified source.
+        Note:
+            This method is specifically tailored for astronomical data and assumes familiarity with astrophysical concepts and data structures.
 
-        This optimization is crucial for understanding the physical processes in astronomical sources by analyzing their energy spectra.
+        Important:
+            The reliability of the optimization depends on the quality and precision of the input data. Users must ensure data accuracy and appropriateness of the model for the specific astrophysical context.
+
+        The method performs steps including retrieving observed fluxes and their errors, defining an absorbed power-law function, curve fitting to find best-fit parameters, and returning optimized parameters and photon index.
         """
         
         if key == "XMM":
@@ -705,21 +753,18 @@ class CompareCatalog:
         """
         Visualizes the interpolation of photon indices using an absorbed power-law model.
 
-        This method plots the observed fluxes and the best-fit absorbed power-law model for sources in an astronomical catalog. It helps in understanding the spectral characteristics of these sources.
+        Args:
+            optimization_parameters (List): Optimization parameters from the absorbed power-law model fitting.
+            photon_index (List): List of photon indices for each source or observation.
+            key (str): The catalog key (e.g., 'XMM', 'CS_Chandra', 'Swift', 'eRosita').
 
-        Parameters:
-            optimization_parameters (List): A list containing the optimization parameters obtained from fitting the absorbed power-law model. It includes energy band centers, observed fluxes, flux errors, and the model function.
-            photon_index (List): A list of photon indices corresponding to each source or observation in the catalog.
-            key (str): The key identifying the catalog (e.g., 'XMM', 'CS_Chandra', 'Swift', 'eRosita') from which the data is taken.
+        Note:
+            This visualization method is designed for astrophysical data and requires an understanding of spectral analysis in astronomy.
 
-        The method performs the following steps:
-        - Retrieves the energy band centers from the catalog data based on the given key.
-        - Creates a plot with energy on the x-axis and flux on the y-axis.
-        - Plots error bars for the observed fluxes and overlays the best-fit absorbed power-law model.
-        - Annotates the plot with the photon index for each source or observation.
-        - Displays the plot with logarithmic axes for better visualization of the spectral data.
+        Important:
+            The clarity and interpretability of the plots depend on the resolution and range of the input data. Users should carefully choose the energy bands and flux ranges for meaningful visualizations.
 
-        This visualization is important for assessing the quality of the fit and for comparing the spectral properties across different sources or observations.
+        The method involves plotting observed fluxes against energy bands, overlaying the best-fit model, and annotating photon indices, offering insights into the spectral properties of astronomical sources.
         """
         
         energy_band = dict_cat.dictionary_catalog[key]["energy_band_center"]
@@ -748,22 +793,20 @@ class CompareCatalog:
         """
         Calculates the photon index and hydrogen column density (NH) for sources in the XMM-Newton catalog.
 
-        Parameters:
-            os_dictionary (Dict): A dictionary containing paths and other operating system-related information needed to access catalog data.
-            xmm_index (int): An index indicating which of the nearby sources tables (1 or 2) corresponds to the XMM-Newton catalog.
+        Args:
+            os_dictionary (Dict): A dictionary containing paths and OS-related information for catalog access.
+            xmm_index (int): An index indicating which nearby sources table corresponds to the XMM-Newton catalog.
 
         Returns:
-            Tuple[Table, List]: A tuple where the first element is the updated table with added 'Photon Index' and 'Nh' columns, and the second element is a table containing indexes mapping nearby sources to the XMM-Newton catalogs.
+            Tuple[Table, List]: An updated table with 'Photon Index' and 'Nh' columns, and a table of indexes mapping sources to the XMM catalogs.
 
-        The method performs the following steps:
-        - Accesses the XMM-Newton DR11 and Athena catalogs using paths provided in the os_dictionary.
-        - Matches sources in the nearby sources table with those in the XMM catalogs based on identifiers like 'IAUNAME' and 'DETID'.
-        - For each source, calculates the photon index and NH either directly from the Athena catalog or through optimization if data is not found.
-        - Visualizes the absorbed power-law fit for the calculated photon indices.
-        - Adds the calculated photon indices and NH values to the nearby sources table.
-        - Returns the updated nearby sources table and a table mapping the indexes of these sources in the XMM catalogs.
+        Note:
+            Assumes familiarity with X-ray astronomy catalogs, particularly XMM-Newton. Suitable for users with astrophysical data processing experience.
 
-        This method is vital for extracting and computing key astrophysical parameters from the XMM-Newton catalog, aiding in the analysis of X-ray sources.
+        Important:
+            Accuracy of NH and photon index calculations is contingent upon the quality and completeness of the XMM catalog data and the robustness of the optimization process.
+
+        The method accesses XMM-Newton catalogs, matches sources, calculates photon indices and NH values, visualizes absorbed power-law fits, and updates the table with these parameters.
         """
         
         catalog_datapath = os_dictionary["catalog_datapath"]
@@ -844,15 +887,19 @@ class CompareCatalog:
 
     def threshold(self, cone_search_catalog: Table) -> Table:
         """
-        Corrects and standardizes flux values in an astronomical catalog, handling missing or undefined data points.
-
-        This method is primarily used to process flux data from the Chandra Source Catalog (CSC), represented by the 'CS_Chandra' key, but can be adapted for similar catalogs.
+        Corrects and standardizes flux values in an astronomical catalog, addressing missing or undefined data points.
 
         Parameters:
-            cone_search_catalog (Table): The table containing flux data and other parameters from the CSC or a similar catalog.
+            cone_search_catalog (Table): The table with flux data from the CSC or a similar catalog.
 
         Returns:
-            Table: The corrected and standardized table with flux values processed to replace undefined or missing data with meaningful numerical values.
+            Table: The corrected and standardized table with processed flux values.
+
+        Note:
+            This method is tailored for astronomical data processing, particularly for handling flux data in catalogs like CSC.
+
+        Important:
+            The effectiveness of this method depends on the consistency of data formats in the input catalog. It's crucial for users to verify that the catalog adheres to expected data structures.
 
         The method performs the following steps:
         - Iterates over each item in the catalog to check for undefined or missing flux values, represented as `np.ma.core.MaskedConstant`.
@@ -933,21 +980,27 @@ class CompareCatalog:
         """
         Calculates and updates the photon index and hydrogen column density (NH) for sources in the Chandra Source Catalog (CSC).
 
-        Parameters:
+        Args:
             csc_index (int): An index indicating which of the nearby sources tables (1 or 2) corresponds to the CSC catalog.
 
         Returns:
             Table: The updated nearby sources table with new columns for 'Photon Index' and 'Nh' added.
 
+        Note:
+            Assumes the user has familiarity with CSC data structures and astrophysical parameters like photon index and NH.
+
+        Important:
+            The method relies on the availability and accuracy of initial values in the CSC catalog. Inaccuracies in source data may affect the calculated photon index and NH values.
+
         The method performs the following steps:
-        - Determines the appropriate nearby sources table based on the csc_index.
-        - Iterates through each source in the table. For each source:
-            - If a valid photon index is already present, it is used; otherwise, it's calculated using the `optimization` method.
-            - If a valid NH value is present, it is used; otherwise, a default value is assigned.
-        - Each source's photon index and NH value are added to the photon_index_list and nh_list, respectively.
-        - Calls the `visualization_interp` method to visualize the interpolated photon indices.
-        - The 'Photon Index' and 'Nh' columns are added or updated in the nearby sources table with the calculated values.
-        - Returns the updated nearby sources table.
+            - Determines the appropriate nearby sources table based on the csc_index.
+            - Iterates through each source in the table. For each source:
+                - If a valid photon index is already present, it is used; otherwise, it's calculated using the `optimization` method.
+                - If a valid NH value is present, it is used; otherwise, a default value is assigned.
+            - Each source's photon index and NH value are added to the photon_index_list and nh_list, respectively.
+            - Calls the `visualization_interp` method to visualize the interpolated photon indices.
+            - The 'Photon Index' and 'Nh' columns are added or updated in the nearby sources table with the calculated values.
+            - Returns the updated nearby sources table.
 
         This method is crucial for enhancing the CSC data by calculating key astrophysical parameters (photon index and NH) that are essential for analyzing the X-ray spectra of astronomical sources.
         """
@@ -987,12 +1040,18 @@ class CompareCatalog:
         """
         Computes and updates photon index and hydrogen column density (NH) for sources in a given astronomical catalog other than XMM and CSC.
 
-        Parameters:
+        Args:
             key (str): The key identifying the catalog (e.g., 'Swift', 'eRosita').
             table (Table): The table containing the catalog data.
 
         Returns:
             Table: The updated table with 'Photon Index' and 'Nh' columns added.
+
+        Note:
+            Designed for users with proficiency in handling astronomical catalog data and spectral analysis.
+
+        Important:
+            Results are dependent on the quality of the catalog data and the effectiveness of the optimization method. Inconsistent data may lead to unreliable photon index and NH values.
 
         Methodology:
         - Iterates over each source in the table.
@@ -1039,16 +1098,27 @@ class CompareCatalog:
         Returns:
             None: This method does not return anything but produces a visualization plot.
 
+        Note:
+            The method requires correct alignment and calibration of catalog data for accurate representation of source positions.
+
+        Important:
+            This method provides a visual representation and does not quantify the statistical significance of the distribution of sources around the object. Interpretation should be done with caution.
+
         Description:
-        - Retrieves object data, including name and celestial position.
-        - Based on the catalog keys, determines the right ascension (RA) and declination (DEC) column names for each catalog.
-        - Creates a plot with two subplots, each representing one of the catalogs.
-        - In each subplot:
-            - Plots the positions of the sources from the respective catalog.
-            - Highlights the position of the main object.
-        - Saves the plot image to a specified path.
+            - Retrieves object data, including name and celestial position.
+            - Based on the catalog keys, determines the right ascension (RA) and declination (DEC) column names for each catalog.
+            - Creates a plot with two subplots, each representing one of the catalogs.
+            - In each subplot:
+                - Plots the positions of the sources from the respective catalog.
+                - Highlights the position of the main object.
+            - Saves the plot image to a specified path.
 
         This method is useful for astronomers to visually assess the distribution of sources around a particular object across different catalogs.
+
+        Here is an example of the plot create by this method:
+
+        .. image:: C:/Users/plamb_v00y0i4/OneDrive/Bureau/Optimal_Pointing_Point_Code/modeling_result/PSR_J0437-4715/Compare_catalog/img/Xmm_DR13_CSC_2.0_neighbourhood_of_PSR_J0437-4715.png
+            :align: center
         """
         
         object_data = simulation_data["object_data"]
@@ -1107,11 +1177,17 @@ class CompareCatalog:
         """
         Creates dictionaries for each source in the nearby sources tables, specifying the astrophysical model parameters.
 
-        Parameters:
+        Args:
             key (Tuple[str, str]): Tuple containing the keys identifying the two catalogs being compared.
 
         Returns:
             Tuple[Dict, Dict]: Two dictionaries, each containing the model parameters for the sources in the corresponding nearby sources table.
+
+        Note:
+            The method assumes the availability of key spectral parameters in the catalogs. Incomplete data may impact the accuracy of the models.
+
+        Important:
+            The choice of 'power' as a model type is a simplification. In real-world scenarios, models should be chosen based on the source characteristics and scientific goals.
 
         Description:
         - Converts catalog keys to standard format if necessary.
@@ -1173,6 +1249,12 @@ class CompareCatalog:
         Returns:
             Tuple[List, List]: Two lists containing the calculated count rates for each source in the corresponding nearby sources table.
 
+        Note:
+            The accuracy of count rate calculations depends on the correctness of the input astrophysical model parameters and the accuracy of the PIMMS tool itself.
+
+        Important:
+            PIMMS (Portable, Interactive Multi-Mission Simulator) is a tool used for predicting count rates from astrophysical models. The user must ensure that PIMMS is correctly installed and configured for accurate calculations.
+
         Description:
         - Iterates over each source in both nearby sources tables.
         - For each source, extracts the astrophysical model parameters from the model dictionaries.
@@ -1232,14 +1314,14 @@ class CompareCatalog:
         """
         Reads count rate data from an Excel file based on specified parameters and updates the provided table with these values.
 
-        Parameters:
-        args (str): Identifier for the catalog to be used (e.g., "Xmm_DR13", "CSC_2.0", "Swift", "eRosita", "match").
-        table (Table): The table to be updated with count rate data.
-        simulation_data (Dict): Dictionary containing simulation parameters and paths.
-        radius (float): The radius value used to define the file name for the Excel data.
+        Args:
+            args (str): Identifier for the catalog to be used (e.g., "Xmm_DR13", "CSC_2.0", "Swift", "eRosita", "match").
+            table (Table): The table to be updated with count rate data.
+            simulation_data (Dict): Dictionary containing simulation parameters and paths.
+            radius (float): The radius value used to define the file name for the Excel data.
 
         Returns:
-        Tuple[List, Table]: A tuple where the first element is a list of count rates and the second element is the updated table with these rates.
+            Tuple[List, Table]: A tuple where the first element is a list of count rates and the second element is the updated table with these rates.
 
         This method constructs the path to the relevant Excel file based on the catalog and object name, reads the count rates, and updates the table's 'count_rate' column.
         """
@@ -1276,14 +1358,30 @@ class CompareCatalog:
         """
         Calculates the optimal pointing coordinates for an astronomical object to maximize the signal-to-noise ratio (S/N) based on nearby sources.
 
-        Parameters:
-        simulation_data (Dict): Dictionary containing simulation parameters including telescope and object data.
-        key (Tuple[str, str]): A tuple of two catalog identifiers used for the analysis.
+        Args:
+            simulation_data (Dict): Dictionary containing simulation parameters, including telescope and object data.
+            key (Tuple[str, str]): A tuple of two catalog identifiers used for the analysis.
 
         Returns:
-        Tuple[Dict, Dict, int, int]: A tuple containing two dictionaries for each catalog, and two integers representing the indices of optimal pointing coordinates.
+            Tuple[Dict, Dict, int, int]: A tuple containing two dictionaries for each catalog, and two integers representing the indices of optimal pointing coordinates.
 
-        This method creates a grid of potential pointing coordinates around the object, calculates the S/N ratio for each point, and identifies the optimal pointing location. It also generates and saves a visualization of the S/N map for each catalog.
+        Note:
+            Accurate input parameters are critical for achieving reliable S/N optimization. Ensure that telescope data, object properties, and catalogs are up-to-date and precise. Inaccuracies can lead to suboptimal or misleading results.
+
+        Important:
+            The accuracy of the generated S/N maps and optimal pointing coordinates heavily relies on the provided simulation data and catalog information. Verify that the input data accurately represents the astronomical scenario you intend to analyze.
+
+        Description:
+            - This method first creates a grid of potential pointing coordinates around the astronomical object, considering a range of right ascension and declination offsets. It then calculates the signal-to-noise ratio (S/N) for each pointing position. The S/N is computed by comparing the expected count rates from the astronomical object of interest with those from nearby sources, accounting for telescope characteristics and background noise.
+            - The function identifies the optimal pointing location by selecting the coordinates with the highest S/N ratio. Two separate dictionaries are generated, each containing information for one of the specified catalogs. Additionally, the indices of the optimal pointing coordinates are returned.
+            - The generated S/N maps provide valuable insights into the quality of potential observations, aiding astronomers in selecting the best pointing coordinates for maximizing scientific outcomes during telescope observations.
+
+        This method is crucial for planning and conducting astronomical observations, enabling astronomers to optimize telescope pointing for enhanced data quality.
+        
+        Here is an example of the plot create by this method:
+        
+        .. image:: C:/Users/plamb_v00y0i4/OneDrive/Bureau/Optimal_Pointing_Point_Code/modeling_result/PSR_J0437-4715/Compare_catalog/img/Xmm_DR13_CSC_2.0_SNR_PSR_J0437-4715.png
+            :align: center
         """
         
         min_value, max_value, step = -7.0, 7.1, 0.05
@@ -1389,22 +1487,28 @@ class CompareCatalog:
     
     def variability_table(self, simulation_data: Dict, radius: int) -> str:
         """
-        Creates a table of master sources around a specific astronomical object based on given radius and simulation data.
+        Creates a table of master sources around a specific astronomical object based on a given radius and simulation data.
 
-        Parameters:
-        simulation_data (Dict): Dictionary containing various parameters and paths used in the simulation.
-        radius (int): Radius in arcminutes defining the area around the object of interest.
+        Args:
+            simulation_data (Dict): Dictionary containing various parameters and paths used in the simulation.
+            radius (int): Radius in arcminutes defining the area around the object of interest.
 
         Returns:
-        str: Path to the created master source FITS file.
+            str: Path to the created master source FITS file.
 
-        This method first extracts sources around the specified region (RA, Dec) within the given radius from the master source catalog. Then, it selects relevant catalog sources around this region. It uses STILTS (Software for the Treatment of Image Data from Large Telescopes) for data processing. Finally, it visualizes and saves the resulting master sources.
+        Description:
+            This method first extracts sources around the specified region (RA, Dec) within the given radius from the master source catalog. Then, it selects relevant catalog sources around this region. It uses STILTS (Software for the Treatment of Image Data from Large Telescopes) for data processing. Finally, it visualizes and saves the resulting master sources.
 
         Exceptions:
-        Any exceptions during processing are caught and printed to the console.
+            Any exceptions during processing are caught and printed to the console.
 
         Note:
-        This method relies on external software (STILTS) and assumes the existence of a master source catalog and additional catalogs defined in `simulation_data`.
+            - This method relies on external software (STILTS) and assumes the existence of a master source catalog and additional catalogs defined in `simulation_data`.
+            - Accurate input parameters are critical for achieving reliable results. Ensure that the telescope data, object properties, and catalogs are up-to-date and precise. Inaccuracies can lead to suboptimal or misleading results.
+            - The generated master source table is saved in the directory specified in the simulation data.
+
+        Important:
+            The accuracy of the generated master source table heavily relies on the provided simulation data, including the path to the master source catalog, the STILTS software path, and other parameters. Verify that the input data accurately represents the astronomical scenario you intend to analyze.
         """
         
         os_dictionary = simulation_data["os_dictionary"]
@@ -1456,18 +1560,20 @@ class CompareCatalog:
         """
         Identifies and returns the indices of variable sources from a nearby sources table based on a master source catalog.
 
-        Parameters:
-        key (str): Key representing the catalog name (e.g., 'CSC_2.0', 'Xmm_DR13').
-        iauname (str): The column name in `nearby_sources_table` representing source names.
-        nearby_sources_table (Table): A table containing data of nearby sources.
+        Args:
+            key (str): Key representing the catalog name (e.g., 'CSC_2.0', 'Xmm_DR13').
+            iauname (str): The column name in `nearby_sources_table` representing source names.
+            nearby_sources_table (Table): A table containing data of nearby sources.
 
         Returns:
-        List: A list of indices in `nearby_sources_table` corresponding to variable sources found in the master source catalog.
+            List: A list of indices in `nearby_sources_table` corresponding to variable sources found in the master source catalog.
 
-        This method opens the master source FITS file and filters out variable sources based on the catalog specified by `key`. It then matches these sources with those in the `nearby_sources_table` and compiles a list of indices representing these variable sources within the table.
+        Description:
+            This method opens the master source FITS file and filters out variable sources based on the catalog specified by `key`. It then matches these sources with those in the `nearby_sources_table` and compiles a list of indices representing these variable sources within the table.
 
         Note:
-        This method assumes that the master source path is already set in the instance variable `self.master_source_path`.
+            - This method assumes that the master source path is already set in the instance variable `self.master_source_path`.
+            - The returned list contains indices that can be used to access variable sources in the `nearby_sources_table`.
         """
         
         with fits.open(self.master_source_path) as data:
@@ -1492,15 +1598,17 @@ class CompareCatalog:
         """
         Writes a given table to a FITS file, using a specific catalog key and directory paths from a dictionary.
 
-        Parameters:
-        table (Table): The table to be written to the FITS file.
-        key (str): Key representing the catalog name used for naming the FITS file.
-        os_dictionary (Dict): Dictionary containing various file paths used in the operation.
+        Args:
+            table (Table): The table to be written to the FITS file.
+            key (str): Key representing the catalog name used for naming the FITS file.
+            os_dictionary (Dict): Dictionary containing various file paths used in the operation.
 
-        This method attempts to write the `table` to a FITS file in the directory specified in `os_dictionary["cloesest_dataset_path"]`. The file is named using the `key` parameter. If an error occurs during this process, it is caught and printed to the console.
+        Description:
+            This method attempts to write the `table` to a FITS file in the directory specified in `os_dictionary["cloesest_dataset_path"]`. The file is named using the `key` parameter. If an error occurs during this process, it is caught and printed to the console.
 
         Note:
-        The method overwrites any existing file with the same name.
+            - The method overwrites any existing file with the same name.
+            - The path to the generated FITS file is printed to the console upon successful creation.
         """
         
         try:            
@@ -1516,18 +1624,24 @@ class CompareCatalog:
         """
         Generates modeled spectra for sources in nearby sources tables for given catalogs.
 
-        Parameters:
-        simulation_data (Dict): A dictionary containing simulation data including telescope data.
-        exp_time (int): Exposure time used in the simulation.
-        key (Tuple[str, str]): A tuple containing the keys of the catalogs to be used.
+        Args:
+            simulation_data (Dict): A dictionary containing simulation data including telescope data.
+            exp_time (int): Exposure time used in the simulation.
+            key (Tuple[str, str]): A tuple containing the keys of the catalogs to be used.
 
         Returns:
-        Tuple[List, List, List, List, Instrument]: A tuple containing lists of total spectra, total variable spectra for both catalogs, and the instrument used.
+            Tuple[List, List, List, List, Instrument]: A tuple containing lists of total spectra, total variable spectra for both catalogs, and the instrument used.
 
-        This method creates and models spectral data for each source in the nearby sources tables of the specified catalogs (key[0] and key[1]). It utilizes an X-ray spectrum model (Tbabs * Powerlaw) and simulates the spectra using the NICER instrument's ARF and RMF files. The method also accounts for the vignetting factor for each source. The result is a collection of spectra for all sources, as well as a separate collection for variable sources as identified by their indices.
+        Description:
+            This method creates and models spectral data for each source in the nearby sources tables of the specified catalogs (key[0] and key[1]). It utilizes an X-ray spectrum model (Tbabs * Powerlaw) and simulates the spectra using the NICER instrument's ARF and RMF files. The method also accounts for the vignetting factor for each source. The result is a collection of spectra for all sources, as well as a separate collection for variable sources as identified by their indices.
 
         Note:
-        This method assumes that the necessary data paths and instrumental information are provided in `simulation_data`.
+            - This method assumes that the necessary data paths and instrumental information are provided in `simulation_data`.
+            - Accurate input parameters are crucial for obtaining meaningful results. Ensure that the telescope data, exposure time, and other simulation data are correctly specified.
+            - The generated spectra are stored as lists and can be used for further analysis or visualization.
+
+        Important:
+            The accuracy of the generated spectra depends on the quality of the input data and the accuracy of the spectral model used. Verify that the instrument files (ARF and RMF), exposure time, and catalog data are appropriate for the analysis. Inaccurate input data can lead to incorrect results and interpretations.
         """
         
         model = Tbabs() * Powerlaw()
@@ -1585,15 +1699,29 @@ class CompareCatalog:
         """
         Plots the modeled spectra for sources around a specific object from two different catalogs.
 
-        Parameters:
-        simulation_data (Dict): A dictionary containing simulation data including object data.
-        radius (float): The radius within which the sources are considered.
-        key (Tuple[str, str]): A tuple containing the keys of the catalogs to be used.
+        Args:
+        - simulation_data (Dict): A dictionary containing the following keys:
+            - "object_data" (Dict): Information about the object of interest, including its name.
+            - "os_dictionary" (Dict): A dictionary with file paths, including the path to save the generated image.
+            - Other necessary data for modeling.
 
-        This method plots the modeled spectra for sources in the vicinity of a specified object, using data from two different catalogs. The plots include individual spectra for each catalog, as well as a combined plot showcasing the summed spectra and variability errors. The method also calculates the upper and lower limits for the spectra to provide an envelope for the variability. Each subplot is appropriately labeled and the overall figure title indicates the object around which the spectra are modeled.
+        - radius (float): The radius (in some unit) within which sources are considered for modeling.
 
-        Note:
-        This method uses the total and variable spectra lists generated by the `modeling_source_spectra` method and the instrumental data from `simulation_data`.
+        - key (Tuple[str, str]): A tuple containing two strings representing the keys of the catalogs to be used for modeling.
+
+        Returns:
+            - Tuple[Dict[str, Union[List[float], List[float]]]]: A tuple containing two dictionaries, one for each catalog, with the following keys:
+                - "Energy" (List[float]): The energy values (in keV) for the spectral data.
+                - "Counts" (List[float]): The counts (cts/s) corresponding to the modeled spectra.
+                - "Upper limit" (List[float]): The upper limits of the counts, representing variability.
+                - "Lower limit" (List[float]): The lower limits of the counts, representing variability.
+
+        This method generates plots of the modeled spectra for sources in the vicinity of a specified object from two different catalogs. It uses the provided `simulation_data`, which includes object and instrumental data. The generated plots include individual spectra for each catalog, as well as a combined plot showcasing the summed spectra and variability errors. The method calculates upper and lower limits for the spectra to provide an envelope for the variability. Each subplot is appropriately labeled, and the overall figure title indicates the object around which the spectra are modeled.
+
+        Here is an example of the plot create by this method:
+
+        .. image:: C:/Users/plamb_v00y0i4/OneDrive/Bureau/Optimal_Pointing_Point_Code/modeling_result/PSR_J0437-4715/Compare_catalog/img/Xmm_DR13_CSC_2.0_spectral_modeling_close_to_PSR_J0437-4715.png
+            :align: center
         """
         
         object_name = simulation_data["object_data"]["object_name"]
@@ -1717,23 +1845,23 @@ class CompareCatalog:
         """
         Writes the spectral modeling data into text files for each of the specified catalogs.
 
-        Parameters:
-        simulation_data (Dict): A dictionary containing simulation data including directory paths.
-        data_1 (Dict): A dictionary containing the spectral data for the first catalog (key[0]).
-        data_2 (Dict): A dictionary containing the spectral data for the second catalog (key[1]).
-        key (Tuple[str, str]): A tuple containing the keys of the catalogs.
+        Args:
+            simulation_data (Dict): A dictionary containing simulation data including directory paths.
+            data_1 (Dict): A dictionary containing the spectral data for the first catalog (key[0]).
+            data_2 (Dict): A dictionary containing the spectral data for the second catalog (key[1]).
+            key (Tuple[str, str]): A tuple containing the keys of the catalogs.
 
         This method exports the spectral data for two different catalogs into separate text files. Each file contains data such as energy, counts, and upper and lower limits of the spectra. The data is formatted into columns for readability. The files are named according to the catalogs' keys and saved in the specified directory.
 
         The method iterates through the provided spectral data, formats each row according to the given specifications, and writes the rows to the respective text files. The headers of the files include the names of the data columns.
 
         Note:
-        The method assumes that the directory for saving the text files is provided in `simulation_data['os_dictionary']["catalog_directory"]`.
+            The method assumes that the directory for saving the text files is provided in `simulation_data['os_dictionary']["catalog_datapath"]`.
 
-        Example of Output File Format:
-        Energy        Counts        Upper Limit   Lower Limit
-        [value]       [value]       [value]       [value]
-        ...           ...           ...           ...
+        Example:
+            Energy        Counts        Upper Limit   Lower Limit
+            [value]       [value]       [value]       [value]
+            [value]       [value]       [value]       [value]
         """
     
         catalog_directory = simulation_data['os_dictionary']["catalog_directory"]
