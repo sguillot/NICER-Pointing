@@ -17,26 +17,26 @@ import matplotlib.pyplot as plt
 # ------------------------------ #
 
 """
-This module contains functions for calculating the Optimal Pointing Point (OPP) for the NICER (Neutron star Interior Composition Explorer) telescope. It includes methods for scaling count rates, calculating angular separations, signal-to-noise ratios, and determining optimal telescope pointing positions to maximize observational efficiency. The module integrates astropy for astronomical calculations, scipy for optimization, and matplotlib for visualization.
+    This module contains functions for calculating the Optimal Pointing Point (OPP) for the NICER (Neutron star Interior Composition Explorer) telescope. It includes methods for scaling count rates, calculating angular separations, signal-to-noise ratios, and determining optimal telescope pointing positions to maximize observational efficiency. The module integrates astropy for astronomical calculations, scipy for optimization, and matplotlib for visualization.
 
-Functions:
-- scaled_ct_rate: Scales a given count rate based on angular distance and effective area.
-- ang_separation: Calculates the angular separation between two celestial objects.
-- signal_to_noise: Calculates the signal-to-noise ratio given source and background count rates, instrumental background, and exposure time.
-- nominal_pointing_info: Calculates and prints various information related to nominal pointing.
-- calculate_opti_point: Calculates the optimal pointing position for NICER to maximize the signal-to-noise ratio.
-- optimal_point_infos: Prints information for the optimal NICER pointing position.
-- data_map: Plots a map of the Signal-to-Noise ratio as a function of NICER pointing.
-- count_rates: Calculates X-ray count rates for nearby sources using PIMMS modeling.
-- vignetting_factor: Calculates vignetting factors for nearby sources and the target object.
-- write_fits_file: Writes the nearby sources table to a FITS file and opens it with TOPCAT.
-- modeling: Performs modeling of nearby sources using a power-law model and creates a plot.
+    Functions:
+    - scaled_ct_rate: Scales a given count rate based on angular distance and effective area.
+    - ang_separation: Calculates the angular separation between two celestial objects.
+    - signal_to_noise: Calculates the signal-to-noise ratio given source and background count rates, instrumental background, and exposure time.
+    - nominal_pointing_info: Calculates and prints various information related to nominal pointing.
+    - calculate_opti_point: Calculates the optimal pointing position for NICER to maximize the signal-to-noise ratio.
+    - optimal_point_infos: Prints information for the optimal NICER pointing position.
+    - data_map: Plots a map of the Signal-to-Noise ratio as a function of NICER pointing.
+    - count_rates: Calculates X-ray count rates for nearby sources using PIMMS modeling.
+    - vignetting_factor: Calculates vignetting factors for nearby sources and the target object.
+    - write_fits_file: Writes the nearby sources table to a FITS file and opens it with TOPCAT.
+    - modeling: Performs modeling of nearby sources using a power-law model and creates a plot.
 
-The module is specifically tailored for use with the NICER telescope, providing essential tools for astronomical data analysis in X-ray astronomy. It facilitates the optimization of observational strategies by calculating the most efficient pointing positions, considering various celestial and instrumental factors.
+    The module is specifically tailored for use with the NICER telescope, providing essential tools for astronomical data analysis in X-ray astronomy. It facilitates the optimization of observational strategies by calculating the most efficient pointing positions, considering various celestial and instrumental factors.
 
-Note:
-- This module is intended for astronomers and astrophysicists, especially those working with NICER data.
-- It requires a comprehensive understanding of astrophysical concepts, telescope operation, and data analysis techniques in X-ray astronomy.
+    Note:
+        - This module is intended for astronomers and astrophysicists, especially those working with NICER data.
+        - It requires a comprehensive understanding of astrophysical concepts, telescope operation, and data analysis techniques in X-ray astronomy.
 """
 
 
@@ -44,14 +44,14 @@ def scaled_ct_rate(D, OptCtRate, effareaX, effareaY) -> float:
     """
     Scale a given count rate based on an angular distance and effective area.
 
-    Parameters:
-    D (float): The angular distance.
-    OptCtRate (float): The original count rate.
-    effareaX (array-like): Effective area data points (X values).
-    effareaY (array-like): Effective area data points (Y values).
+    Args:
+        D (float): The angular distance.
+        OptCtRate (float): The original count rate.
+        effareaX (array-like): Effective area data points (X values).
+        effareaY (array-like): Effective area data points (Y values).
 
     Returns:
-    float: The scaled count rate.
+        float: The scaled count rate.
     """
     return OptCtRate * np.interp(D,effareaX,effareaY)
 
@@ -60,12 +60,12 @@ def ang_separation(reference, obj) -> Angle:
     """
     Calculate the angular separation between two celestial objects.
 
-    Parameters:
-    reference (SkyCoord): The reference object's coordinates.
-    obj (SkyCoord): The coordinates of the object to which the separation is calculated.
+    Args:
+        reference (SkyCoord): The reference object's coordinates.
+        obj (SkyCoord): The coordinates of the object to which the separation is calculated.
 
     Returns:
-    Quantity: The angular separation between the two objects.
+        Quantity: The angular separation between the two objects.
     """
     return reference.separation(obj)
 
@@ -74,14 +74,14 @@ def signal_to_noise(SrcCtsRate, BkgSrcRates, InstBkgd, ExpTime) -> float:
     """
     Calculate the signal-to-noise ratio (S/N) given various parameters.
 
-    Parameters:
-    SrcCtsRate (float): Source count rate.
-    BkgSrcRates (array-like): Count rates of background sources.
-    InstBkgd (float): Instrumental and particle background count rate.
-    ExpTime (float): Exposure time.
+    Args:
+        SrcCtsRate (float): Source count rate.
+        BkgSrcRates (array-like): Count rates of background sources.
+        InstBkgd (float): Instrumental and particle background count rate.
+        ExpTime (float): Exposure time.
 
     Returns:
-    float: The signal-to-noise ratio (S/N).
+        float: The signal-to-noise ratio (S/N).
     """
     SNR = (SrcCtsRate*ExpTime) / np.sqrt(ExpTime*(SrcCtsRate+np.sum(BkgSrcRates)+InstBkgd))
     return SNR
@@ -91,12 +91,12 @@ def nominal_pointing_info(simulation_data, NearbySRCposition) -> None:
     """
     Calculate and print various information related to nominal pointing.
 
-    Parameters:
-    SIM_parameters (dict): Dictionary containing simulation parameters.
-    NearbySRCposition (SkyCoord): Coordinates of nearby sources.
+    Args:
+        SIM_parameters (dict): Dictionary containing simulation parameters.
+        NearbySRCposition (SkyCoord): Coordinates of nearby sources.
 
     Returns:
-    None
+        None
     """
 
     object_data = simulation_data['object_data']
@@ -188,16 +188,20 @@ def optimal_point_infos(vector_dictionary, OptimalPointingIdx, SRCoptimalRATES) 
     """
     Print information for the optimal NICER pointing that maximizes the signal-to-noise ratio (S/N).
 
-    This function prints information about the S/N ratio, pulsar count rate, background sources count rate,
-    individual background source rates, and the optimal pointing coordinates for the NICER telescope.
+    This function prints detailed information about the NICER telescope's optimal pointing, 
+    which is selected to maximize the signal-to-noise ratio (S/N). The information includes 
+    the S/N ratio, pulsar count rate, background sources count rate, individual background source rates,
+    and the coordinates of the optimal pointing. 
 
     Args:
-        vector_dictionary (dict): A dictionary contai
-        # if isinstance(model_value, tuple):
-        #     model_value = model_value[0]ning result vectors, including sampled RA and DEC positions,
-                                  pulsar count rates, SRC count rates, and the S/N ratio for each pointing.
+        vector_dictionary (dict): A dictionary containing result vectors. This includes sampled 
+                                  RA (Right Ascension) and DEC (Declination) positions, pulsar count rates, 
+                                  SRC (source) count rates, and the S/N ratio for each pointing.
         OptimalPointingIdx (int): The index of the optimal pointing in the result vectors.
-        SRCoptimalRATES (float): The SRC count rate at the optimal pointing.
+        SRCoptimalRATES (float): The SRC (source) count rate at the optimal pointing.
+        
+    Returns:
+        None: This function does not return any value, but prints the relevant information to the console.
     """
 
     # Print info for the optimal NICER pointing that maximizes the S/N ratio
@@ -212,18 +216,18 @@ def optimal_point_infos(vector_dictionary, OptimalPointingIdx, SRCoptimalRATES) 
     print ("----------------------------------------------------------------------")
 
 
-def data_map(simulation_data, vector_dictionary, OptimalPointingIdx, NearbySRCposition) -> None:
+def data_map(simulation_data: Dict, vector_dictionary: Dict, OptimalPointingIdx: int, NearbySRCposition: SkyCoord) -> None:
     """
     Plot the map of the Signal-to-Noise (S/N) ratio as a function of NICER pointing.
 
-    Parameters:
-    - SIM_parameters (dict): A dictionary containing simulation parameters, including the pulsar position.
-    - Vector_Dictionary (dict): A dictionary containing vector data, including SampleRA, SampleDEC, and SNR.
-    - OptimalPointingIdx (int): The index of the optimal pointing in Vector_Dictionary.
-    - NearbySRCposition (SkyCoord): SkyCoord object representing the positions of nearby sources.
+    Args:
+        SIM_parameters (dict): A dictionary containing simulation parameters, including the pulsar position.
+        Vector_Dictionary (dict): A dictionary containing vector data, including SampleRA, SampleDEC, and SNR.
+        OptimalPointingIdx (int): The index of the optimal pointing in Vector_Dictionary.
+        NearbySRCposition (SkyCoord): SkyCoord object representing the positions of nearby sources.
 
     Returns:
-    None
+        None
     
     """
     os_dictionary = simulation_data["os_dictionary"]
@@ -264,7 +268,7 @@ def count_rates(nearby_src_table, model_dictionary, telescop_data) -> Tuple[List
     This function calculates X-ray count rates for a set of nearby sources based on their model information and associated parameters.
     It uses PIMMS (Portable, Interactive Multi-Mission Simulator) to perform the modeling and computes the count rates.
 
-    Parameters:
+    Args:
         nearby_src_table (Table): A table containing data on nearby sources, including model information, X-ray flux, and column density.
         model_dictionary (dict): A dictionary mapping sources (e.g., "src_0") to model and parameter information.
 
@@ -274,8 +278,8 @@ def count_rates(nearby_src_table, model_dictionary, telescop_data) -> Tuple[List
             - An updated 'nearby_src_table' with the added 'Count Rates' column.
 
     Note:
-    - PIMMS modeling commands are generated for each source based on the model, model value, X-ray flux, and column density.
-    - The 'Count Rates' column is added to the 'nearby_src_table' with the calculated count rates.
+        - PIMMS modeling commands are generated for each source based on the model, model value, X-ray flux, and column density.
+        - The 'Count Rates' column is added to the 'nearby_src_table' with the calculated count rates.
     """
     number_source = len(model_dictionary)
     count_rates = np.array([], dtype=float)

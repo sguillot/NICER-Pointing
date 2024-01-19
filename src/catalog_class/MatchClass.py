@@ -30,74 +30,134 @@ import shlex
 
 # ---------------------------------------- #
 
+# ---------- for documentation ---------- #
+
+# import src.function.init_function as i_f
+# import src.function.calculation_function as c_f
+# import src.function.software_function as s_f
+# import src.function.unique_function as u_f
+# import src.catalog_information as dict_cat
+
+# --------------------------------------- #
+
+
 class MatchCatalog:
     """
-    A class to match and analyze astronomical sources from different catalogs.
+    A class for managing and analyzing astronomical catalogs and simulation data.
 
-    This class matches sources from two astronomical catalogs based on their 
-    proximity and performs various analyses including calculating photon indices, 
-    modeling source spectra, and creating source tables. It is designed to handle 
-    complex astronomical data sets and prepare them for further scientific analysis.
+    This class is designed to handle various operations related to astronomical catalogs and simulations.
+    It provides methods to load catalog data, find nearby sources, calculate mixed indices, retrieve photon index lists,
+    and perform other essential tasks for astronomical analysis.
 
-    Attributes:
-        nearby_sources_table_1 (Table): Nearby sources table from the first catalog.
-        nearby_sources_table_2 (Table): Nearby sources table from the second catalog.
-        nearby_sources_position_1 (SkyCoord): Positions of nearby sources from the first catalog.
-        nearby_sources_position_2 (SkyCoord): Positions of nearby sources from the second catalog.
-        mixed_index (List): List of mixed indexes where sources from both catalogs are matched.
-        coordinates (List): List of coordinates of matched sources.
-        photon_index_list (List): List of photon indices for sources.
-        flag (List): Flags to identify the source of data.
-        nh_list (List): List of hydrogen column densities.
-        model_dictionary (Dict): Dictionary of models for sources.
-        nearby_sources_table (Table): Combined nearby sources table.
-        nearby_sources_position (SkyCoord): Positions of sources in the combined table.
-        count_rate (List): List of count rates for sources.
-        vignetting_factor (List): Vignetting factors for sources.
-        master_source_cone (Table): Table of master sources within a cone search.
-        var_index (List): List of variable indexes in the nearby sources table.
+    Args:
+        catalog_name (Tuple[str, str]): A tuple containing the names of the catalogs to be loaded.
+        radius (float): The radius within which nearby sources are to be found.
+        simulation_data (Dict): A dictionary containing simulation data and information.
 
-    Methods:
-        __init__(self, catalog_name, radius, simulation_data): Initializes the CatalogMatch object.
-        load_catalog(...): Loads the catalogs and returns their tables.
-        load_cs_catalog(...): Loads the cone search catalog.
-        unique_sources_table(...): Creates a table of unique sources.
-        find_nearby_sources(...): Finds nearby sources within a specified radius.
-        get_mixed_coordinate(...): Gets coordinates of mixed sources from both catalogs.
-        neighbourhood_of_object(...): Plots the neighborhood of an object.
-        get_photon_index(...): Calculates the photon index for a source.
-        get_mixed_photon_index(...): Calculates the photon index for a mixed source.
-        get_total_photon_nh_list(...): Returns total photon indices and hydrogen column densities.
-        model_dictionary(...): Creates a dictionary of models for sources.
-        create_nearby_sources_table(...): Creates a table of nearby sources.
-        get_sources_position(...): Gets positions of sources in the nearby sources table.
-        count_rate_SNR_map(...): Calculates count rates and generates a signal-to-noise ratio map.
-        vignetting_factor(...): Calculates vignetting factors for sources.
-        write_fits_table(...): Writes the nearby sources table to a FITS file.
-        load_master_source_cone(...): Loads the master source cone.
-        cross_table_index(...): Finds cross table indexes in the nearby sources table.
+    Note:
+        - This class loads and processes two tables from the specified catalogs.
+        - It calculates mixed indices and coordinates for objects in the simulation.
+        - Photon index lists, flags, and neighborhood lists are retrieved and processed.
+        - A model dictionary and a nearby sources table are created.
+        - Count rates and vignetting factors are computed for signal-to-noise ratio mapping.
+        - FITS tables are written based on the provided simulation data.
+        - Master source cones are loaded and variable indices are calculated.
 
-    The class is essential for analyzing astronomical data from multiple catalogs and preparing
-    it for scientific research.
+    Example:
+    Creating an instance of CompareCatalog with necessary parameters:
+        
+    >>> match_catalog = MatchCatalog(catalog_name, radius, simulation_data)
+
+    The class instance is now initialized and can be used to perform various operations on the catalogs
+    and simulation data.
     """
 
     def __init__(self, catalog_name: Tuple[str, str], radius, simulation_data: Dict) -> None:
         """
-        Initializes the CatalogMatch class with specific catalog names, a search radius, 
-        and simulation data. The class is designed to match and analyze data from two different 
-        astronomical catalogs.
+        Initialize a MatchCatalog object with provided parameters.
+
+        This constructor creates an instance of the MatchCatalog class, enabling the management and analysis of
+        astronomical catalogs and simulation data. It takes in three essential parameters.
 
         Args:
-        catalog_name (Tuple[str, str]): A tuple containing the names of the two catalogs to be matched.
-        radius (float): The search radius for finding nearby sources, typically specified in arcminutes.
-        simulation_data (Dict): A dictionary containing various simulation parameters and data paths.
+            catalog_path (tuple): A tuple containing the keys for two catalogs ("Xmm_DR13", "Chandra").
+            radius: The radius around the object position to consider for analysis.
+            simulation_data (dict): A dictionary containing simulation data such as object data and telescope data.
+            exp_time (int): The exposure time used in the analysis.
 
-        This method loads the specified catalogs, finds nearby sources within the given radius, 
-        calculates photon indices and hydrogen column densities, models the sources, and prepares 
-        the data for further analysis.
+        Note:
+            - Ensure that the catalog paths and keys in `catalog_name` are provided correctly to load the desired catalogs.
+            - `radius` determines the region around each object that is considered for analysis. It affects nearby source calculations.
+            - `simulation_data` should contain essential data required for various operations within this class.
+            - `exp_time` is used for certain calculations and should be set appropriately based on the simulation.
+
+        Attributes:
+        
+        .. attribute:: nearby_sources_table_1
+            :type: Table
+            :value: The first table of nearby sources.
+
+        .. attribute:: nearby_sources_table_2
+            :type: Table
+            :value: The second table of nearby sources.
+
+        .. attribute:: nearby_sources_position_1
+            :type: ndarray
+            :value: The positions of nearby sources from the first table.
+
+        .. attribute:: nearby_sources_position_2
+            :type: ndarray
+            :value: The positions of nearby sources from the second table.
+
+        .. attribute:: mixed_index
+            :type: float
+            :value: The calculated mixed index for objects in the simulation.
+
+        .. attribute:: coordinates
+            :type: ndarray
+            :value: The coordinates of objects in the simulation.
+
+        .. attribute:: photon_index_list
+            :type: list
+            :value: A list of photon index values.
+
+        .. attribute:: flag
+            :type: int
+            :value: A flag value.
+
+        .. attribute:: nh_list
+            :type: list
+            :value: A list of neighborhood values.
+
+        .. attribute:: model_dictionary
+            :type: dict
+            :value: A dictionary containing model information.
+
+        .. attribute:: nearby_sources_table
+            :type: Table
+            :value: A table of nearby sources.
+
+        .. attribute:: nearby_sources_position
+            :type: ndarray
+            :value: The positions of nearby sources.
+
+        .. attribute:: count_rate
+            :type: float
+            :value: The calculated count rate for signal-to-noise ratio mapping.
+
+        .. attribute:: vignetting_factor
+            :type: float
+            :value: The calculated vignetting factor.
+
+        .. attribute:: master_source_cone
+            :type: Cone
+            :value: The loaded master source cone.
+
+        .. attribute:: var_index
+            :type: int
+            :value: The calculated variable index.
 
         """
-        
         table_1, table_2 = self.load_catalog(catalog_name=catalog_name, os_dictionary=simulation_data["os_dictionary"])
 
         self.nearby_sources_table_1, self.nearby_sources_table_2, self.nearby_sources_position_1, self.nearby_sources_position_2 = self.find_nearby_sources(radius=radius, simulation_data=simulation_data, table=(table_1, table_2))
@@ -119,18 +179,23 @@ class MatchCatalog:
         Loads two specified astronomical catalogs for further analysis and matching.
 
         Args:
-        catalog_name (Tuple[str, str]): A tuple containing the names of the two catalogs to be loaded.
-        os_dictionary (Dict): A dictionary containing the operating system information, 
-                            including the data path for the catalogs.
+            catalog_name (Tuple[str, str]): A tuple containing the names of the two catalogs to be loaded.
+            os_dictionary (Dict): A dictionary containing the operating system information, 
+                                including the data path for the catalogs.
 
         Returns:
-        Tuple[Table, Table]: A tuple of astropy Table objects corresponding to the loaded catalogs.
+            Tuple[Table, Table]: A tuple of astropy Table objects corresponding to the loaded catalogs.
 
         This method attempts to open FITS files for the specified catalogs. If successful, 
         it sets various class attributes for future data processing. 
 
         Raises:
-        SystemExit: If the file paths are invalid or an error occurs during file loading.
+            SystemExit: If the file paths are invalid or an error occurs during file loading.
+
+        Note:
+            - Ensure that `catalog_name` contains the correct names of the two catalogs to be loaded.
+            - `os_dictionary` should provide the necessary data path information.
+            - The method initializes class attributes related to catalog loading.
         """
         
         name_1, name_2 = catalog_name
@@ -166,14 +231,18 @@ class MatchCatalog:
         Loads a cone search catalog based on the provided object name and search radius.
 
         Args:
-        radius (float): The radius for the cone search, typically specified in arcminutes.
-        object_data (Dict): A dictionary containing the object's data, specifically its name.
+            radius (float): The radius for the cone search, typically specified in arcminutes.
+            object_data (Dict): A dictionary containing the object's data, specifically its name.
 
         Returns:
-        Table: An astropy Table object containing the results of the cone search.
+            Table: An astropy Table object containing the results of the cone search.
 
         This method uses the VO cone search service to find astronomical objects within the specified 
         radius of the named object. The results are converted to an astropy Table for easy handling.
+
+        Note:
+            - Ensure that `object_data` contains the correct object name for the cone search.
+            - The `radius` parameter should be specified in arcminutes for an accurate search.
         """
         
         cone = vo.dal.SCSService('http://cda.cfa.harvard.edu/csc2scs/coneSearch') 
@@ -188,17 +257,21 @@ class MatchCatalog:
         Generates a table of unique sources from a given nearby sources table.
 
         Args:
-        nearby_sources_table (Table): The table containing sources from a particular catalog.
-        column_name (dict): A dictionary specifying column names to be used, 
-                            including catalog name and other relevant fields.
+            nearby_sources_table (Table): The table containing sources from a particular catalog.
+            column_name (dict): A dictionary specifying column names to be used, 
+                                including catalog name and other relevant fields.
 
         Returns:
-        Table: A table of unique sources, with averaged values for sources 
-            that are listed multiple times in the input table.
+            Table: A table of unique sources, with averaged values for sources 
+                that are listed multiple times in the input table.
 
         This method processes the nearby sources table to identify and consolidate 
         duplicate entries. It averages the flux values for duplicated sources 
         and creates a new table with unique sources.
+
+        Note:
+            - Ensure that `nearby_sources_table` contains the necessary source information.
+            - `column_name` should provide the correct column names for catalog-specific fields.
         """
         
         key = column_name["catalog_name"]
@@ -264,16 +337,20 @@ class MatchCatalog:
         Identifies nearby sources from astronomical catalogs based on a given radius around an object.
 
         Args:
-        radius (float): The radius within which to search for nearby sources.
-        simulation_data (Dict): A dictionary containing the simulation data, including the object's information.
-        table (Tuple[Table, Table]): A tuple containing two tables from different catalogs to search within.
+            radius (float): The radius within which to search for nearby sources, typically specified in arcminutes.
+            simulation_data (Dict): A dictionary containing the simulation data, including the object's information.
+            table (Tuple[Table, Table]): A tuple containing two tables from different catalogs to search within.
 
         Returns:
-        Tuple[Table, Table]: A tuple of tables containing the nearby sources from each catalog.
+            Tuple[Table, Table]: A tuple of tables containing the nearby sources from each catalog.
 
         This method filters the sources in the provided catalog tables to find those 
         that are within a specified radius from the object's position. It creates new 
         tables containing these nearby sources.
+
+        Note:
+            - Ensure that `table` contains the necessary catalog tables for searching.
+            - The `radius` parameter should be specified in arcminutes for an accurate search.
         """
         
         object_data = simulation_data["object_data"]
@@ -350,16 +427,19 @@ class MatchCatalog:
         Identifies and averages coordinates of overlapping sources between two astronomical catalogs.
 
         Args:
-        catalog_key (Tuple[str, str]): A tuple containing the names of the two catalogs.
-        table (Tuple[Table, Table]): A tuple of tables from the two catalogs.
+            catalog_key (Tuple[str, str]): A tuple containing the names of the two catalogs.
+            table (Tuple[Table, Table]): A tuple of tables from the two catalogs.
 
         Returns:
-        Tuple[List, List]: A tuple containing the mixed coordinates and indices of sources found in both catalogs.
+            Tuple[List, List]: A tuple containing the mixed coordinates and indices of sources found in both catalogs.
 
         This method compares the coordinates of sources in both catalogs. If sources are within a certain 
         threshold distance, it averages their coordinates to create a 'mixed' coordinate. It also tracks 
         the indices of these sources in both catalogs for further analysis.
 
+        Note:
+            - The `catalog_key` should specify the correct catalog names for comparison.
+            - Ensure that `table` contains the necessary catalog tables for comparison.
         """
         
         key_1, key_2 = catalog_key
@@ -409,15 +489,23 @@ class MatchCatalog:
         Visualizes the neighborhood of an astronomical object within a given radius, using data from multiple catalogs.
 
         Args:
-        simulation_data (Dict): Dictionary containing simulation data including the object's information.
-        radius (float): Radius within which to identify neighboring sources.
+            simulation_data (Dict): Dictionary containing simulation data including the object's information.
+            radius (float): Radius within which to identify neighboring sources.
 
         Returns:
-        Tuple[List, List]: A tuple containing indices of mixed sources and their coordinates.
+            Tuple[List, List]: A tuple containing indices of mixed sources and their coordinates.
 
         This method plots the neighborhood of the specified object and shows the distribution of sources 
         from different catalogs. It also identifies and marks sources that are common between catalogs.
 
+        Note:
+            - Ensure that the `simulation_data` dictionary contains the necessary information, including the object's data.
+            - The `radius` parameter specifies the radius within which to identify neighboring sources.
+            
+        Here is an example of the plot create by this method:
+        
+        .. image:: C:/Users/plamb_v00y0i4/OneDrive/Bureau/Optimal_Pointing_Point_Code/modeling_result/PSR_J0437-4715/xmmXchandra/img/neighbourhood_of_PSR J0437-4715.png
+            :align: center
         """
         
         object_data = simulation_data["object_data"]
@@ -450,18 +538,22 @@ class MatchCatalog:
         Calculates the photon index for a source from a specific catalog based on its spectral data.
 
         Args:
-        catalog_key (Tuple[str, str]): A tuple representing the name of the catalog.
-        table (Table): The table containing the source data from the catalog.
-        index (int): The index of the source in the table.
-        os_dictionary (Dict): Dictionary containing various paths and settings used in the simulation.
+            catalog_key (Tuple[str, str]): A tuple representing the name of the catalog.
+            table (Table): The table containing the source data from the catalog.
+            index (int): The index of the source in the table.
+            os_dictionary (Dict): Dictionary containing various paths and settings used in the simulation.
 
         Returns:
-        float: The calculated photon index for the source.
+            float: The calculated photon index for the source.
 
         This method processes the spectral data of a source and fits it to a model to determine the photon index. 
         It supports both non-absorbed and absorbed models for fitting. For visualization purposes, it plots the 
         interpolation and fitting results for the first source in the dataset.
 
+        Note:
+            - The `catalog_key` parameter should be a tuple with the names of the catalog.
+            - The `table` parameter is expected to contain the spectral data for the source.
+            - The `index` parameter specifies the index of the source in the table.
         """
         
         band_flux_name = dict_cat.dictionary_catalog[catalog_key]["band_flux_obs"]
@@ -514,19 +606,24 @@ class MatchCatalog:
         Determines the photon index for a source that appears in both catalogs, using combined spectral data.
 
         Args:
-        catalog_key (Tuple[str, str]): A tuple containing the names of the two catalogs.
-        table (Tuple[Table, Table]): A tuple of tables from the two catalogs.
-        mixed_index (List[Tuple]): List of tuples with indices of sources appearing in both catalogs.
-        row (int): The row number in the mixed_index list for which the photon index is to be calculated.
-        os_dictionary (Dict): Dictionary containing various paths and settings used in the simulation.
+            catalog_key (Tuple[str, str]): A tuple containing the names of the two catalogs.
+            table (Tuple[Table, Table]): A tuple of tables from the two catalogs.
+            mixed_index (List[Tuple]): List of tuples with indices of sources appearing in both catalogs.
+            row (int): The row number in the mixed_index list for which the photon index is to be calculated.
+            os_dictionary (Dict): Dictionary containing various paths and settings used in the simulation.
 
         Returns:
-        float: The calculated photon index for the mixed source.
+            float: The calculated photon index for the mixed source.
 
         This method merges the spectral data from two different catalogs for the same source and calculates the photon index. 
         It supports fitting to both non-absorbed and absorbed models. A visualization of the interpolation and fitting 
         is provided for a specific case (row = 10).
 
+        Note:
+            - The `catalog_key` parameter should be a tuple with the names of the two catalogs.
+            - The `table` parameter should be a tuple containing tables from both catalogs.
+            - The `mixed_index` parameter is a list of tuples containing indices of sources appearing in both catalogs.
+            - The `row` parameter specifies the index of the source for which the photon index is calculated.
         """
         
         key_1, key_2 = catalog_key
@@ -606,16 +703,18 @@ class MatchCatalog:
         Compiles a list of photon indices, source flags, and column densities for sources in the catalog.
 
         Args:
-        os_dictionary (Dict): Dictionary containing various paths and settings used in the simulation.
+            os_dictionary (Dict): Dictionary containing various paths and settings used in the simulation.
 
         Returns:
-        Tuple[List[float], List[Tuple], List[float]]: A tuple containing three lists - photon indices, flags, and column densities.
+            Tuple[List[float], List[Tuple], List[float]]: A tuple containing three lists - photon indices, flags, and column densities.
 
         This method iterates over the sources in the provided catalogs (XMM and Chandra), calculates the photon index 
         for each source, and assigns a flag indicating the catalog(s) to which the source belongs. It also appends 
         a default column density value for each source. The method handles sources unique to one catalog and those 
         appearing in both.
 
+        Note:
+            - The `os_dictionary` parameter is a dictionary containing various paths and settings used in the simulation.
         """
         
         key_1, key_2 = self.catalog_key
@@ -655,16 +754,18 @@ class MatchCatalog:
         """
         Creates a dictionary mapping each source to its spectral model parameters.
 
-        Returns:
-        Dict: A dictionary where each key represents a source and its value is a dictionary of model parameters.
-
-        The method iterates over all sources, categorizing them based on their catalog (XMM, Chandra, or both). 
+        This method iterates over all sources, categorizing them based on their catalog (XMM, Chandra, or both). 
         It then constructs a model dictionary for each source, specifying the model type ('power'), the photon index, 
         observed flux, and a default column density. The model parameters are derived from the catalog data and 
         previously calculated photon indices.
 
+        Returns:
+            Dict: A dictionary where each key represents a source and its value is a dictionary of model parameters.
+
+        Note:
+            - This method assumes that the necessary data (photon indices, flags, etc.) have been pre-computed and are available.
         """
-     
+
         model_dictionary = {}
         
         for item, flag in enumerate(self.flag):
@@ -700,13 +801,15 @@ class MatchCatalog:
         Constructs a table of nearby sources with their respective details from XMM and Chandra catalogs.
 
         Returns:
-        astropy.table.Table: A table containing the combined data of nearby sources from both catalogs.
+            astropy.table.Table: A table containing the combined data of nearby sources from both catalogs.
 
         This method processes the sources identified as nearby in either the XMM or Chandra catalogs, or both.
         It creates a table with columns for flags indicating the source's catalog, names from both catalogs, 
         coordinates (RA, DEC), and flux observations. The method also appends photon index and column density (Nh) 
         data to each source. The table facilitates easy reference to the properties of all nearby sources.
 
+        Note:
+            - This method assumes that the necessary data (flags, photon indices, etc.) have been pre-computed and are available.
         """
                 
         key_1, key_2 = self.catalog_key
@@ -760,12 +863,11 @@ class MatchCatalog:
         Retrieves the positions of all nearby sources as SkyCoord objects.
 
         Returns:
-        astropy.coordinates.SkyCoord: SkyCoord object containing the RA and DEC of each nearby source.
+            astropy.coordinates.SkyCoord: SkyCoord object containing the RA and DEC of each nearby source.
 
         This method extracts the right ascension (RA) and declination (DEC) of each nearby source from the 
         compiled table and converts them into a SkyCoord object for convenient handling of celestial coordinates.
         It is particularly useful for astronomical calculations and visualizations that require positional data.
-
         """
         
         ra_value = list(self.nearby_sources_table["RA"])
@@ -779,11 +881,11 @@ class MatchCatalog:
         Calculates the count rates for nearby sources and generates a Signal-to-Noise Ratio (SNR) map.
 
         Args:
-        simulation_data (Dict): A dictionary containing simulation data including telescope and object data.
-        radius (float): The radius within which to consider nearby sources.
+            simulation_data (Dict): A dictionary containing simulation data including telescope and object data.
+            radius (float): The radius within which to consider nearby sources.
 
         Returns:
-        List[float]: A list of count rates for each nearby source.
+            List[float]: A list of count rates for each nearby source.
 
         This method computes count rates for sources within a specified radius from the object of interest.
         It generates count rates based on the sources' table, the model dictionary, and telescope data. 
@@ -791,7 +893,11 @@ class MatchCatalog:
         optimal pointing information, creating a SNR map, and updating the nearby sources table with 
         relevant data. It is specific to astronomy and astrophysics simulations where understanding the 
         surrounding field of sources is crucial.
-
+        
+        Here is an example of the plot create by this method:
+        
+        .. image:: C:/Users/plamb_v00y0i4/OneDrive/Bureau/Optimal_Pointing_Point_Code/modeling_result/PSR_J0437-4715/xmmXchandra/img/xmmXchandra_SNR_PSR_J0437-4715.png
+            :align: center
         """
         
         telescop_data = simulation_data["telescop_data"]
@@ -828,18 +934,21 @@ class MatchCatalog:
         Calculates the vignetting factor for each nearby source based on the optimal pointing index.
 
         Args:
-        OptimalPointingIdx (int): The index of the optimal pointing position.
-        vector_dictionary (Dict): A dictionary containing vectors for calculation.
-        simulation_data (Dict): A dictionary containing simulation data.
+            OptimalPointingIdx (int): The index of the optimal pointing position.
+            vector_dictionary (Dict): A dictionary containing vectors for calculation.
+            simulation_data (Dict): A dictionary containing simulation data.
 
         Returns:
-        List[float]: A list of vignetting factors for each nearby source.
+            List[float]: A list of vignetting factors for each nearby source.
 
         This method evaluates the vignetting factor, a measure of the decrease in telescope sensitivity 
         with increasing off-axis angles, for each nearby source. It uses the optimal pointing index to 
         determine the minimum angular distance of each source from the optimal pointing position and 
         calculates the corresponding vignetting factor. The method is essential in astrophysical 
         observations to correct for instrumental effects on observed fluxes.
+        
+        Note:
+            - The method assumes the existence of the 'EffArea' and 'OffAxisAngle' keys in the 'telescop_data' dictionary.
         
         """
         
@@ -905,16 +1014,16 @@ class MatchCatalog:
         Writes the nearby sources table to a FITS file and opens it using TOPCAT software.
 
         Args:
-        os_dictionary (Dict): A dictionary containing operating system paths and other related information.
+            os_dictionary (Dict): A dictionary containing operating system paths and other related information.
 
-        This method saves the nearby sources table as a FITS file to the path specified in the 
-        'cloesest_dataset_path' key of the os_dictionary. It then attempts to open this file using 
-        TOPCAT software for further analysis and visualization. This function is essential for astronomers 
-        and astrophysicists who need to store and analyze large sets of astronomical data.
+        Important:
+            - This method saves the nearby sources table as a FITS file to the path specified in the 'cloesest_dataset_path' key of the os_dictionary.
+            - It then attempts to open this file using TOPCAT software for further analysis and visualization.
+            - This function is essential for astronomers and astrophysicists who need to store and analyze large sets of astronomical data.
 
         Note:
-        - The method assumes the existence of the TOPCAT software in the active workflow directory.
-        - Errors during the process are caught and printed, but do not halt the execution of the program.
+            - The method assumes the existence of the TOPCAT software in the active workflow directory.
+            - Errors during the process are caught and printed, but do not halt the execution of the program.
 
         """
         
@@ -937,22 +1046,23 @@ class MatchCatalog:
         Loads and processes a master source cone file within a given radius for a specific object.
 
         Args:
-        radius (float): The search radius in arcminutes.
-        simulation_data (Dict): A dictionary containing essential simulation data and paths.
+            radius (float): The search radius in arcminutes.
+            simulation_data (Dict): A dictionary containing essential simulation data and paths.
 
         Returns:
-        Table: An astropy table containing the processed master source cone data.
+            Table: An astropy table containing the processed master source cone data.
 
-        This method processes a master source FITS file to select and match sources around a 
-        specified region based on the object's position in the simulation data. It uses various 
-        software tools like STILTS and TOPCAT for data processing and visualization. The method is 
-        crucial for isolating and analyzing celestial objects within a specific region in 
-        astrophysical studies.
+        Important:
+            - This method processes a master source FITS file to select and match sources around a 
+            specified region based on the object's position in the simulation data.
+            - It uses various software tools like STILTS and TOPCAT for data processing and visualization.
+            - The method is crucial for isolating and analyzing celestial objects within a specific region 
+            in astrophysical studies.
 
         Note:
-        - The method assumes the presence of necessary software tools in the specified paths.
-        - It handles exceptions during processing and displays relevant error messages.
-        
+            - The method assumes the presence of necessary software tools in the specified paths.
+            - It handles exceptions during processing and displays relevant error messages.
+            
         """
         
         catalogs = dict_cat.catalogs
@@ -1016,16 +1126,18 @@ class MatchCatalog:
         Generates a list of indices where sources from the master source cone match those in the nearby sources table.
 
         Returns:
-        List: A list of indices representing the matching sources across the two tables.
+            List: A list of indices representing the matching sources across the two tables.
 
-        This method compares the master source cone table with the nearby sources table to identify common sources. 
-        It specifically looks for matches in the 'Xmm_IAUNAME' and 'Chandra_IAUNAME' columns of the nearby sources table 
-        based on the names listed in the master source cone table. The method is essential for astrophysical research 
-        where identifying overlapping observations from different catalogs is necessary.
+        Important:
+            - This method compares the master source cone table with the nearby sources table to identify common sources. 
+            - It specifically looks for matches in the 'Xmm_IAUNAME' and 'Chandra_IAUNAME' columns of the nearby sources table 
+            based on the names listed in the master source cone table.
+            - The method is essential for astrophysical research where identifying overlapping observations from different catalogs 
+            is necessary.
 
         Note:
-        - The method relies on the catalog key to determine the columns for comparison.
-        - The result is a sorted list of unique indices, representing the intersection of the two tables.
+            - The method relies on the catalog key to determine the columns for comparison.
+            - The result is a sorted list of unique indices, representing the intersection of the two tables.
 
         """
         

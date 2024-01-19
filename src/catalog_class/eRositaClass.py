@@ -24,38 +24,43 @@ import matplotlib.pyplot as plt
 import catalog_information as dict_cat
 
 # ------------------------------ #
+
+# ---------- for documentation ---------- #
+
+# import src.function.unique_function as u_f
+# import src.function.calculation_function as c_f
+# import src.catalog_information as dict_cat
+
+# --------------------------------------- #
+
 class eRositaCatalog:
     """
-    A class for analyzing astronomical data from the eRosita catalog.
+    A class dedicated to handling and analyzing astronomical data from the eRosita catalog.
 
-    This class provides methods for opening and analyzing data from the eRosita catalog. It includes functionalities 
-    for finding nearby sources, visualizing the neighborhood of a specific object, calculating photon indices, 
-    and building a dictionary model for the sources.
+    The eRositaCatalog class offers a suite of methods for efficiently managing and interpreting data from the eRosita space telescope. 
+    This includes capabilities for opening the catalog, identifying nearby astronomical sources, visualizing spatial distributions 
+    of these sources, and conducting detailed spectral analysis through photon index calculations. Additionally, the class provides 
+    functionality for constructing detailed model dictionaries for each identified source.
 
-    Attributes:
-        ra (str): Right ascension column name in the eRosita catalog.
-        dec (str): Declination column name in the eRosita catalog.
-        eRo_catalog (Table): The eRosita catalog data as an astropy Table.
-        nearby_sources_table (Table): Table of nearby sources.
-        nearby_sources_position (SkyCoord): Sky coordinates of nearby sources.
-        photon_index (List[float]): List of photon index values for sources.
-        model_dictionary (Dict[str, Dict[str, Union[str, float]]]): Dictionary of source models.
+    Important:
+        - This class is specifically tailored for the eRosita data, providing astronomers and researchers with tools 
+          necessary for X-ray astronomy data analysis.
+        - Advanced functionalities such as variability assessment and photon index calculation are integral to the 
+          class, facilitating a deeper understanding of the high-energy universe.
+        - The class bridges the gap between raw observational data and meaningful astronomical insights, playing a 
+          critical role in astrophysical research.
 
-    Parameters:
-        catalog_path (str): Path to the eRosita catalog file.
-        radius (Quantity): Radius for searching nearby sources.
-        simulation_data (dict): Dictionary containing simulation data.
-        user_table (Table): User-provided astropy Table.
+    Note:
+        - The eRositaCatalog class is part of a broader toolkit aimed at enhancing the analysis and interpretation of 
+          X-ray data from various space telescopes.
+        - Integration with other data sources and catalogs is feasible, allowing for comprehensive and comparative 
+          astronomical studies.
+        - Users should possess a basic understanding of X-ray astronomy and data formats common in the field for optimal use.
 
-    Methods:
-        open_catalog(catalog_path): Opens the eRosita catalog file and returns it as an astropy Table.
-        find_nearby_sources(radius, simulation_data): Finds and returns nearby sources and their positions.
-        neighbourhood_of_object(dictionary, radius): Visualizes the neighborhood of a specified object.
-        visualization_inter(optimization_parameters, photon_index, key): Visualizes the interpolation of photon index values.
-        optim_index(table, key, index): Calculates the photon index for a given source.
-        get_phoindex_nh(): Computes and assigns photon index and Nh values for sources.
-        dictionary_model(): Constructs a dictionary with model parameters for sources.
-
+    Example:
+        Instantiate the eRositaCatalog with necessary parameters:
+        
+        >>> eRo_catalog = eRositaCatalog("path/to/eRosita_catalog.fits", 5*u.arcmin, simulation_data, user_table)
     """
 
     def __init__(self, catalog_path: str, radius: Quantity, simulation_data: dict, user_table: Table) -> None:
@@ -66,20 +71,60 @@ class eRositaCatalog:
         specified radius around a provided celestial object, and performs various analyses such as neighborhood 
         visualization, photon index calculation, and model dictionary creation.
 
-        Parameters:
+        Args:
             catalog_path (str): The file path to the eRosita catalog.
             radius (Quantity): The radius within which to search for nearby sources, specified as an astropy Quantity.
             simulation_data (dict): A dictionary containing simulation data, including details about the celestial object.
             user_table (Table): An astropy Table provided by the user, not used in the current implementation.
 
-        Attributes created:
-            ra (str): Right ascension column name as specified in dict_cat.dictionary_coord for eRosita.
-            dec (str): Declination column name as specified in dict_cat.dictionary_coord for eRosita.
-            eRo_catalog (Table): The eRosita catalog data as an astropy Table, loaded from the specified catalog_path.
-            nearby_sources_table (Table): Table of sources found near the specified celestial object.
-            nearby_sources_position (SkyCoord): Sky coordinates of the sources found near the specified celestial object.
-            photon_index (List[float]): List of photon index values for sources.
-            model_dictionary (Dict[str, Dict[str, Union[str, float]]]): Dictionary of model parameters for each source.
+        Attributes:
+    
+        .. attribute:: ra
+            :type: str
+            :value: RA
+            
+            Right ascension column name as specified in dict_cat.dictionary_coord for eRosita.
+        
+        .. attribute:: dec
+            :type: str
+            :value: DEC
+            
+            Declination column name as specified in dict_cat.dictionary_coord for eRosita.
+            
+        .. attribute:: eRo_catalog
+            :type: Table
+            
+            The eRosita catalog data as an astropy Table, loaded from the specified catalog_path.
+            
+        .. attribute:: nearby_sources_table
+            :type: Table
+            
+            Table of sources found near the specified celestial object.
+            
+        .. attribute:: nearby_sources_position
+            :type: List[SkyCoord]
+            
+            Sky coordinates of the sources found near the specified celestial object.
+            
+        .. attribute:: photon_index
+            :type: List[float] 
+            
+            List of photon index values for sources.
+            
+        .. attribute:: model_dictionary
+            :type: Dict[str, Dict[str, Union[str, float]]]
+        
+            Dictionary of model parameters for each source.
+            
+        Important:
+            - Catalog Initialization: The eRosita astronomical catalog is loaded from the specified path, setting the foundation for all subsequent analyses.
+            - Nearby Sources Identification: The constructor employs a search radius to identify astronomical sources in close proximity to a specified celestial object, enhancing the relevance of the analysis.
+            - Data Analysis Initiation: It initiates key analyses such as neighborhood visualization, which helps in understanding the spatial distribution of astronomical objects, and photon index calculation, crucial for characterizing the spectral properties of these objects.
+            - Model Dictionary Creation: A model dictionary for the sources is created, which is vital for detailed astrophysical analysis and interpretation.
+            - Versatility in Data Handling: The class is designed to handle user-provided data tables, although this functionality is not implemented in the current version, indicating potential for future expansion and customization.
+            - Coordinate System Specification: The class initializes specific coordinate columns ('RA' and 'DEC') for eRosita data, ensuring accurate spatial referencing and alignment with astronomical standards.
+
+        The eRositaCatalog class, through its constructor, lays the groundwork for sophisticated astronomical data analysis, enabling researchers to unlock deeper insights from eRosita telescope observations.
         """    
         # ---------- coord ---------- #
         self.ra = dict_cat.dictionary_coord["eRosita"]["right_ascension"]
@@ -96,16 +141,19 @@ class eRositaCatalog:
         
     def open_catalog(self, catalog_path: str) -> Table:
         """
-        Opens a FITS file containing the eRosita catalog and returns it as an astropy Table.
+        Opens a FITS file containing the eRosita catalog and converts it into an astropy Table.
 
-        This method is responsible for loading the eRosita catalog data from a FITS file located at the specified path. 
-        It utilizes memory mapping for efficient handling of large files.
+        This method is essential for loading the eRosita catalog data. It utilizes the astropy library to handle FITS 
+        files, a common format for storing astronomical data. By converting the FITS file into an astropy Table, 
+        the data becomes more accessible and easier to manipulate for further analysis.
 
-        Parameters:
-        catalog_path (str): The file path to the eRosita catalog.
+        Args:
+            catalog_path (str): The file path to the eRosita catalog FITS file. This path should point to a valid 
+                                FITS file containing the eRosita catalog data.
 
         Returns:
-        Table: An astropy Table containing the data from the eRosita catalog.
+            Table: An astropy Table containing the data from the eRosita catalog. This table structure allows for 
+                convenient handling and analysis of the catalog data, utilizing the rich feature set of astropy.
         """
 
         with fits.open(catalog_path, memmap=True) as data:
@@ -114,22 +162,34 @@ class eRositaCatalog:
         
     def find_nearby_sources(self, radius: Quantity, simulation_data: dict) -> Tuple[Table, SkyCoord]:
         """
-        Finds sources in the eRosita catalog that are near a specified celestial object.
+        Identifies and compiles a list of astronomical sources from the eRosita catalog that are located near a specified 
+        celestial object.
 
-        This method identifies sources within a specified radius around a celestial object's position. It searches the 
-        eRosita catalog for sources within this field of view and compiles a list of nearby sources.
+        This method is pivotal for studies focusing on specific regions of the sky. It filters the eRosita catalog to 
+        identify sources within a defined radius from the target celestial object, using its astronomical coordinates. 
+        The method enhances the data's relevance to specific astronomical queries or studies.
 
-        Parameters:
-        radius (Quantity): The search radius around the celestial object, specified as an astropy Quantity.
-        simulation_data (dict): A dictionary containing information about the celestial object including its name and position.
+        Args:
+            radius (Quantity): The radius within which to search for nearby sources. This radius should be specified 
+                            as an astropy Quantity object, indicating both the value and the unit (e.g., degrees, 
+                            arcminutes, etc.).
+            object_data (dict): A dictionary containing essential information about the celestial object. Key elements 
+                                include 'object_name' for identification and 'object_position', an astropy SkyCoord 
+                                object representing the object's coordinates.
 
         Returns:
-        Tuple[Table, SkyCoord]: A tuple containing an astropy Table of nearby sources and their SkyCoord positions.
+            Tuple[Table, SkyCoord]: A tuple containing two elements:
+                - An astropy Table listing the sources found near the specified celestial object. This table includes 
+                various details from the eRosita catalog for each identified source.
+                - A SkyCoord object containing the coordinates of these nearby sources.
 
-        The method calculates the field of view by adding an extra 5 arcminutes to the provided radius. It then filters 
-        the eRosita catalog to find sources within this field of view. If no sources are found, or in case of an error, 
-        the method provides appropriate feedback.
+        Note:
+            - The method dynamically adjusts the search area based on the specified radius, ensuring comprehensive 
+            coverage of the surrounding region.
+            - It is capable of handling additional user-provided data (not implemented in the current version), 
+            which could be integrated in future enhancements.
         """
+
         field_of_view = radius + 5*u.arcmin
         object_data = simulation_data["object_data"]
         object_name = object_data["object_name"]
@@ -191,15 +251,18 @@ class eRositaCatalog:
         This method creates a scatter plot showing the positions of sources found near the specified celestial object. 
         It highlights both the nearby sources and the object itself, helping to understand their spatial distribution.
 
-        Parameters:
-        dictionary (dict): A dictionary containing information about the celestial object, including its name and position.
-        radius (Quantity): The search radius around the celestial object, specified as an astropy Quantity.
+        Args:
+            radius (Quantity): The search radius around the celestial object, specified as an astropy Quantity.
+            simulation_data (dict): A dictionary containing simulation data. This should include 'object_data' with the 
+                                    target object's information and 'os_dictionary' for output settings.
 
-        The method plots the right ascension and declination of the nearby sources and the target object. The celestial 
-        object's name and the number of nearby sources found are displayed as part of the plot's legend.
+        The method plots the right ascension and declination of the nearby sources and the target object. It saves the 
+        plot to a specified location and also displays it.
 
-        The plot visually represents the distribution of sources within the specified radius from the celestial object, 
-        helping to analyze the object's local astronomical neighborhood.
+        Note:
+            'object_data' within simulation_data should contain 'object_name' for the title of the plot and 
+            'object_position' for the object's coordinates. 'os_dictionary' should contain the 'img' key with the path 
+            to save the plot.
         """
         
         object_position = dictionary['object_position']
@@ -221,21 +284,19 @@ class eRositaCatalog:
 
     def visualization_inter(self, optimization_parameters, photon_index, key) -> None:
         """
-        Visualizes the interpolation of photon index values across different energy bands for astronomical sources.
+        Visualizes the interpolation of photon index values for sources in the eRosita catalog.
 
-        This method creates a plot illustrating the relationship between photon index values and energy bands for sources 
-        in the eRosita catalog. It uses error bars to represent observed fluxes and plots the absorbed power-law models 
-        for each energy band based on the photon index values.
+        This method plots the relationship between photon index values and energy bands for sources in the eRosita catalog. 
+        It showcases the spectral characteristics of these sources through a plot that combines error bars for observed 
+        fluxes and absorbed power-law models.
 
-        Parameters:
-        optimization_parameters: A list of tuples, each containing optimization parameters for a source. These parameters 
-                                typically include observed fluxes, flux errors, and absorbed power-law values.
-        photon_index (list): A list of photon index values corresponding to each set of optimization parameters.
-        key (str): The key used to access energy band center values from 'dict_cat.dictionary_catalog'.
+        Args:
+            optimization_parameters (list): A list of tuples containing optimization parameters (fluxes, errors, power-law values) for each source.
+            photon_index (list): A list of photon index values for the sources.
+            key (str): The key to retrieve energy band center values from 'dict_cat.dictionary_catalog'.
 
-        The plot displays energy in keV and flux in erg/cm^2/s/keV. It uses a logarithmic scale for both axes to 
-        effectively visualize the spectral data. Each source's data is plotted with its corresponding photon index, 
-        providing insights into the spectral characteristics of the sources in the catalog.
+        The plot is on a logarithmic scale, displaying energy in keV and flux in erg/cm²/s/keV. It provides a visual summary 
+        of how photon index values vary across different energy bands, aiding in the spectral analysis of the sources.
         """
         
         energy_band = dict_cat.dictionary_catalog[key]["energy_band_center"]
@@ -262,23 +323,24 @@ class eRositaCatalog:
 
     def optim_index(self, table, key, index) -> Tuple[List, Tuple]:
         """
-        Calculates the photon index for a specified source in the eRosita catalog using an absorbed power-law fitting.
+        Calculates the photon index for a source in the eRosita catalog using an absorbed power-law model.
 
-        This method computes the photon index of a source by fitting its flux observations across different energy bands 
-        to an absorbed power-law model. It considers the flux errors and the energy band properties during the fitting.
+        This method fits the observed flux data of a source across various energy bands to an absorbed power-law model. 
+        The fitting process takes into account both the flux values and their respective errors, resulting in a photon 
+        index that characterizes the source's spectral properties.
 
-        Parameters:
-        table (Table): An astropy Table containing the catalog data.
-        key (str): The key to access the required data from 'dict_cat.dictionary_catalog'.
-        index (int): The index of the source in the table for which the photon index is to be calculated.
+        Args:
+            table (Table): An astropy Table containing the eRosita catalog data.
+            key (str): The key to access necessary data from 'dict_cat.dictionary_catalog'.
+            index (int): The index of the source in the table for photon index calculation.
 
         Returns:
-        Tuple[float, Tuple]: A tuple containing the photon index and a tuple of optimization parameters. The optimization 
-                            parameters include energy band centers, observed fluxes, flux errors, and absorbed power-law 
-                            values.
+            Tuple[float, Tuple]: The photon index of the source and a tuple of optimization parameters, including energy band 
+                                centers, observed fluxes, flux errors, and fitted power-law values.
 
-        The method uses the curve_fit function from scipy.optimize to perform the fitting. If the fitting process 
-        encounters any error, a default photon index value is returned.
+        The photon index is a critical parameter in X-ray astronomy, offering insights into the energy distribution of 
+        celestial sources. The method employs curve fitting techniques, defaulting to a standard value in case of 
+        fitting failures.
         """
         interp_data = {"band_flux_obs": dict_cat.dictionary_catalog[key]["band_flux_obs"],
                        "band_flux_obs_err": dict_cat.dictionary_catalog[key]["band_flux_obs_err"],
@@ -312,19 +374,23 @@ class eRositaCatalog:
         return photon_index, optimization_parameters 
 
 
-    def get_phoindex_nh(self) -> List:
+    def get_phoindex_nh(self) -> List[float]:
         """
-        Computes the photon index and hydrogen column density (Nh) for sources in the eRosita catalog's nearby sources table.
+        Computes the photon index and hydrogen column density (Nh) for each source in the eRosita catalog's nearby sources table.
 
-        This method calculates the photon index for each source in the nearby sources table using an absorbed power-law model. 
-        It also assigns a default hydrogen column density (Nh) value to each source. The photon indices are visualized using a 
-        plot, and the nearby sources table is updated with these new 'Photon Index' and 'Nh' values.
+        This method calculates the photon index using an absorbed power-law model and assigns a default Nh value to each source. 
+        It also includes a visualization step for the photon indices and updates the nearby sources table with these calculated values.
 
         Returns:
-        List[float]: A list containing the photon index values for each source in the nearby sources table.
+            List[float]: A list of photon index values for each source in the nearby sources table.
 
-        The method uses a default Nh value of 3e20. If a calculated photon index is negative or zero, a default value of 1.7 is used. 
-        The visualization of photon indices is done using the 'visualization_inter' method.
+        Note:
+            - A default Nh value of 3e20 is used if specific Nh data is not available.
+            - The photon index calculation defaults to a value of 1.7 if the computed index is negative or zero.
+            - Visualization of photon indices aids in understanding the spectral characteristics of the sources.
+
+        The method plays a crucial role in spectral analysis, allowing for a detailed examination of the high-energy properties 
+        of astronomical sources in the eRosita catalog.
         """
         key = "eRosita"
         photon_index_list, parameters_list, nh_list = [], [], []
@@ -345,19 +411,20 @@ class eRositaCatalog:
     
     def dictionary_model(self) -> Dict[str, Dict[str, Union[str, float]]]:
         """
-        Creates a dictionary containing the model parameters for each source in the eRosita catalog's nearby sources table.
+        Constructs a dictionary with detailed modeling parameters for each source in the nearby sources table.
 
-        This method compiles a dictionary where each entry corresponds to a source from the nearby sources table. The 
-        dictionary for each source includes its astrophysical model type (such as 'power'), model values (like the photon index), 
-        observed flux, and column density (Nh).
+        This method creates a comprehensive dictionary where each entry corresponds to a source, detailing its astrophysical 
+        model type, model values (like photon index), observed flux, and hydrogen column density.
 
         Returns:
-        Dict[str, Dict[str, Union[str, float]]]: A dictionary where each key represents a source and the value is a 
-        dictionary containing the source's modeling parameters.
+            Dict[str, Dict[str, Union[str, float]]]: A dictionary with each source represented by a unique key (e.g., 'src_0'), containing a dictionary of its modeling parameters.
 
-        The current implementation primarily handles the 'power' model type. Placeholders exist for 'black_body' and 'temp' types, 
-        indicating potential future expansion. The method assumes that 'Photon Index' and 'Nh' values are already computed and 
-        available in the nearby sources table.
+        Note:
+            - Currently, only the 'power' model type is implemented, with placeholders for other models like 'black_body' and 'temp'.
+            - Assumes photon index ('Photon Index') and hydrogen column density ('Nh') values are pre-computed and present in the nearby sources table.
+
+        This method provides a structured approach to organizing and accessing model data for each source, supporting further 
+        analysis and interpretation in X-ray astrophysics.
         """
         model_dictionary = {}
         number_source = len(self.nearby_sources_table)

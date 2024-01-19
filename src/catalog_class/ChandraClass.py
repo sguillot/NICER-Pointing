@@ -27,36 +27,53 @@ import pyvo as vo
 
 # ------------------------------ #
 
+# ---------- for documentation ---------- #
+
+# import src.function.calculation_function as c_f
+# import src.function.unique_function as u_f
+# import src.catalog_information as dict_cat
+
+# --------------------------------------- #
+
+
 class ChandraCatalog:
     """
     A class for handling and analyzing data from the Chandra X-ray Observatory and associated cone search catalogs.
 
-    This class is designed to work with Chandra X-ray data and perform various analyses including finding nearby sources, 
-    assessing source variability, calculating photon indices, and generating models for each source.
+    This class is expertly crafted to manage and interpret data from the Chandra X-ray Observatory, one of the foremost 
+    tools in modern astrophysics for observing X-ray sources. It extends its capabilities to cone search catalogs, offering 
+    a wide array of analytical functions. These include identifying nearby astronomical sources, assessing their variability, 
+    computing photon indices, and modeling astronomical data for in-depth analysis.
 
-    Attributes:
-        ra (str): The key for right ascension in the Chandra dictionary.
-        dec (str): The key for declination in the Chandra dictionary.
-        ra_cs (str): The key for right ascension in the cone search Chandra dictionary.
-        dec_cs (str): The key for declination in the cone search Chandra dictionary.
-        chandra_catalog (Table): The catalog of Chandra data loaded from the specified path.
-        cone_search_catalog (Table): The catalog of data loaded from a cone search based on the Chandra data.
-        cs_nearby_sources_position (SkyCoord): The coordinates of sources found in the cone search catalog.
-        nearby_sources_table (Table): A table of nearby sources found in the Chandra catalog.
-        nearby_sources_position (SkyCoord): The coordinates of nearby sources found in the Chandra catalog.
-        cs_photon_index (array): Photon index values for sources in the cone search catalog.
-        photon_index (array): Photon index values for sources in the Chandra catalog.
-        cs_model_dictionary (dict): A dictionary of models for sources in the cone search catalog.
-        model_dictionary (dict): A dictionary of models for sources in the Chandra catalog.
+    The class streamlines the process of working with complex astronomical data, simplifying the task of extracting meaningful 
+    information from X-ray observations. Its integration with cone search catalogs enhances its utility in broader astronomical 
+    research and studies.
 
-    The class includes methods for opening and loading catalogs, finding nearby sources, analyzing source variability, 
-    calculating photon indices, visualizing data, and generating source models.
+    Important:
+        - This class is tailored to work with the specific data formats and analytical needs of Chandra X-ray data.
+        - It offers advanced functionalities such as variability analysis, photon index calculations, and custom source modeling.
+        - The class plays a vital role in X-ray astronomy, enabling researchers to delve deeper into understanding the 
+          universe's high-energy phenomena.
+        - Users should have a basic understanding of X-ray astronomy and data structures commonly used in the field for 
+          effective utilization of this class.
 
-    Args:
-        catalog_path (str): Path to the primary Chandra catalog file.
-        radius (Quantity): The search radius for finding nearby sources.
-        simulation_data (Dict): A dictionary containing simulation data, including object data and OS dictionary for saving plots.
-        user_table (Table): An optional user-provided table to include in the analysis.
+    Note:
+        - ChandraCatalog is not just a data processing tool; it's a bridge between raw observational data and actionable 
+          astronomical insights.
+        - The integration with cone search catalogs opens up new possibilities for comparative studies and cross-referencing 
+          with other astronomical data sources.
+        - While designed for Chandra X-ray data, the methodologies and techniques employed are adaptable to other X-ray 
+          observatories' data.
+        - The class is part of a larger ecosystem of tools aimed at enhancing our understanding of the cosmos through X-ray 
+          astronomy.
+
+    Example:
+        Creating an instance of ChandraCatalog with necessary parameters:
+        
+        >>> chandra_catalog = ChandraCatalog("path/to/chandra_catalog.fits", 5*u.arcmin, simulation_data, user_table)
+
+    The ChandraCatalog class stands as a testament to the power of combining detailed observational data with sophisticated 
+    analysis techniques, pushing the boundaries of astronomical research and discovery.
     """
     
     def __init__(self, catalog_path: str, radius: Quantity, simulation_data: Dict, user_table: Table) -> None:
@@ -72,27 +89,85 @@ class ChandraCatalog:
             simulation_data (Dict): A dictionary containing simulation data. This includes 'object_data' for object-specific information and 'os_dictionary' for operating system-specific information.
             user_table (Table): An optional Astropy Table provided by the user to include in the analysis.
 
-        The constructor performs several key operations:
-        - Initializes coordinate keys for Chandra and cone search catalogs from a global dictionary.
-        - Loads the Chandra catalog from the specified path.
-        - Loads a cone search catalog based on the provided radius and object data.
-        - Finds nearby sources based on the Chandra catalog and additional user-provided data.
-        - Prepares the data for further analysis, including calculating photon indices and generating source models.
-
         Attributes:
-            ra (str): Right ascension key for the Chandra catalog.
-            dec (str): Declination key for the Chandra catalog.
-            ra_cs (str): Right ascension key for the cone search Chandra catalog.
-            dec_cs (str): Declination key for the cone search Chandra catalog.
-            chandra_catalog (Table): Catalog data loaded from the Chandra catalog file.
-            cone_search_catalog (Table): Catalog data loaded from the cone search.
-            cs_nearby_sources_position (SkyCoord): Positions of sources found in the cone search catalog.
-            nearby_sources_table (Table): Table of nearby sources found in the Chandra catalog.
-            nearby_sources_position (SkyCoord): Positions of nearby sources found in the Chandra catalog.
-            cs_photon_index (list): List of photon index values for sources in the cone search catalog.
-            photon_index (list): List of photon index values for sources in the Chandra catalog.
-            cs_model_dictionary (dict): Dictionary of models for sources in the cone search catalog.
-            model_dictionary (dict): Dictionary of models for sources in the Chandra catalog.
+        
+        .. attribute:: ra
+            :type: str
+            :value: RA
+            
+            Right ascension key for the Chandra catalog.
+            
+        .. attribute:: dec
+            :type: str
+            :value: DEC
+            
+            Declination key for the Chandra catalog.
+            
+        .. attribute:: cs_ra
+            :type: str
+            :value: ra
+            
+            Right ascension key for the cone search Chandra catalog.
+            
+        .. attribute:: cs_dec
+            :type: str
+            :value: dec
+            
+            Declination key for the cone search Chandra catalog.
+            
+        .. attribute:: chandra_catalog
+            :type: Table
+            
+            Catalog data loaded from the Chandra catalog file.
+            
+        .. attribute:: cone_search_catalog
+            :type:Table
+            
+            Catalog data loaded from the cone search.
+            
+        .. attribute:: cs_nearby_sources_position
+            :type:SkyCoord
+            
+            Positions of sources found in the cone search catalog.
+            
+        .. attribute:: nearby_sources_table
+            :type: Table
+            
+            Table of nearby sources found in the Chandra catalog.
+            
+        .. attribute:: nearby_sources_position
+            :type: SkyCoord
+            
+            Positions of nearby sources found in the Chandra catalog.
+
+        .. attribute:: cs_photon_index
+            :type: list
+            
+            List of photon index values for sources in the cone search catalog.
+            
+        .. attribute:: photon_index
+            :type: list
+            
+            List of photon index values for sources in the Chandra catalog.
+            
+        .. attribute:: cs_model_dictionary
+            :type: dict
+            
+            Dictionary of models for sources in the cone search catalog.
+            
+        .. attribute:: model_dictionary
+            :type: dict
+            
+            Dictionary of models for sources in the Chandra catalog.
+
+        Important:
+            The constructor performs several key operations:
+            
+            - Initializes coordinate keys for Chandra and cone search catalogs from a global dictionary.
+            - Loads the Chandra catalog from the specified path.
+            - Loads a cone search catalog based on the provided radius and object data.
+            - Finds nearby sources based on the Chandra catalog and additional user-provided data.
+            - Prepares the data for further analysis, including calculating photon indices and generating source models.
         """    
         
         # ---------- coord ---------- #
@@ -127,7 +202,8 @@ class ChandraCatalog:
             catalog_path (str): The file path to the FITS file containing the catalog data. This file should conform to the FITS standard and typically contains astronomical data.
 
         Returns:
-            Table: An Astropy Table object containing the data from the FITS file. The table format facilitates various operations like data filtering, sorting, and visualization.
+            Table: 
+                An Astropy Table object containing the data from the FITS file. The table format facilitates various operations like data filtering, sorting, and visualization.
         """
         
         with fits.open(catalog_path, memmap=True) as data:
@@ -142,16 +218,14 @@ class ChandraCatalog:
         service request. The search is centered on the coordinates of a celestial object, which are determined using the 
         object's name provided in `object_data`. The search radius is specified by the `radius` parameter.
 
-        Parameters:
-        radius (Quantity): The radius of the cone search. Should be an astropy Quantity object, specifying both the value 
-                        and the unit (e.g., in degrees or arcminutes).
-        object_data (dict): A dictionary containing information about the celestial object. This must include a key 
-                            'object_name' with the object's name as its value, which is used to determine the object's sky 
-                            coordinates for the search.
+        Args:
+            radius (Quantity): The radius of the cone search. Should be an astropy Quantity object, specifying both the value and the unit (e.g., in degrees or arcminutes).
+            object_data (dict): A dictionary containing information about the celestial object. This must include a key 'object_name' with the object's name as its value, which is used to determine the object's sky coordinates for the search.
 
         Returns:
-        Table: An astropy Table containing the results of the cone search. This table includes various details about the 
-            astronomical sources found within the specified search radius.
+            Table: 
+                An astropy Table containing the results of the cone search. This table includes various details about the 
+                astronomical sources found within the specified search radius.
 
         """
         
@@ -169,23 +243,23 @@ class ChandraCatalog:
         celestial object. It uses the object's position and a defined field of view to filter sources from the catalog. 
         The method returns a table of nearby sources along with their sky coordinates.
 
-        Parameters:
-        radius (Quantity): The radius within which to search for sources, as an astropy Quantity object (value and unit).
-        object_data (dict): A dictionary containing the object's information. It must have keys 'object_name' and 
-                            'object_position', where 'object_position' should be a SkyCoord object.
-        user_table (Table): An astropy Table object representing the user's data. This table is not used in the current 
-                            implementation of the function.
+        Args:
+            radius (Quantity): The radius within which to search for sources, as an astropy Quantity object (value and unit).
+            object_data (dict): A dictionary containing the object's information. It must have keys 'object_name' and 
+                                'object_position', where 'object_position' should be a SkyCoord object.
+            user_table (Table): An astropy Table object representing the user's data. This table is not used in the current 
+                                implementation of the function.
 
         Returns:
-        Tuple[Table, SkyCoord]: A tuple containing two elements. The first element is an astropy Table with the catalog of 
-                                nearby sources. The second element is a SkyCoord object containing the positions of these 
-                                sources.
+            Tuple[Table, SkyCoord]: 
+                A tuple containing two elements. The first element is an astropy Table with the catalog of nearby sources. 
+                The second element is a SkyCoord object containing the positions of these sources.
 
-        Notes:
-        - The search radius is internally expanded by 5 arcminutes to define a field of view.
-        - The function prints various messages during execution, including progress updates and results summary.
-        - If no sources are found, the function exits the program.
-        - In case of an error, the error message is printed.
+        Note:
+            - The search radius is internally expanded by 5 arcminutes to define a field of view.
+            - The function prints various messages during execution, including progress updates and results summary.
+            - If no sources are found, the function exits the program.
+            - In case of an error, the error message is printed.
 
         """
     
@@ -241,20 +315,21 @@ class ChandraCatalog:
         """
         Adds a 'Variability' column to the Chandra Source Catalog table based on intra and inter variability probabilities.
 
-        This method calculates a variability score for each source in the Chandra Source Catalog. It uses the 
-        'var_inter_prob_b' and 'var_intra_prob_b' columns from the catalog to compute this score. If both intra and inter 
-        variability probabilities are available for a source, their mean is used as the variability score. If only one of 
-        them is available, that value is used. If both are missing, the variability score is set to 0.0.
+        Important:
+            This method calculates a variability score for each source in the Chandra Source Catalog. It uses the 
+            'var_inter_prob_b' and 'var_intra_prob_b' columns from the catalog to compute this score. If both intra and inter 
+            variability probabilities are available for a source, their mean is used as the variability score. If only one of 
+            them is available, that value is used. If both are missing, the variability score is set to 0.0.
 
         Returns:
-        Table: The modified astropy Table of the Chandra Source Catalog, now including the 'Variability' column. This column 
-            contains the computed variability scores for each source.
+            Table: 
+                The modified astropy Table of the Chandra Source Catalog, now including the 'Variability' column. 
+                This column contains the computed variability scores for each source.
 
-        Notes:
-        - The method assumes that the catalog has already been converted to an astropy Table and is accessible via 
-        `self.cone_search_catalog`.
-        - Variability probabilities that are masked (not available) are handled as described above.
-        - The method appends the 'Variability' column to the existing table and returns the updated table.
+        Note:
+            - The method assumes that the catalog has already been converted to an astropy Table and is accessible via `self.cone_search_catalog`.
+            - Variability probabilities that are masked (not available) are handled as described above.
+            - The method appends the 'Variability' column to the existing table and returns the updated table.
 
         """
         
@@ -288,18 +363,22 @@ class ChandraCatalog:
         the Chandra Source Catalog and a simulation data dictionary. The plots include the positions of nearby sources, 
         differentiating between variable and invariant sources. The plots are saved as a PNG file and also displayed.
 
-        Parameters:
-        radius (Quantity): The search radius around the celestial object, specified as an astropy Quantity.
-        simulation_data (Dict): A dictionary containing various simulation parameters and data. This must include keys 
-                                'os_dictionary' for output settings and 'object_data' for the celestial object's data. 
-                                'object_data' itself must be a dictionary containing the 'object_name' and 'object_position'.
+        Args:
+            radius (Quantity): The search radius around the celestial object, specified as an astropy Quantity.
+            simulation_data (Dict): A dictionary containing various simulation parameters and data. This must include keys 
+                                    'os_dictionary' for output settings and 'object_data' for the celestial object's data. 
+                                    'object_data' itself must be a dictionary containing the 'object_name' and 'object_position'.
 
-        Notes:
-        - The method creates and displays four scatter plots in a 2x2 grid. Each plot shows different aspects of the 
-        neighborhood, such as sources from different catalogs and variability information.
-        - The object's position is marked distinctly in each plot.
-        - The generated plots are saved to a file in the directory specified in 'os_dictionary' within 'simulation_data'.
-        - The method does not return any value.
+        Note:
+            - The method creates and displays four scatter plots in a 2x2 grid. Each plot shows different aspects of the neighborhood, such as sources from different catalogs and variability information.
+            - The object's position is marked distinctly in each plot.
+            - The generated plots are saved to a file in the directory specified in 'os_dictionary' within 'simulation_data'.
+            - The method does not return any value.
+        
+        Here is an example of the plot create by this method:
+        
+        .. image:: C:/Users/plamb_v00y0i4/OneDrive/Bureau/Optimal_Pointing_Point_Code/modeling_result/PSR_J0437-4715/Chandra/img/neighbourhood_of_PSR_J0437-4715.png
+            :align: center
 
         """
         
@@ -351,7 +430,7 @@ class ChandraCatalog:
         plt.show()
 
 
-    def threshold(self, cone_search_catalog):
+    def threshold(self, cone_search_catalog) -> Table:
         """
         Corrects flux values in the Chandra Source Catalog by replacing missing or invalid data with minimum valid values.
 
@@ -359,19 +438,18 @@ class ChandraCatalog:
         flux-related columns in the catalog, replacing masked or NaN values with the minimum numerical value found in each 
         respective column. The method corrects both observed flux values and their errors, across different bands.
 
-        Parameters:
-        cone_search_catalog : The Chandra Source Catalog, typically an astropy Table, which contains the flux data to be 
-                            corrected.
+        Args:
+            cone_search_catalog (Table): The Chandra Source Catalog, typically an astropy Table, which contains the flux data to be 
+                                corrected.
 
         Returns:
-        The modified Chandra Source Catalog, with corrected flux values.
+            Table: The modified Chandra Source Catalog, with corrected flux values.
 
-        Notes:
-        - The method relies on the 'dict_cat.dictionary_catalog' for definitions of the flux columns to be processed.
-        - The flux columns include observed fluxes, their errors, and band-specific fluxes.
-        - The method iterates through each source in the catalog, checking for masked constants or NaN values in these 
-        columns and replacing them with the minimum valid value found in the same column.
-        - This correction is applied to ensure more accurate and meaningful analysis of the flux data.
+        Note:
+            - The method relies on the 'dict_cat.dictionary_catalog' for definitions of the flux columns to be processed.
+            - The flux columns include observed fluxes, their errors, and band-specific fluxes.
+            - The method iterates through each source in the catalog, checking for masked constants or NaN values in these columns and replacing them with the minimum valid value found in the same column.
+            - This correction is applied to ensure more accurate and meaningful analysis of the flux data.
 
         """
         
@@ -449,19 +527,17 @@ class ChandraCatalog:
         photon index values. It uses optimization parameters and photon index values for each energy band and displays the 
         results as an errorbar plot, with power-law models for absorption.
 
-        Parameters:
-        optimization_parameters (list): A list of tuples, each containing optimization parameters. Each tuple typically 
-                                        includes flux observations, flux errors, and absorbed power-law values.
-        photon_index (list): A list of photon index values corresponding to the optimization parameters.
-        key (str): A key to access the energy band center values from 'dict_cat.dictionary_catalog'.
+        Args:
+            optimization_parameters (list): A list of tuples, each containing optimization parameters. Each tuple typically 
+                                            includes flux observations, flux errors, and absorbed power-law values.
+            photon_index (list): A list of photon index values corresponding to the optimization parameters.
+            key (str): A key to access the energy band center values from 'dict_cat.dictionary_catalog'.
 
-        Notes:
-        - The method retrieves energy band center values from 'dict_cat.dictionary_catalog' using the provided key.
-        - The plot is logarithmic, displaying energy in keV and flux in erg/cm^2/s/keV.
-        - Each set of flux observations is plotted with error bars, and absorbed power-law models are plotted for each 
-        photon index.
-        - The plot is titled "Interpolation Photon Index plot" and includes appropriate axis labels.
-
+        Note:
+            - The method retrieves energy band center values from 'dict_cat.dictionary_catalog' using the provided key.
+            - The plot is logarithmic, displaying energy in keV and flux in erg/cm^2/s/keV.
+            - Each set of flux observations is plotted with error bars, and absorbed power-law models are plotted for each photon index.
+            - The plot is titled "Interpolation Photon Index plot" and includes appropriate axis labels.
         """
         
         energy_band = dict_cat.dictionary_catalog[key]["energy_band_center"]
@@ -495,21 +571,21 @@ class ChandraCatalog:
         provided catalog key and then performs the fitting process to determine the photon index and other optimization 
         parameters.
 
-        Parameters:
-        key (str): The key to identify the catalog and retrieve the relevant data from 'dict_cat.dictionary_catalog'.
-        table (Table): An astropy Table containing flux data for the source in various energy bands.
-        index (int): The index of the source in the table for which the photon index is to be calculated.
+        Args:
+            key (str): The key to identify the catalog and retrieve the relevant data from 'dict_cat.dictionary_catalog'.
+            table (Table): An astropy Table containing flux data for the source in various energy bands.
+            index (int): The index of the source in the table for which the photon index is to be calculated.
 
         Returns:
-        Tuple[float, Tuple]: A tuple containing the photon index and a tuple of optimization parameters. The optimization 
-                            parameters include energy band centers, observed fluxes, flux errors, and absorbed power-law 
-                            values.
+            Tuple[float, Tuple]: A tuple containing the photon index and a tuple of optimization parameters. The optimization 
+                                 parameters include energy band centers, observed fluxes, flux errors, and absorbed power-law 
+                                 values.
 
-        Notes:
-        - The method supports different keys for different catalogs (e.g., 'Chandra', 'CS_Chandra').
-        - The absorbed power-law fitting is done using the curve_fit function from scipy.optimize.
-        - If the fitting process fails, a default photon index value of 1.7 is returned.
-        - The optimization parameters are used for plotting in the 'visualization_interp' method.
+        Note:
+            - The method supports different keys for different catalogs (e.g., 'Chandra', 'CS_Chandra').
+            - The absorbed power-law fitting is done using the curve_fit function from scipy.optimize.
+            - If the fitting process fails, a default photon index value of 1.7 is returned.
+            - The optimization parameters are used for plotting in the 'visualization_interp' method.
 
         """
         
@@ -562,18 +638,16 @@ class ChandraCatalog:
         the interpolation of photon indices.
 
         Returns:
-        Tuple[List[float], List[float]]: A tuple containing two lists. The first list contains photon index values for 
-                                        sources in the Chandra Source Catalog. The second list contains photon index 
-                                        values for nearby sources.
+            Tuple[List[float], List[float]]: A tuple containing two lists. The first list contains photon index values for 
+                                            sources in the Chandra Source Catalog. The second list contains photon index 
+                                            values for nearby sources.
 
-        Notes:
-        - The method iterates through the Chandra Source Catalog and the nearby sources table, computing photon indices 
-        where necessary using the 'get_photon_index' method.
-        - Nh values are calculated based on 'nh_gal' data, with a default value assigned where this data is missing.
-        - The computed photon indices and Nh values are added to the respective tables as new columns.
-        - The method visualizes the photon indices using the 'visualization_interp' method for both the Chandra Source 
-        Catalog and nearby sources.
-        - Default photon index and Nh values are used for cases with missing or invalid data.
+        Note:
+            - The method iterates through the Chandra Source Catalog and the nearby sources table, computing photon indices where necessary using the 'get_photon_index' method.
+            - Nh values are calculated based on 'nh_gal' data, with a default value assigned where this data is missing.
+            - The computed photon indices and Nh values are added to the respective tables as new columns.
+            - The method visualizes the photon indices using the 'visualization_interp' method for both the Chandra Source Catalog and nearby sources.
+            - Default photon index and Nh values are used for cases with missing or invalid data.
 
         """
         
@@ -636,21 +710,17 @@ class ChandraCatalog:
         model values (e.g., photon index), flux values, and column density.
 
         Returns:
-        Dict[str, Dict[str, Union[str, float]]]: A tuple of two dictionaries. The first dictionary corresponds to the 
-                                                Chandra Source Catalog, and the second to the nearby sources. Each entry 
-                                                in these dictionaries represents a source, keyed by a unique identifier 
-                                                (e.g., 'src_0'), and contains information about the source's model, 
-                                                model value, flux, and column density.
+            Dict[str, Dict[str, Union[str, float]]]: A tuple of two dictionaries. The first dictionary corresponds to the 
+                                                    Chandra Source Catalog, and the second to the nearby sources. Each entry 
+                                                    in these dictionaries represents a source, keyed by a unique identifier 
+                                                    (e.g., 'src_0'), and contains information about the source's model, 
+                                                    model value, flux, and column density.
 
-        Notes:
-        - The method assumes that the 'Photon Index' and 'Nh' values have already been calculated and added to the 
-        respective tables.
-        - Currently, the method only handles the 'power' model type. Placeholder code exists for other model types 
-        ('black_body', 'temp'), but these are not yet implemented.
-        - Each source is assigned a unique key in the dictionary (e.g., 'src_0', 'src_1', etc.).
-        - The method utilizes 'dict_cat.dictionary_catalog' to access flux observation column names for the respective 
-        catalogs.
-
+        Note:
+            - The method assumes that the 'Photon Index' and 'Nh' values have already been calculated and added to the respective tables.
+            - Currently, the method only handles the 'power' model type. Placeholder code exists for other model types ('black_body', 'temp'), but these are not yet implemented.
+            - Each source is assigned a unique key in the dictionary (e.g., 'src_0', 'src_1', etc.).
+            - The method utilizes 'dict_cat.dictionary_catalog' to access flux observation column names for the respective catalogs.
         """
         
         model_dictionary, cs_model_dictionary = {}, {}

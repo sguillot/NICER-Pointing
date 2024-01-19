@@ -26,37 +26,39 @@ import catalog_information as dict_cat
 
 # ------------------------------ #
 
+# ---------- for documentation ---------- #
+
+# import src.function.unique_function as u_f
+# import src.function.calculation_function as c_f
+# import src.catalog_information as dict_cat
+
+# --------------------------------------- #
+
 class SwiftCatalog:
     """
-    A class for analyzing astronomical data from the Swift catalog.
+    A specialized class for processing and analyzing data from the Swift X-ray Telescope and related astronomical sources.
 
-    This class provides methods for opening and analyzing data from the Swift catalog. It includes functionalities 
-    for finding nearby sources, visualizing the neighborhood of a specific object, calculating photon indices, 
-    and building a dictionary model for the sources.
+    This class is meticulously designed to handle data from the Swift X-ray Telescope, a pivotal instrument in contemporary astrophysics for studying gamma-ray bursts and other high-energy phenomena. It adeptly extends its analytical prowess to include data from related astronomical sources, offering comprehensive functionalities. Key features include the identification of nearby celestial sources, evaluation of their variability, computation of photon indices, and the development of intricate models for thorough scientific analysis.
 
-    Attributes:
-        ra (str): Right ascension column name in the Swift catalog.
-        dec (str): Declination column name in the Swift catalog.
-        swi_catalog (Table): The Swift catalog data as an astropy Table.
-        nearby_sources_table (Table): Table of nearby sources.
-        nearby_sources_position (SkyCoord): Sky coordinates of nearby sources.
-        photon_index (List[float]): List of photon index values for sources.
-        model_dictionary (Dict[str, Dict[str, Union[str, float]]]): Dictionary of source models.
+    SwiftCatalog simplifies the intricate process of deciphering complex X-ray data, transforming it into intelligible and scientifically valuable insights. Its ability to integrate and analyze data from associated sources significantly broadens its scope in astronomical research and exploration.
 
-    Parameters:
-        catalog_path (str): Path to the Swift catalog file.
-        radius (Quantity): Radius for searching nearby sources.
-        simulation_data (dict): Dictionary containing simulation data.
-        user_table (Table): User-provided astropy Table.
+    Important:
+        - Tailored specifically for Swift X-ray data, the class provides advanced functionalities like detailed variability analysis, precise photon index computation, and sophisticated source modeling.
+        - It is an indispensable tool in the realm of X-ray astrophysics, facilitating deep explorations into the high-energy aspects of the universe.
+        - Users leveraging this class should ideally possess a foundational knowledge of X-ray astronomy and the data structures typical in this scientific domain.
 
-    Methods:
-        open_catalog(catalog_path): Opens the Swift catalog file and returns it as an astropy Table.
-        find_nearby_sources(radius, object_data): Finds and returns nearby sources and their positions.
-        neighbourhood_of_object(radius, simulation_data): Visualizes the neighborhood of a specified object.
-        visualization_inter(optimization_parameters, photon_index, key): Visualizes the interpolation of photon index values.
-        optim_index(table, key, index): Calculates the photon index for a given source.
-        get_phoindex_nh(): Computes and assigns photon index and Nh values for sources.
-        dictionary_model(): Constructs a dictionary with model parameters for sources.
+    Note:
+        - SwiftCatalog transcends being merely a data processing utility; it represents a conduit linking raw space observations with profound astronomical insights.
+        - Its integration with additional astronomical data sources paves the way for expansive studies and cross-referencing, enriching the field of astrophysics.
+        - While primarily designed for Swift data, the methodologies and approaches are versatile, applicable to data from other X-ray observatories.
+        - This class is a crucial component of a larger toolkit aimed at augmenting our comprehension of space through X-ray astrophysics.
+
+    Example:
+        Instantiate the SwiftCatalog with necessary parameters:
+        
+        >>> swift_catalog = SwiftCatalog("path/to/swift_catalog.fits", 5*u.arcmin, simulation_data, user_table)
+
+    SwiftCatalog embodies the fusion of comprehensive observational data with advanced analytical methodologies, propelling astrophysical research into new frontiers of discovery and understanding.
     """
 
     def __init__(self, catalog_path: str, radius: Quantity, simulation_data: dict, user_table: Table) -> None:
@@ -67,21 +69,62 @@ class SwiftCatalog:
         specified radius around a provided celestial object, and initiates several analyses including neighborhood 
         visualization, photon index calculation, and model dictionary creation.
 
-        Parameters:
+        Args:
             catalog_path (str): The file path to the Swift catalog.
             radius (Quantity): The radius within which to search for nearby sources, specified as an astropy Quantity.
             simulation_data (dict): A dictionary containing simulation data, including details about the celestial object.
             user_table (Table): An astropy Table provided by the user, not used in the current implementation.
 
-        Attributes created:
-            ra (str): Right ascension column name as specified in dict_cat.dictionary_coord for Swift.
-            dec (str): Declination column name as specified in dict_cat.dictionary_coord for Swift.
-            swi_catalog (Table): The Swift catalog data as an astropy Table, loaded from the specified catalog_path.
-            nearby_sources_table (Table): Table of sources found near the specified celestial object.
-            nearby_sources_position (SkyCoord): Sky coordinates of the sources found near the specified celestial object.
-            photon_index (List[float]): List of photon index values for sources.
-            model_dictionary (Dict[str, Dict[str, Union[str, float]]]): Dictionary of model parameters for each source.
-        """    
+        Attributes:
+        
+        .. attribute:: ra
+            :type: str
+            :value: RA
+            
+            Right ascension column name as specified in dict_cat.dictionary_coord for Swift.
+        
+        .. attribute:: dec
+            :type: str
+            :value: DEC
+            
+            Declination column name as specified in dict_cat.dictionary_coord for Swift.
+            
+        .. attribute:: swi_catalog
+            :type: Table
+            
+            The Swift catalog data as an astropy Table, loaded from the specified catalog_path.
+            
+        .. attribute:: nearby_sources_table
+            :type: Table
+            
+            Table of sources found near the specified celestial object.
+            
+        .. attribute:: nearby_sources_position
+            :type: List[SkyCoord]
+            
+            Sky coordinates of the sources found near the specified celestial object.
+            
+        .. attribute:: photon_index
+            :type: List[float] 
+            
+            List of photon index values for sources.
+            
+        .. attribute:: model_dictionary
+            :type: Dict[str, Dict[str, Union[str, float]]]
+            
+            Dictionary of model parameters for each source.
+            
+        Important:
+            - Catalog Initialization: The Swift astronomical catalog is loaded from the specified path, setting the foundation for all subsequent analyses.
+            - Nearby Sources Identification: The constructor employs a search radius to identify astronomical sources in close proximity to a specified celestial object, enhancing the relevance of the analysis.
+            - Data Analysis Initiation: It initiates key analyses such as neighborhood visualization, which helps in understanding the spatial distribution of astronomical objects, and photon index calculation, crucial for characterizing the spectral properties of these objects.
+            - Model Dictionary Creation: A model dictionary for the sources is created, which is vital for detailed astrophysical analysis and interpretation.
+            - Versatility in Data Handling: The class is designed to handle user-provided data tables, although this functionality is not implemented in the current version, indicating potential for future expansion and customization.
+            - Coordinate System Specification: The class initializes specific coordinate columns ('RA' and 'DEC') for Swift data, ensuring accurate spatial referencing and alignment with astronomical standards.
+
+        The SwiftCatalog class, through its constructor, lays the groundwork for sophisticated astronomical data analysis, enabling researchers to unlock deeper insights from Swift telescope observations.
+        """  
+        
         # ---------- coord ---------- #
         self.ra = dict_cat.dictionary_coord["Swift"]["right_ascension"]
         self.dec = dict_cat.dictionary_coord["Swift"]["declination"]
@@ -97,13 +140,19 @@ class SwiftCatalog:
 
     def open_catalog(self, catalog_path: str)-> Table:
         """
-        Opens a FITS file containing the Swift catalog and returns it as an astropy Table.
+        Opens a FITS file containing the Swift catalog and converts it into an astropy Table.
 
-        Parameters:
-        catalog_path (str): The file path to the Swift catalog.
+        This method is essential for loading the Swift catalog data. It utilizes the astropy library to handle FITS 
+        files, a common format for storing astronomical data. By converting the FITS file into an astropy Table, 
+        the data becomes more accessible and easier to manipulate for further analysis.
+
+        Args:
+            catalog_path (str): The file path to the Swift catalog FITS file. This path should point to a valid 
+                                FITS file containing the Swift catalog data.
 
         Returns:
-        Table: An astropy Table containing the data from the Swift catalog.
+            Table: An astropy Table containing the data from the Swift catalog. This table structure allows for 
+                convenient handling and analysis of the catalog data, utilizing the rich feature set of astropy.
         """
         with fits.open(catalog_path, memmap=True) as data:
             return Table(data[1].data)
@@ -111,14 +160,32 @@ class SwiftCatalog:
             
     def find_nearby_sources(self, radius: Quantity, object_data: dict) -> Tuple[Table, SkyCoord]:
         """
-        Finds sources in the Swift catalog that are near a specified celestial object.
+        Identifies and compiles a list of astronomical sources from the Swift catalog that are located near a specified 
+        celestial object.
 
-        Parameters:
-        radius (Quantity): The search radius around the object, specified as an astropy Quantity.
-        object_data (dict): A dictionary containing information about the celestial object.
+        This method is pivotal for studies focusing on specific regions of the sky. It filters the Swift catalog to 
+        identify sources within a defined radius from the target celestial object, using its astronomical coordinates. 
+        The method enhances the data's relevance to specific astronomical queries or studies.
+
+        Args:
+            radius (Quantity): The radius within which to search for nearby sources. This radius should be specified 
+                            as an astropy Quantity object, indicating both the value and the unit (e.g., degrees, 
+                            arcminutes, etc.).
+            object_data (dict): A dictionary containing essential information about the celestial object. Key elements 
+                                include 'object_name' for identification and 'object_position', an astropy SkyCoord 
+                                object representing the object's coordinates.
 
         Returns:
-        Tuple[Table, SkyCoord]: A tuple containing an astropy Table of nearby sources and their SkyCoord positions.
+            Tuple[Table, SkyCoord]: A tuple containing two elements:
+                - An astropy Table listing the sources found near the specified celestial object. This table includes 
+                various details from the Swift catalog for each identified source.
+                - A SkyCoord object containing the coordinates of these nearby sources.
+
+        Note:
+            - The method dynamically adjusts the search area based on the specified radius, ensuring comprehensive 
+            coverage of the surrounding region.
+            - It is capable of handling additional user-provided data (not implemented in the current version), 
+            which could be integrated in future enhancements.
         """
     
         field_of_view = radius + 5*u.arcmin
@@ -180,18 +247,23 @@ class SwiftCatalog:
         This method creates a scatter plot showing the positions of sources found near the specified celestial object. 
         It highlights both the nearby sources and the object itself, helping to understand their spatial distribution.
 
-        Parameters:
-        radius (Quantity): The search radius around the celestial object, specified as an astropy Quantity.
-        simulation_data (dict): A dictionary containing simulation data. This should include 'object_data' with the 
-                                target object's information and 'os_dictionary' for output settings.
+        Args:
+            radius (Quantity): The search radius around the celestial object, specified as an astropy Quantity.
+            simulation_data (dict): A dictionary containing simulation data. This should include 'object_data' with the 
+                                    target object's information and 'os_dictionary' for output settings.
 
         The method plots the right ascension and declination of the nearby sources and the target object. It saves the 
         plot to a specified location and also displays it.
 
         Note:
-        'object_data' within simulation_data should contain 'object_name' for the title of the plot and 
-        'object_position' for the object's coordinates. 'os_dictionary' should contain the 'img' key with the path 
-        to save the plot.
+            'object_data' within simulation_data should contain 'object_name' for the title of the plot and 
+            'object_position' for the object's coordinates. 'os_dictionary' should contain the 'img' key with the path 
+            to save the plot.
+            
+        Here is an example of the plot create by this method:
+        
+        .. image:: C:/Users/plamb_v00y0i4/OneDrive/Bureau/Optimal_Pointing_Point_Code/modeling_result/PSR_J0437-4715/Swift/img/neighbourhood_of_PSR_J0437-4715.png
+            :align: center
         """
         object_data = simulation_data["object_data"]
         object_position = object_data['object_position']
@@ -220,20 +292,19 @@ class SwiftCatalog:
     
     def visualization_inter(self, optimization_parameters, photon_index, key) -> None:
         """
-        Visualizes the interpolation of photon index values across different energy bands.
+        Visualizes the interpolation of photon index values for sources in the Swift catalog.
 
-        This method creates a plot that illustrates the relationship between photon index values and energy bands. 
-        It uses error bars to depict observed fluxes and plots absorbed power-law models for each energy band based 
-        on the photon index values.
+        This method plots the relationship between photon index values and energy bands for sources in the Swift catalog. 
+        It showcases the spectral characteristics of these sources through a plot that combines error bars for observed 
+        fluxes and absorbed power-law models.
 
-        Parameters:
-        optimization_parameters: A list of tuples containing optimization parameters for each source. Each tuple should 
-                                include observed fluxes, flux errors, and absorbed power-law values.
-        photon_index (list): A list of photon index values corresponding to each set of optimization parameters.
-        key (str): The key used to access energy band center values from 'dict_cat.dictionary_catalog'.
+        Args:
+            optimization_parameters (list): A list of tuples containing optimization parameters (fluxes, errors, power-law values) for each source.
+            photon_index (list): A list of photon index values for the sources.
+            key (str): The key to retrieve energy band center values from 'dict_cat.dictionary_catalog'.
 
-        The plot displays energy in keV and flux in erg/cm^2/s/keV. Each source's data is plotted with its photon index, 
-        providing a visual representation of the spectral characteristics of the sources.
+        The plot is on a logarithmic scale, displaying energy in keV and flux in erg/cm²/s/keV. It provides a visual summary 
+        of how photon index values vary across different energy bands, aiding in the spectral analysis of the sources.
         """
         
         energy_band = dict_cat.dictionary_catalog[key]["energy_band_center"]
@@ -260,24 +331,24 @@ class SwiftCatalog:
 
     def optim_index(self, table, key, index) -> Tuple[List, Tuple]:
         """
-        Calculates the photon index for a specified source in the Swift catalog using absorbed power-law fitting.
+        Calculates the photon index for a source in the Swift catalog using an absorbed power-law model.
 
-        This method computes the photon index of a source by fitting its flux observations across different energy bands 
-        to an absorbed power-law model. The method takes into account the flux errors and the energy band properties 
-        while performing the fit.
+        This method fits the observed flux data of a source across various energy bands to an absorbed power-law model. 
+        The fitting process takes into account both the flux values and their respective errors, resulting in a photon 
+        index that characterizes the source's spectral properties.
 
-        Parameters:
-        table (Table): An astropy Table containing the catalog data.
-        key (str): The key to access the required data from 'dict_cat.dictionary_catalog'.
-        index (int): The index of the source in the table for which the photon index is to be calculated.
+        Args:
+            table (Table): An astropy Table containing the Swift catalog data.
+            key (str): The key to access necessary data from 'dict_cat.dictionary_catalog'.
+            index (int): The index of the source in the table for photon index calculation.
 
         Returns:
-        Tuple[float, Tuple]: A tuple containing the photon index and a tuple of optimization parameters. The optimization 
-                            parameters include energy band centers, observed fluxes, flux errors, and absorbed power-law 
-                            values.
+            Tuple[float, Tuple]: The photon index of the source and a tuple of optimization parameters, including energy band 
+                                centers, observed fluxes, flux errors, and fitted power-law values.
 
-        The method uses the curve_fit function from scipy.optimize to perform the fitting. If the fitting fails, a 
-        default photon index value is returned.
+        The photon index is a critical parameter in X-ray astronomy, offering insights into the energy distribution of 
+        celestial sources. The method employs curve fitting techniques, defaulting to a standard value in case of 
+        fitting failures.
         """
         
         interp_data = {"band_flux_obs": dict_cat.dictionary_catalog[key]["band_flux_obs"],
@@ -312,19 +383,23 @@ class SwiftCatalog:
         return photon_index, optimization_parameters 
 
 
-    def get_phoindex_nh(self) -> List:
+    def get_phoindex_nh(self) -> List[float]:
         """
-        Computes photon index and hydrogen column density (Nh) for sources in the Swift catalog's nearby sources table.
+        Computes the photon index and hydrogen column density (Nh) for each source in the Swift catalog's nearby sources table.
 
-        This method calculates the photon index for each source in the nearby sources table using the absorbed power-law 
-        model. It also assigns a default hydrogen column density (Nh) value to each source. The method then visualizes 
-        the photon indices using a plot and updates the nearby sources table with the calculated photon indices and Nh values.
+        This method calculates the photon index using an absorbed power-law model and assigns a default Nh value to each source. 
+        It also includes a visualization step for the photon indices and updates the nearby sources table with these calculated values.
 
         Returns:
-        List[float]: A list containing the photon index values for each source in the nearby sources table.
+            List[float]: A list of photon index values for each source in the nearby sources table.
 
-        The method assumes a default Nh value of 3e20. If the calculated photon index is negative or zero, a default 
-        value of 1.7 is used. The visualization of photon indices is handled by the 'visualization_inter' method.
+        Note:
+            - A default Nh value of 3e20 is used if specific Nh data is not available.
+            - The photon index calculation defaults to a value of 1.7 if the computed index is negative or zero.
+            - Visualization of photon indices aids in understanding the spectral characteristics of the sources.
+
+        The method plays a crucial role in spectral analysis, allowing for a detailed examination of the high-energy properties 
+        of astronomical sources in the Swift catalog.
         """
         key = "Swift"
         photon_index_list, parameters_list, nh_list = [], [], []
@@ -345,19 +420,20 @@ class SwiftCatalog:
     
     def dictionary_model(self) -> Dict[str, Dict[str, Union[str, float]]]:
         """
-        Creates a dictionary containing model parameters for each source in the nearby sources table.
+        Constructs a dictionary with detailed modeling parameters for each source in the nearby sources table.
 
-        This method iterates over the nearby sources table and compiles a dictionary where each entry corresponds 
-        to a source. The dictionary for each source includes its model type, model value (such as the photon index), 
-        observed flux, and column density.
+        This method creates a comprehensive dictionary where each entry corresponds to a source, detailing its astrophysical 
+        model type, model values (like photon index), observed flux, and hydrogen column density.
 
         Returns:
-        Dict[str, Dict[str, Union[str, float]]]: A dictionary where each key represents a source (formatted as 'src_{index}')
-        and the value is another dictionary containing the source's modeling parameters.
+            Dict[str, Dict[str, Union[str, float]]]: A dictionary with each source represented by a unique key (e.g., 'src_0'), containing a dictionary of its modeling parameters.
 
-        The current implementation only handles the 'power' model type, with placeholders for 'black_body' and 'temp' 
-        types for future expansion. The method assumes that the 'Photon Index' and 'Nh' values are already computed 
-        and available in the nearby sources table.
+        Note:
+            - Currently, only the 'power' model type is implemented, with placeholders for other models like 'black_body' and 'temp'.
+            - Assumes photon index ('Photon Index') and hydrogen column density ('Nh') values are pre-computed and present in the nearby sources table.
+
+        This method provides a structured approach to organizing and accessing model data for each source, supporting further 
+        analysis and interpretation in X-ray astrophysics.
         """
         
         model_dictionary = {}

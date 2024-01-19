@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 # ---------- import class ---------- #
 
-import catalog_class.MasterSourceClass
+from catalog_class import MasterSourceClass
 
 # ---------------------------------- #
 
@@ -22,6 +22,13 @@ import catalog_information as dict_cat
 import matplotlib.pyplot as plt
 
 # ------------------------------ #
+
+# ---------- for documentation ---------- #
+
+# import src.catalog_information as dict_cat
+# from src.catalog_class import MasterSourceClass
+
+# --------------------------------------- #
 
 """
 This module is designed for handling and processing astronomical data from various catalogs, specifically focusing on multi-instrument source analysis. It includes functionalities for loading, processing, and plotting data from catalogs like Swift, XMM, and others. The module integrates Astropy for data handling and Matplotlib for plotting, among other packages.
@@ -39,22 +46,31 @@ The module is essential for astronomers and data analysts working with multi-ins
 
 def load_relevant_sources(cat: str, file_to_load: str) -> Dict:
     """
-    Loads and processes source data from a specified catalog and returns it in a structured format.
+    Loads source data from a specified astronomical catalog and processes it for further analysis.
+
+    This function reads data from a FITS file for a given catalog and processes the data by organizing, sorting, 
+    and computing additional parameters. It focuses on extracting unique sources and relevant observational data 
+    such as time steps, observation IDs, and flux data, which are essential for astronomical analysis.
 
     Args:
-    cat (str): Name of the catalog to load (e.g., "Swift", "XMM").
-    file_to_load (str): Path to the FITS file containing the raw catalog data.
-
-    The function loads data from a FITS file, processes it by sorting and extracting unique sources, 
-    and computes additional parameters like time steps, observation IDs, and flux data.
+        cat (str): Name of the catalog from which to load data (e.g., "Swift", "XMM").
+        file_to_load (str): Path to the FITS file containing the catalog data.
 
     Returns:
-    Dict: A dictionary of processed source data, with keys being the names of the sources and values being 
-          the corresponding data structured in a pre-defined format.
+        Dict: A dictionary where keys are source names and values are `Source` objects containing processed 
+              data for each source, including flux, time steps, and observational parameters.
+
+    Important:
+        The function performs several steps:
+            - Loads the FITS file and sorts the data based on source names.
+            - Processes the data to calculate additional parameters like time steps and flux data.
+            - Handles different catalog-specific processing needs, particularly for time-based data.
+            - Creates a `Source` object for each unique source, containing all relevant data.
 
     Note:
-    - The function handles different catalogs with specific processing needs, particularly for time-based data.
-    - An error in data loading is handled and reported.
+        - The function is designed to handle various astronomical catalogs with specific processing requirements.
+        - Errors in data loading or processing are caught and reported.
+        - Assumes the presence of certain columns in the FITS file, which may vary based on the catalog.
     """
     
     print(f"Loading {cat}...")
@@ -126,9 +142,9 @@ def load_relevant_sources(cat: str, file_to_load: str) -> Dict:
                 band_flux_err = [band_flux_err[0][obsid < 1e10], band_flux_err[1][obsid < 1e10]]
                 obsid = obsid[obsid < 1e10]
 
-            band_data = catalog_class.MasterSourceClass.BandFlux(flux=band_flux, flux_err=band_flux_err)
-            swift_data = catalog_class.MasterSourceClass.SwiftData(stacked_flux=swift_stacked_flux, stacked_flux_err=swift_stacked_flux_err, stacked_times=swift_stacked_times)
-            source = catalog_class.MasterSourceClass.Source(catalog=cat, iau_name=name[0].strip(), flux=flux, flux_err=flux_error, time_steps=time, 
+            band_data = MasterSourceClass.BandFlux(flux=band_flux, flux_err=band_flux_err)
+            swift_data = MasterSourceClass.SwiftData(stacked_flux=swift_stacked_flux, stacked_flux_err=swift_stacked_flux_err, stacked_times=swift_stacked_times)
+            source = MasterSourceClass.Source(catalog=cat, iau_name=name[0].strip(), flux=flux, flux_err=flux_error, time_steps=time, 
                             band_flux_data=band_data, obsids=[...], swift_data=swift_data, xmm_offaxis=[], short_term_var=[])
             # **kwargs : obsids, swift_data, xmm_offaxis, short_term_var
             
@@ -139,21 +155,31 @@ def load_relevant_sources(cat: str, file_to_load: str) -> Dict:
 
 def load_master_sources(file_to_load: str) -> Dict:
     """
-    Loads multi-instrument source data from a master source file, integrating data from various catalogs.
+    Loads data from a master source file, integrating multi-instrument source data from various astronomical catalogs.
+
+    This function is designed to read a master source cone FITS file located in the specified directory. It integrates 
+    this data with additional catalog-specific data, combining information from multiple sources to create a comprehensive 
+    dataset for each master source. The function is particularly useful in astronomical data analysis where data 
+    from different instruments and catalogs need to be consolidated.
 
     Args:
-    file_to_load (str): Directory path where the master source file and related catalog files are located.
-
-    The function reads a master source cone FITS file and integrates it with relevant catalog data. 
-    It combines data from multiple catalogs to create a comprehensive view of each master source.
+        file_to_load (str): Path to the directory where the master source file and related catalog files are located.
 
     Returns:
-    Dict: A dictionary of master sources, where each key is a master source ID and its value is an object 
-          representing the combined data from various catalogs.
+        Dict: A dictionary where keys are master source IDs and values are `MasterSource` objects representing 
+              the combined data from various catalogs. Each `MasterSource` object contains detailed information 
+              about the source, including its coordinates, positional error, and associated data from different catalogs.
+
+    Important:
+        The function performs the following steps:
+            - Reads the master source FITS file to extract primary source data.
+            - Integrates data from different catalogs, matching sources based on specific identifiers.
+            - Creates a `MasterSource` object for each unique master source ID, containing all relevant combined data.
 
     Note:
-    - The function assumes the existence of catalog-specific FITS files in the same directory as the master source file.
-    - Any errors during data loading are handled and reported.
+        - Assumes that catalog-specific FITS files are available in the same directory as the master source file.
+        - Handles and reports any errors encountered during the data loading process.
+        - The function is tailored for complex astronomical data handling and might require specific file structures.
     """
     
     """Loads the multi-instruments sources in a dictionary"""
@@ -185,7 +211,7 @@ def load_master_sources(file_to_load: str) -> Dict:
             except Exception as error:
                 pass
         ms_id = line["MS_ID"]
-        ms = catalog_class.MasterSourceClass.MasterSource(ms_id, tab_sources_for_this_ms, line["MS_RA"], line["MS_DEC"], line["MS_POSERR"])
+        ms = MasterSourceClass.MasterSource(ms_id, tab_sources_for_this_ms, line["MS_RA"], line["MS_DEC"], line["MS_POSERR"])
         dict_master_sources[ms_id] = ms
         
     print("Master sources loaded!")
@@ -194,19 +220,29 @@ def load_master_sources(file_to_load: str) -> Dict:
 
 def master_source_plot(master_sources: Dict, simulation_data: Dict, number_graph: int) -> None:
     """
-    Generates and saves plots for multi-instrument sources based on catalog data.
+    Creates and saves plots for a specified number of multi-instrument sources using data from various astronomical catalogs.
+
+    This function iterates over the provided multi-instrument sources and generates a plot for each. It visualizes 
+    data such as energy bands and fluxes, combining information from different catalogs to present a comprehensive 
+    view of each source. The function is tailored to handle astronomical data from various catalogs, adapting the 
+    plot to the specific data available for each source.
 
     Args:
-    master_sources (Dict): A dictionary of multi-instrument sources to be plotted.
-    simulation_data (Dict): A dictionary containing simulation data including object positions.
-    number_graph (int): The number of graphs to generate from the master sources.
+        master_sources (Dict): A dictionary where keys are master source IDs and values are objects representing 
+                               combined data from multiple catalogs.
+        simulation_data (Dict): A dictionary containing simulation data, including object positions and plot paths.
+        number_graph (int): The number of plots to generate from the master sources.
 
-    The function iterates over a specified number of master sources and generates a plot for each. 
-    It combines data from different catalogs and plots energy bands and fluxes.
+    Important:
+        The function performs the following steps for each selected master source:
+            - Computes specific data points, such as NICER off-axis angles.
+            - Generates a plot that includes energy bands and fluxes for each catalog within the source.
+            - Saves the plot in a specified directory with an indexed name.
 
     Note:
-    - The function is designed to handle various catalogs and adjusts the plot according to the specific data available for each source.
-    - The plots are saved in a specified directory, and their names are indexed.
+        - Plots are saved in the directory specified in `simulation_data` under 'plot_var_sources_path'.
+        - The function assumes that the necessary energy band and flux data are available in the master sources.
+        - Handles different catalog data formats and visualizes them on a logarithmic scale.
     """
 
     object_data = simulation_data["object_data"]
